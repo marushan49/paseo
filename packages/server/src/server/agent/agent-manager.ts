@@ -124,7 +124,7 @@ export class AgentManagerShuttingDownError extends Error {
 }
 
 export class AgentRunCancellationError extends Error {
-  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop") {
+  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop" | "switch") {
     super(
       `Cannot ${action} agent ${agentId} because its active run cancellation was not acknowledged`,
     );
@@ -1545,6 +1545,131 @@ export class AgentManager {
         existing.lifecycle = "error";
         existing.lastError = error instanceof Error ? error.message : String(error);
         this.emitState(existing);
+      }
+      throw error;
+    } finally {
+      if (!handedToRegistration) {
+        if (hadPreviousPaseoToolPolicy) {
+          this.paseoToolPolicies.set(agentId, previousPaseoToolPolicy);
+        } else {
+          this.paseoToolPolicies.delete(agentId);
+        }
+        if (session) {
+          await this.closeUnregisteredSession(session);
+        }
+      }
+    }
+  }
+
+  /**
+   * Move a live agent to another provider. The Paseo agent id, workspace,
+   * labels, timestamps, and timeline survive the switch; the provider session
+   * does not.
+   *
+   * The new runtime is created, never resumed: a persisted session belongs to
+   * the provider that minted it. `registerSession` re-derives `persistence` and
+   * `runtimeInfo` from the session it installs, so the previous provider's
+   * handle leaves the record with it. A surviving handle would point the next
+   * `ensureAgentLoaded()` at a foreign session.
+   *
+   * Mode, thinking option, features, and provider options are dropped for the
+   * same reason: each names something only the old provider offers.
+   *
+   * A failed switch leaves the agent closed on its old provider, as reload
+   * does. The record still resumes its original session, so the switch is
+   * retryable and nothing is lost by declining it.
+   */
+  setAgentProvider(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    return this.trackAgentRegistrationOperation(
+      this.runLifecycleMutation(agentId, () =>
+        this.setAgentProviderInternal(agentId, provider, modelId),
+      ),
+    );
+  }
+
+  private async setAgentProviderInternal(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    this.assertAcceptingAgentRegistrations();
+    let existing = this.requireSessionAgent(agentId);
+    if (existing.provider === provider) {
+      throw new Error(`Agent ${agentId} already runs on provider '${provider}'`);
+    }
+    this.requireEnabledProvider(provider);
+    const client = await this.requireAvailableClient({ provider });
+    if (this.hasInFlightRun(agentId)) {
+      await this.cancelAgentRunBefore(agentId, "switch");
+      existing = this.requireSessionAgent(agentId);
+    }
+
+    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+      {
+        provider,
+        cwd: existing.cwd,
+        model: modelId ?? undefined,
+        systemPrompt: existing.config.systemPrompt,
+        mcpServers: existing.config.mcpServers,
+        toolPolicy: existing.config.toolPolicy,
+      },
+      agentId,
+    );
+
+    const preservedLastUsage = existing.lastUsage;
+    const preservedLastError = existing.lastError;
+    const preservedAttention = existing.attention;
+    const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
+    const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
+
+    let session: AgentSession | undefined;
+    let closedExisting: ManagedAgentClosed | undefined;
+    let handedToRegistration = false;
+    try {
+      // A persisted thread can have only one writer, even when its turn is idle.
+      await this.closeReloadedSession(existing.session, agentId);
+      await this.drainSessionEvents(agentId);
+      this.cancelRunningProviderSubagents(agentId);
+      closedExisting = this.prepareAgentForClosure(existing, "agent provider switched");
+      await this.persistSnapshot(closedExisting);
+      this.assertAcceptingAgentRegistrations();
+
+      this.paseoToolPolicies.set(agentId, paseoToolPolicy);
+      const launchContext = await this.buildLaunchContext(
+        agentId,
+        client,
+        storedConfig.cwd,
+        paseoToolPolicy,
+        undefined,
+        { reason: "create", purpose: "interactive", workspaceId: existing.workspaceId ?? null },
+      );
+      const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
+      session = await client.createSession(providerLaunchConfig, launchContext);
+      await this.requireExternalMcpSupport(session, storedConfig);
+      this.assertAcceptingAgentRegistrations();
+
+      handedToRegistration = true;
+      return await this.registerSession(session, storedConfig, agentId, {
+        labels: existing.labels,
+        workspaceId: existing.workspaceId,
+        owner: existing.owner,
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+        lastUserMessageAt: existing.lastUserMessageAt,
+        // The canonical timeline is already primed and the new provider has no
+        // history of its own to replay into it.
+        historyPrimed: true,
+        lastUsage: preservedLastUsage,
+        lastError: preservedLastError,
+        attention: preservedAttention,
+      });
+    } catch (error) {
+      if (closedExisting) {
+        this.emitClosedAgent(closedExisting, { persist: false });
       }
       throw error;
     } finally {
@@ -3009,7 +3134,7 @@ export class AgentManager {
 
   private async cancelAgentRunBefore(
     agentId: string,
-    action: "reload" | "replace" | "rewind",
+    action: "reload" | "replace" | "rewind" | "switch",
   ): Promise<void> {
     const result = await this.cancelAgentRun(agentId);
     if (result.status === "refused") {
