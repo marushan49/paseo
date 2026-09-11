@@ -1653,7 +1653,7 @@ export class AgentManager {
       this.assertAcceptingAgentRegistrations();
 
       handedToRegistration = true;
-      return await this.registerSession(session, storedConfig, agentId, {
+      const switched = await this.registerSession(session, storedConfig, agentId, {
         labels: existing.labels,
         workspaceId: existing.workspaceId,
         owner: existing.owner,
@@ -1667,6 +1667,14 @@ export class AgentManager {
         lastError: preservedLastError,
         attention: preservedAttention,
       });
+      // One timeline stretches across two provider sessions, so mark where the
+      // cut is: everything above it was said by a different brain.
+      await this.appendTimelineItem(agentId, {
+        type: "notification",
+        level: "info",
+        message: `Switched provider: ${existing.provider} → ${provider}`,
+      });
+      return switched;
     } catch (error) {
       if (closedExisting) {
         this.emitClosedAgent(closedExisting, { persist: false });

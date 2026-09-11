@@ -11115,7 +11115,10 @@ test("setAgentProvider replaces the runtime with the new provider and keeps the 
   expect(switched.workspaceId).toBe("ws-provider-switch");
   expect(switched.labels).toEqual({ "paseo.brain-switch": "keep" });
   expect(switched.createdAt).toEqual(agent.createdAt);
-  expect(manager.getTimeline(agent.id)).toEqual(timelineBeforeSwitch);
+  // The switch appends its own marker; everything said before it survives.
+  expect(manager.getTimeline(agent.id).slice(0, timelineBeforeSwitch.length)).toEqual(
+    timelineBeforeSwitch,
+  );
 
   // The new provider launches with the requested model and none of the old
   // provider's mode or thinking selection.
@@ -11177,4 +11180,25 @@ test("setAgentProvider leaves the agent closed on its old provider when the new 
   expect(record?.lastStatus).toBe("closed");
   expect(record?.provider).toBe("codex");
   expect(record?.persistence?.sessionId).toBe(codexSessionId);
+});
+
+test("setAgentProvider marks the provider cut in the timeline", async () => {
+  const { manager, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000604",
+    target: new ProviderSwitchClient("claude"),
+  });
+  await manager.appendTimelineItem(agent.id, {
+    type: "assistant_message",
+    text: "said before the switch",
+  });
+
+  await manager.setAgentProvider(agent.id, "claude", "claude-opus-5");
+
+  const timeline = manager.getTimeline(agent.id);
+  expect(timeline).toHaveLength(2);
+  expect(timeline[1]).toEqual({
+    type: "notification",
+    level: "info",
+    message: "Switched provider: codex → claude",
+  });
 });
