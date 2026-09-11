@@ -3358,6 +3358,38 @@ export class DaemonClient {
     return payload.notice ?? null;
   }
 
+  /**
+   * Moves the agent to another provider. `modelId` names a model of the target
+   * provider; the agent's mode and thinking selections do not survive the move.
+   */
+  async setAgentProvider(agentId: string, provider: string, modelId: string | null): Promise<void> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "set_agent_provider_request",
+      agentId,
+      provider,
+      modelId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "set_agent_provider_response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentProvider rejected");
+    }
+  }
+
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
