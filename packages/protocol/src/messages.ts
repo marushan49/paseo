@@ -1881,6 +1881,24 @@ export const SetAgentModelResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+/**
+ * Moves an existing agent to another provider. `modelId` names a model of the
+ * target provider, not the current one; the provider's own mode and thinking
+ * selections do not survive the move, so they are not part of the request.
+ */
+export const SetAgentProviderRequestMessageSchema = z.object({
+  type: z.literal("set_agent_provider_request"),
+  agentId: z.string(),
+  provider: z.string(),
+  modelId: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const SetAgentProviderResponseMessageSchema = z.object({
+  type: z.literal("set_agent_provider_response"),
+  payload: AgentActionResponsePayloadSchema,
+});
+
 export const SetAgentThinkingRequestMessageSchema = z.object({
   type: z.literal("set_agent_thinking_request"),
   agentId: z.string(),
@@ -3203,6 +3221,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentForkContextRequestMessageSchema,
   SetAgentModeRequestMessageSchema,
   SetAgentModelRequestMessageSchema,
+  SetAgentProviderRequestMessageSchema,
   SetAgentThinkingRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
@@ -6652,6 +6671,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WriteProjectConfigResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
   SetAgentModelResponseMessageSchema,
+  SetAgentProviderResponseMessageSchema,
   SetAgentThinkingResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
@@ -6851,6 +6871,7 @@ export type SendAgentMessageResponseMessage = z.infer<typeof SendAgentMessageRes
 export type SetVoiceModeResponseMessage = z.infer<typeof SetVoiceModeResponseMessageSchema>;
 export type SetAgentModeResponseMessage = z.infer<typeof SetAgentModeResponseMessageSchema>;
 export type SetAgentModelResponseMessage = z.infer<typeof SetAgentModelResponseMessageSchema>;
+export type SetAgentProviderResponseMessage = z.infer<typeof SetAgentProviderResponseMessageSchema>;
 export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
@@ -7016,6 +7037,7 @@ export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryIn
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;
 export type SetAgentModeRequestMessage = z.infer<typeof SetAgentModeRequestMessageSchema>;
 export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMessageSchema>;
+export type SetAgentProviderRequestMessage = z.infer<typeof SetAgentProviderRequestMessageSchema>;
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
