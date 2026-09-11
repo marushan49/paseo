@@ -1,63 +1,55 @@
-# Brain switching: den Provider einer laufenden Unterhaltung wechseln
+# Brain switching: moving a conversation to another provider
 
-Ziel: In derselben Paseo-Unterhaltung von OpenCode auf Claude oder Codex
-wechseln, ohne Workspace, Worktree, Agent-ID und Timeline zu verlieren.
+Switching an agent from OpenCode to Claude or Codex keeps the Paseo agent id,
+workspace, worktree, labels, timestamps, and timeline. Only the provider session
+is replaced.
 
-## Warum das heute nicht geht
+`AgentManager.setAgentProvider(agentId, provider, modelId)` closes the current
+runtime, starts a fresh session on the target provider, and re-registers it under
+the same agent id. It reaches the client as `set_agent_provider_request` through
+`AgentConfigSession`, and the model picker raises it when the user picks a model
+that belongs to a different provider.
 
-`AgentConfigOperations` (packages/server/src/server/session/agent-config/agent-config-session.ts:27)
-bietet `setMode`, `setModel`, `setFeature`, `setThinking` — kein `setProvider`.
-Der Provider steht bei der Erzeugung fest, deshalb zeigt der Model-Picker nur
-Modelle des aktuellen Providers.
+## Why the new runtime is created, not resumed
 
-## Warum es trotzdem klein ist
+A persisted provider session belongs to the provider that minted it. `persistence`
+(`{ provider, sessionId }`) is what `ensureAgentLoaded()` reads to decide how to
+bring a closed agent back: with a handle it calls `resumeAgentFromPersistence`
+against `handle.provider`, without one it creates a session from the stored
+config. `reloadAgentSession` resolves its provider the same way.
 
-Die Lebenszyklus-Mechanik existiert bereits (docs/agent-lifecycle.md:13-26):
+So the handle, not `runtimeInfo`, is what pins an agent to its provider.
+`runtimeInfo` is a live-state mirror that no load path reads. Carrying the old
+handle across a switch leaves the record pointing at the previous provider's
+session, and the next resume attaches to it —
+`agent-manager.test.ts` holds that case ("drops the previous provider session
+handle from the stored record").
 
-- `closed` ist ein persistierter, fortsetzbarer Zustand ohne laufende Laufzeit.
-- Schliessen gibt die Provider-Laufzeit frei, Datensatz und Timeline bleiben.
-- `ensureAgentLoaded()` baut eine Laufzeit aus dem Datensatz auf, unter
-  derselben Paseo-Agent-ID.
-- Reload = genau diese Abfolge, mit E2E-Test
-  (packages/server/src/server/daemon-e2e/agent-reload.native.real.e2e.test.ts).
+Nothing clears the handle explicitly. `registerSession` re-derives `persistence`
+and `runtimeInfo` from the session it installs, and the agent snapshot is
+projected whole, so installing the new session is what retires the old handle.
 
-Ein Providerwechsel ist also ein Reload, bei dem zwischen Schliessen und
-Laden der Datensatz umgeschrieben wird.
+## Why not createAgent
 
-## Der Datensatz
+`createAgent` begins with `deleteAgentState`, which drops the durable timeline.
+That is correct for a new agent and fatal for a switch, whose entire point is that
+the transcript survives. `setAgentProvider` therefore mirrors
+`reloadAgentSessionInternal` — close, build, `registerSession` with the preserved
+labels, workspace, owner, and timestamps — and differs from it only in calling
+`createSession` on a different provider's client instead of `resumeSession`.
 
-`STORED_AGENT_SCHEMA` (packages/server/src/server/agent/agent-storage.ts:45):
+## What does not survive
 
-| Feld | beim Wechsel |
-|---|---|
-| `provider` | auf den neuen Provider setzen |
-| `config.model` | auf das gewaehlte Modell des neuen Providers |
-| `config.modeId`, `config.thinkingOptionId` | zuruecksetzen, Werte sind providerspezifisch |
-| `runtimeInfo` | **loeschen** — `sessionId` gehoert zur alten Provider-Session |
-| alles andere | unveraendert, insbesondere `id`, `cwd`, `workspaceId`, `persistence` |
+`config.model` moves to the requested model of the new provider. `modeId`,
+`thinkingOptionId`, `featureValues`, and `providerOptions` are dropped: each names
+something only the previous provider offers.
 
-Das Loeschen von `runtimeInfo` ist der kritische Punkt: Bleibt die alte
-`sessionId` stehen, versucht die neue Laufzeit eine fremde Session
-fortzusetzen.
+The native provider history does not move either. An OpenCode session is not a
+Claude session. The Paseo timeline remains and carries a `Switched provider: X → Y`
+marker at the cut; the substantive handover is the Second Brain's job.
 
-## Umsetzung, in dieser Reihenfolge
+## Failure
 
-1. **Server, Kern.** `setProvider(agentId, provider, modelId)` im AgentManager:
-   schliessen, Datensatz umschreiben, `ensureAgentLoaded()`. Fehlschlag laesst
-   den Agenten `closed` und wiederholbar zurueck, wie beim Reload.
-2. **Timeline-Marker.** Ein Eintrag "Provider gewechselt: X -> Y", damit im
-   Verlauf sichtbar bleibt, wo der Schnitt liegt.
-3. **Protokoll.** `set_agent_provider_request` / `_response` analog zu
-   `set_agent_mode_*`.
-4. **Session-Huelle.** `setProvider` in `AgentConfigOperations`, Handler in
-   `AgentConfigSession` nach dem Muster von `handleSetAgentModeRequest`.
-5. **UI.** Model-Picker um die anderen Provider erweitern, mit Rueckfrage vor
-   dem Wechsel.
-6. **Tests.** E2E analog zum Reload-Test, plus Unit-Test fuer das Loeschen von
-   `runtimeInfo`.
-
-## Bewusst nicht Teil davon
-
-Die native Provider-Historie wandert nicht mit. Eine OpenCode-Session ist keine
-Claude-Session. Die Paseo-Timeline bleibt, die inhaltliche Uebergabe leistet
-das Second Brain — der Weg Codex -> Claude ist damit bereits belegt.
+A failed switch leaves the agent `closed` on its old provider, as reload does. The
+record still resumes its original session, so nothing is lost by declining and the
+switch can be retried.
