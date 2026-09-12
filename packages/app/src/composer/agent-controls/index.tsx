@@ -1657,7 +1657,7 @@ export const AgentControls = memo(function AgentControls({
       agentModelSelectorProviders.find((entry) => entry.id === provider)?.label ?? provider,
     [agentModelSelectorProviders],
   );
-  const handleSelectCommandCenterModel = useCallback(
+  const handleSelectProviderAndModel = useCallback(
     (provider: AgentProvider, modelId: string) => {
       if (!agentProvider || provider === agentProvider) {
         void handleSelectModel(modelId);
@@ -1782,7 +1782,7 @@ export const AgentControls = memo(function AgentControls({
         providers: agentModelSelectorProviders,
         selectedProvider: agentProvider,
         selectedModelId: activeModelId,
-        select: handleSelectCommandCenterModel,
+        select: handleSelectProviderAndModel,
       },
       thinking: {
         options: modelSelection.thinkingOptions,
@@ -1802,7 +1802,7 @@ export const AgentControls = memo(function AgentControls({
       agentModelSelectorProviders,
       agentProvider,
       commandCenterModes,
-      handleSelectCommandCenterModel,
+      handleSelectProviderAndModel,
       handleSelectThinkingOption,
       handleSetFeature,
       modeProviderDefinitions,
@@ -1845,6 +1845,7 @@ export const AgentControls = memo(function AgentControls({
         modelOptions={modelOptions}
         selectedModelId={modelSelection.activeModelId ?? undefined}
         onSelectModel={handleSelectModel}
+        onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}
         onApplyAgentProfile={agentProfiles?.applyProfile}
         onEditAgentProfiles={handleEditAgentProfiles}
