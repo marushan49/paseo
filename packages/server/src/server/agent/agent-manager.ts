@@ -2,6 +2,7 @@ import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
+import { composeDaemonAppendSystemPrompt } from "./writing-block-instruction.js";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -5094,16 +5095,15 @@ export class AgentManager {
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
-    const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+    // The writing-block convention always ships; the operator's own prompt follows it.
+    const daemonAppendSystemPrompt = composeDaemonAppendSystemPrompt(this.appendSystemPrompt);
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
 
-    return daemonAppendSystemPrompt
-      ? {
-          ...next,
-          daemonAppendSystemPrompt,
-        }
-      : next;
+    return {
+      ...next,
+      daemonAppendSystemPrompt,
+    };
   }
 
   private async buildLaunchContext(

@@ -299,6 +299,7 @@ export const en = {
     },
     actions: {
       copyCode: "Copy code",
+      copyText: "Copy text",
       copyTurn: "Copy turn",
       copyMessage: "Copy message",
       forkMenu: "Fork chat from here",
@@ -309,6 +310,9 @@ export const en = {
       forkFailed: "Failed to fork chat",
       openFile: "Open file",
       copied: "Copied",
+    },
+    writingBlock: {
+      untitled: "Text",
     },
     attachments: {
       dismissImage: "Dismiss image",

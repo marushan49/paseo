@@ -305,6 +305,7 @@ export const ja: TranslationResources = {
     },
     actions: {
       copyCode: "コードをコピー",
+      copyText: "テキストをコピー",
       copyTurn: "ターンをコピー",
       copyMessage: "メッセージをコピー",
       forkMenu: "メッセージをフォーク",
@@ -315,6 +316,9 @@ export const ja: TranslationResources = {
       forkFailed: "チャットのフォークに失敗しました",
       openFile: "ファイルを開く",
       copied: "コピーしました",
+    },
+    writingBlock: {
+      untitled: "テキスト",
     },
     attachments: {
       dismissImage: "画像を閉じる",

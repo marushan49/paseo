@@ -304,6 +304,7 @@ export const ru: TranslationResources = {
     },
     actions: {
       copyCode: "Скопировать код",
+      copyText: "Скопировать текст",
       copyTurn: "Скопировать ответ",
       copyMessage: "Копировать сообщение",
       forkMenu: "Форкнуть чат отсюда",
@@ -314,6 +315,9 @@ export const ru: TranslationResources = {
       forkFailed: "Не удалось создать форк чата",
       openFile: "Открыть файл",
       copied: "Скопировано",
+    },
+    writingBlock: {
+      untitled: "Текст",
     },
     attachments: {
       dismissImage: "Закрыть изображение",

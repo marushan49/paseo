@@ -304,6 +304,7 @@ export const ptBR: TranslationResources = {
     },
     actions: {
       copyCode: "Copiar código",
+      copyText: "Copiar texto",
       copyTurn: "Copiar turno",
       copyMessage: "Copiar mensagem",
       forkMenu: "Bifurcar mensagem",
@@ -314,6 +315,9 @@ export const ptBR: TranslationResources = {
       forkFailed: "Falha ao bifurcar o chat",
       openFile: "Abrir arquivo",
       copied: "Copiado",
+    },
+    writingBlock: {
+      untitled: "Texto",
     },
     attachments: {
       dismissImage: "Dispensar imagem",

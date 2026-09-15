@@ -306,6 +306,7 @@ export const fr: TranslationResources = {
     },
     actions: {
       copyCode: "Copier le code",
+      copyText: "Copier le texte",
       copyTurn: "Copier le tour",
       copyMessage: "Copier le message",
       forkMenu: "Dupliquer le message",
@@ -316,6 +317,9 @@ export const fr: TranslationResources = {
       forkFailed: "Impossible de dupliquer le chat",
       openFile: "Ouvrir le fichier",
       copied: "Copié",
+    },
+    writingBlock: {
+      untitled: "Texte",
     },
     attachments: {
       dismissImage: "Ignorer l'image",

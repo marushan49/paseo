@@ -302,6 +302,7 @@ export const ko: TranslationResources = {
     },
     actions: {
       copyCode: "코드 복사",
+      copyText: "텍스트 복사",
       copyTurn: "턴 복사",
       copyMessage: "메시지 복사",
       forkMenu: "여기에서 채팅 분기",
@@ -312,6 +313,9 @@ export const ko: TranslationResources = {
       forkFailed: "채팅을 분기하지 못했습니다.",
       openFile: "파일 열기",
       copied: "복사됨",
+    },
+    writingBlock: {
+      untitled: "텍스트",
     },
     attachments: {
       dismissImage: "이미지 닫기",

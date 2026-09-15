@@ -301,6 +301,7 @@ export const ar: TranslationResources = {
     },
     actions: {
       copyCode: "نسخ الرمز",
+      copyText: "نسخ النص",
       copyTurn: "نسخ بدوره",
       copyMessage: "انسخ الرسالة",
       forkMenu: "تفريع الرسالة",
@@ -311,6 +312,9 @@ export const ar: TranslationResources = {
       forkFailed: "فشل تفريع المحادثة",
       openFile: "افتح الملف",
       copied: "منقول",
+    },
+    writingBlock: {
+      untitled: "نص",
     },
     attachments: {
       dismissImage: "تجاهل الصورة",

@@ -301,6 +301,7 @@ export const zhCN: TranslationResources = {
     },
     actions: {
       copyCode: "复制代码",
+      copyText: "复制文本",
       copyTurn: "复制回合",
       copyMessage: "复制消息",
       forkMenu: "分叉消息",
@@ -311,6 +312,9 @@ export const zhCN: TranslationResources = {
       forkFailed: "分叉聊天失败",
       openFile: "打开文件",
       copied: "已复制",
+    },
+    writingBlock: {
+      untitled: "文本",
     },
     attachments: {
       dismissImage: "关闭图片",
