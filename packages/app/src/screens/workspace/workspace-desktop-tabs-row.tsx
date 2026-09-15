@@ -56,6 +56,7 @@ import {
   type WorkspaceTabPresentation,
 } from "@/screens/workspace/workspace-tab-presentation";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
+import type { TranscriptFormat } from "@/agent-transcript/serialize";
 import {
   buildWorkspaceDesktopTabActions,
   type WorkspaceDesktopTabActions,
@@ -507,6 +508,7 @@ interface WorkspaceDesktopTabsRowProps {
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -1003,6 +1005,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   onNavigateTab,
   onCloseTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -1081,6 +1084,8 @@ function ResolvedWorkspaceDesktopTabsRow({
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
     () => ({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
+      copyChatMarkdown: t("workspace.tabs.menu.copyChatMarkdown"),
+      copyChatJson: t("workspace.tabs.menu.copyChatJson"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),
@@ -1259,6 +1264,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           index={index}
           tabCount={displayedTabs.length}
           onCopyResumeCommand={onCopyResumeCommand}
+          onCopyChat={onCopyChat}
           onCopyAgentId={onCopyAgentId}
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
@@ -1294,6 +1300,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       onCopyTerminalId,
       onCopyFilePath,
       onCopyResumeCommand,
+      onCopyChat,
       onNavigateTab,
       onReloadAgent,
       onRenameTab,
@@ -1406,6 +1413,7 @@ function ResolvedDesktopTabChip({
   index,
   tabCount,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -1432,6 +1440,7 @@ function ResolvedDesktopTabChip({
   index: number;
   tabCount: number;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -1460,6 +1469,7 @@ function ResolvedDesktopTabChip({
         index,
         tabCount,
         onCopyResumeCommand,
+        onCopyChat,
         onCopyAgentId,
         onCopyTerminalId,
         onCopyFilePath,
@@ -1482,6 +1492,7 @@ function ResolvedDesktopTabChip({
       onCopyTerminalId,
       onCopyFilePath,
       onCopyResumeCommand,
+      onCopyChat,
       labels,
       onReloadAgent,
       onRenameTab,

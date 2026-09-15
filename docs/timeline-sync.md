@@ -107,6 +107,20 @@ history replay. The pending approval UI can hide that tool from presentation, bu
 must retain its position. Creating a new history card on rejection places it after the prompt that
 rejected it; changing steer-event ordering would also put new assistant output before that prompt.
 
+## Copying a transcript
+
+Copy chat in the agent tab menu exports the whole conversation, not the window the chat happens to
+have loaded. It walks `fetch_agent_timeline_request` backward from the tail until `hasOlder` is
+false and serializes the projected items, so it adds no RPC and needs no host capability gate.
+
+The walk is bounded by an entry cap and a page cap, and a rewind mid-walk restarts it once against
+the new epoch. When a bound stops it early, the export is marked truncated and reports that in its
+header. Do not drop the marker: a partial export that reads as complete misleads whoever pastes it.
+
+Markdown is for reading and pasting; JSON carries the raw projected entries for tooling. Both keep
+tool calls with their command, output, exit code, and error, since debugging a failed run is the
+reason to copy a transcript at all.
+
 ## Provider child history
 
 Child transcripts use the same projected-page reconciliation as the main conversation. The client

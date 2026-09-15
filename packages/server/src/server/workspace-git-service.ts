@@ -52,6 +52,11 @@ import {
   runGitCommand,
   type RunGitCommand,
 } from "../utils/run-git-command.js";
+import {
+  mergeRelatedPullRequests,
+  type RelatedPullRequest,
+  type RelatedPullRequestFacts,
+} from "../utils/related-pull-requests.js";
 import { branchNameFromRef } from "../utils/worktree-metadata.js";
 import { listPaseoWorktrees, type PaseoWorktreeInfo } from "../utils/worktree.js";
 import { READ_ONLY_GIT_ENV } from "./checkout-git-utils.js";
@@ -168,6 +173,12 @@ export interface WorkspaceGitRuntimeSnapshot {
       reviewDecision?: "approved" | "changes_requested" | "pending" | null;
       forgeSpecific?: ForgeSpecificStatusFacts;
     } | null;
+    /**
+     * Every change request that belongs with `pullRequest` — its GitHub stack plus anything
+     * else opened from the same head. Absent when the adapter cannot resolve a set, which
+     * leaves the row rendering the single change request above.
+     */
+    relatedPullRequests?: RelatedPullRequest[];
     error: { message: string } | null;
   };
 }
@@ -579,6 +590,47 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.forgeResolver = createForgeResolver({
       createService: (forge) => this.deps.forgeOverrides?.[forge] ?? createForgeService(forge),
     });
+  }
+
+  /**
+   * The set that belongs with the change request the poll just read. Adapters without stacks
+   * omit the method, and a failure here must not cost the status the poll already earned —
+   * the row falls back to its single change request.
+   */
+  private async resolveRelatedPullRequests(input: {
+    service: {
+      getRelatedPullRequests?: (options: {
+        cwd: string;
+        number: number;
+        headRef: string;
+        headSha?: string;
+      }) => Promise<RelatedPullRequestFacts[]>;
+    };
+    cwd: string;
+    status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"];
+    headRef: string;
+    headSha?: string;
+  }): Promise<RelatedPullRequest[] | undefined> {
+    const number = input.status?.number;
+    if (number === undefined || !input.service.getRelatedPullRequests) {
+      return undefined;
+    }
+    try {
+      const facts = await input.service.getRelatedPullRequests({
+        cwd: input.cwd,
+        number,
+        headRef: input.headRef,
+        ...(input.headSha ? { headSha: input.headSha } : {}),
+      });
+      const merged = mergeRelatedPullRequests({ currentNumber: number, branch: facts });
+      return merged.length > 0 ? merged : undefined;
+    } catch (error) {
+      this.logger.warn(
+        { err: error, cwd: input.cwd, number },
+        "Failed to resolve related pull requests",
+      );
+      return undefined;
+    }
   }
 
   resolveForge(cwd: string): Promise<ForgeResolution | null> {
@@ -2503,9 +2555,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         if (!closed && this.isActiveObservedWorkspaceTarget(target)) {
           latestStatus = status;
           consecutiveErrors = 0;
-          this.rememberForgePrStatusSnapshot(target, buildForgeSnapshotFromStatus(status, forge), {
-            notify: true,
+          const related = await this.resolveRelatedPullRequests({
+            service,
+            cwd: target.cwd,
+            status,
+            headRef: pollTarget.headRef,
+            ...(pollTarget.headSha ? { headSha: pollTarget.headSha } : {}),
           });
+          this.rememberForgePrStatusSnapshot(
+            target,
+            buildForgeSnapshotFromStatus(status, forge, related),
+            { notify: true },
+          );
         }
       } catch (error) {
         consecutiveErrors += 1;
@@ -3424,11 +3485,13 @@ function buildForgeSnapshot(
   authState: ForgeAuthState,
   pullRequest: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   error: WorkspaceGitRuntimeSnapshot["forge"]["error"],
+  relatedPullRequests?: RelatedPullRequest[],
 ): WorkspaceGitRuntimeSnapshot["forge"] {
   return {
     featuresEnabled: authState === "authenticated",
     authState,
     pullRequest,
+    ...(relatedPullRequests && relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
     error,
   };
 }
@@ -3519,8 +3582,9 @@ function buildUnresolvedRemoteForgeSnapshot(
 function buildForgeSnapshotFromStatus(
   status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   forge: string,
+  relatedPullRequests?: RelatedPullRequest[],
 ): WorkspaceGitRuntimeSnapshot["forge"] {
-  return { ...buildForgeSnapshot("authenticated", status, null), forge };
+  return { ...buildForgeSnapshot("authenticated", status, null, relatedPullRequests), forge };
 }
 
 function buildWorkspaceForgePrStatusPollKey({

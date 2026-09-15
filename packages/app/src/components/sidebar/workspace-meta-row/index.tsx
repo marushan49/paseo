@@ -16,6 +16,8 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { useSidebarMetaPreferences } from "@/components/sidebar/display-preferences/model";
 import type { Theme } from "@/styles/theme";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import type { RelatedPullRequest } from "@/git/related-pull-requests";
+import { ChangeRequestSetItem, ChangeRequestSetList } from "./change-request-set";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
 import { selectMetaRowItems, type MetaRowItem } from "./meta-items";
@@ -65,6 +67,7 @@ export function WorkspaceMetaRow({
   projectName,
   hostBadge,
   prHint,
+  relatedPullRequests = EMPTY_PULL_REQUESTS,
   serviceSummary,
   labels = EMPTY_LABELS,
 }: {
@@ -72,15 +75,22 @@ export function WorkspaceMetaRow({
   projectName: string | null;
   hostBadge: HostBadgeModel | null;
   prHint: PrHint | null;
+  relatedPullRequests?: readonly RelatedPullRequest[];
   serviceSummary: WorkspaceServiceSummary | null;
   labels?: readonly WorkspaceLabelDefinition[];
 }) {
   const { rowItems, checksDisplay } = useSidebarMetaPreferences();
+  // Expansion is this row's own business: it survives no navigation and nothing else reads it,
+  // so it stays local rather than becoming another field in the sidebar's persisted state.
+  const [expanded, setExpanded] = useState(false);
+  const handleToggle = useCallback(() => setExpanded((open) => !open), []);
   const items = selectMetaRowItems({
     currentBranch,
     projectName,
     hasHostBadge: hostBadge !== null,
     prHint,
+    relatedPullRequests,
+    setExpanded: expanded,
     serviceSummary,
     labels,
     visible: rowItems,
@@ -89,27 +99,43 @@ export function WorkspaceMetaRow({
 
   if (items.length === 0) return null;
 
+  const expandedSet = items.find((item) => item.kind === "changeRequestSet" && item.expanded);
+
   return (
-    <View style={styles.row}>
-      {items.map((item, index) => (
-        <Fragment key={item.kind}>
-          {index > 0 ? <Text style={styles.separator}>·</Text> : null}
-          <MetaItemNode item={item} hostBadge={hostBadge} leading={index === 0} />
-        </Fragment>
-      ))}
+    <View style={styles.column}>
+      <View style={styles.row}>
+        {items.map((item, index) => (
+          <Fragment key={item.kind}>
+            {index > 0 ? <Text style={styles.separator}>·</Text> : null}
+            <MetaItemNode
+              item={item}
+              hostBadge={hostBadge}
+              leading={index === 0}
+              onToggleSet={handleToggle}
+            />
+          </Fragment>
+        ))}
+      </View>
+      {expandedSet?.kind === "changeRequestSet" ? (
+        <ChangeRequestSetList pullRequests={expandedSet.pullRequests} />
+      ) : null}
     </View>
   );
 }
+
+const EMPTY_PULL_REQUESTS: readonly RelatedPullRequest[] = [];
 
 function MetaItemNode({
   item,
   hostBadge,
   leading,
+  onToggleSet,
 }: {
   item: MetaRowItem;
   hostBadge: HostBadgeModel | null;
   /** First on the line, so this item's ink sets the rail the title above it already uses. */
   leading: boolean;
+  onToggleSet: () => void;
 }): ReactNode {
   if (item.kind === "branch") {
     return <IdentityItem kind="branch" name={item.name} />;
@@ -122,6 +148,15 @@ function MetaItemNode({
   }
   if (item.kind === "changeRequest") {
     return <PullRequestItem hint={item.hint} />;
+  }
+  if (item.kind === "changeRequestSet") {
+    return (
+      <ChangeRequestSetItem
+        summary={item.summary}
+        expanded={item.expanded}
+        onToggle={onToggleSet}
+      />
+    );
   }
   if (item.kind === "checks") {
     return <ChecksItem summary={item.summary} label={item.label} />;
@@ -310,6 +345,9 @@ function pressableItemStyle({ pressed }: { pressed: boolean }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  column: {
+    minWidth: 0,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
