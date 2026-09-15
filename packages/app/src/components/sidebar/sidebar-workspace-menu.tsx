@@ -7,6 +7,7 @@ import {
   Circle,
   CircleCheck,
   Copy,
+  GitPullRequest,
   MoreVertical,
   Pencil,
   Pin,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
   workspaceServiceLabelKey,
@@ -51,6 +53,7 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 });
 
 const ThemedMoreVertical = withUnistyles(MoreVertical);
+const ThemedGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedArchive = withUnistyles(Archive);
 const ThemedCircle = withUnistyles(Circle);
@@ -155,6 +158,17 @@ function SidebarWorkspaceMenuItems({
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
+  const attachLeading = useMemo(
+    () => <ThemedGitPullRequest size={14} uniProps={foregroundMutedColorMapping} />,
+    [],
+  );
+  // The attach flow owns its dialog: every row menu (kebab or context menu,
+  // all row renderers) gets it without threading state through the row tree.
+  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
+    serverId,
+    workspaceId,
+    workspaceKey,
+  });
 
   return (
     <>
@@ -188,6 +202,14 @@ function SidebarWorkspaceMenuItems({
           {t("sidebar.workspace.actions.rename")}
         </WorkspaceMenuItem>
       ) : null}
+      <WorkspaceMenuItem
+        surface={surface}
+        testID={`sidebar-workspace-menu-attach-pr-${workspaceKey}`}
+        leading={attachLeading}
+        onSelect={openAttachDialog}
+      >
+        {t("workspace.git.pr.set.attachPullRequest")}
+      </WorkspaceMenuItem>
       {onMarkAsRead ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -245,6 +267,7 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
+      {attachDialog}
     </>
   );
 }

@@ -951,6 +951,12 @@ export const zhCN: TranslationResources = {
           passing: "通过",
           draft: "草稿",
           toggleAccessibility: "显示全部 {{count}} 个拉取请求",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "PR number, e.g. 1346",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
         },
         checksSummary: {
           passedLabel: "通过",

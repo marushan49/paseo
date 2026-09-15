@@ -966,6 +966,12 @@ export const ko: TranslationResources = {
           passing: "성공",
           draft: "초안",
           toggleAccessibility: "풀 리퀘스트 {{count}}개 모두 보기",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "PR number, e.g. 1346",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
         },
         checksSummary: {
           passedLabel: "통과",
