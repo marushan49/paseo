@@ -8,6 +8,7 @@ import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
+import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
 import { useToast } from "@/contexts/toast-context";
 import { toWorktreeArchiveRisk } from "@/git/worktree-archive-warning";
@@ -122,6 +123,14 @@ export function SidebarWorkspaceRow({
     setIsRenameOpen(false);
   }, []);
 
+  // Row-level like rename: the dialog must survive the hover-gated kebab
+  // menu unmounting when its item is selected.
+  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
+    serverId: workspace.serverId,
+    workspaceId: workspace.workspaceId,
+    workspaceKey: workspace.workspaceKey,
+  });
+
   const archiveShortcutKeys = useShortcutKeys("archive-workspace");
   const { hasClearableAttention, canMarkUnread, clearAttention, markUnread } =
     useWorkspaceReadState({
@@ -174,6 +183,7 @@ export function SidebarWorkspaceRow({
         onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
         onMarkAsUnread={canMarkUnread ? handleMarkAsUnread : undefined}
         archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+        openAttachDialog={openAttachDialog}
       />
       <WorkspaceRenameModal
         visible={isRenameOpen}
@@ -181,6 +191,7 @@ export function SidebarWorkspaceRow({
         onClose={handleCloseRename}
         testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
       />
+      {attachDialog}
     </>
   );
 }
@@ -207,6 +218,7 @@ interface WorkspaceRowBodyProps {
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  openAttachDialog: () => void;
 }
 
 function WorkspaceRowBody({
@@ -231,6 +243,7 @@ function WorkspaceRowBody({
   onMarkAsRead,
   onMarkAsUnread,
   archiveShortcutKeys,
+  openAttachDialog,
 }: WorkspaceRowBodyProps) {
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
@@ -309,6 +322,7 @@ function WorkspaceRowBody({
               archivePendingLabel={archivePendingLabel}
               archiveShortcutKeys={archiveShortcutKeys}
               openInFileManagerPath={workspace.workspaceDirectory}
+              openAttachDialog={openAttachDialog}
               disabled={isArchiving}
               aria-selected={selected}
               accessibilityRole="button"
@@ -351,6 +365,7 @@ function WorkspaceRowBody({
                   onRename={onRename}
                   onMarkAsRead={onMarkAsRead}
                   onMarkAsUnread={onMarkAsUnread}
+                  openAttachDialog={openAttachDialog}
                 />
               </SidebarWorkspaceRowContent>
             </SidebarWorkspaceContextMenu>
@@ -380,6 +395,7 @@ function WorkspaceRowTrailingActions({
   onCopyBranchName,
   onCopyPath,
   onRename,
+  openAttachDialog,
 }: {
   workspace: SidebarWorkspaceEntry;
   backdrop: SidebarSurfaceBackdrop;
@@ -399,6 +415,7 @@ function WorkspaceRowTrailingActions({
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
   onRename?: () => void;
+  openAttachDialog: () => void;
 }) {
   const { t } = useTranslation();
   const showShortcut = showShortcutBadge && shortcutNumber !== null;
@@ -449,6 +466,7 @@ function WorkspaceRowTrailingActions({
                 archiveStatus={archiveStatus}
                 archivePendingLabel={archivePendingLabel}
                 archiveShortcutKeys={archiveShortcutKeys}
+                openAttachDialog={openAttachDialog}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>
