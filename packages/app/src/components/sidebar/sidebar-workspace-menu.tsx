@@ -1,4 +1,10 @@
-import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
+import {
+  useCallback,
+  useMemo,
+  type ComponentProps,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -36,6 +42,7 @@ import {
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
+import { useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
   workspaceServiceLabelKey,
@@ -169,6 +176,10 @@ function SidebarWorkspaceMenuItems({
     workspaceId,
     workspaceKey,
   });
+  const { scanChat, scanning } = useScanWorkspaceChat({ serverId, workspaceId, workspaceKey });
+  const handleScanChat = useCallback(() => {
+    void scanChat();
+  }, [scanChat]);
 
   return (
     <>
@@ -209,6 +220,15 @@ function SidebarWorkspaceMenuItems({
         onSelect={openAttachDialog}
       >
         {t("workspace.git.pr.set.attachPullRequest")}
+      </WorkspaceMenuItem>
+      <WorkspaceMenuItem
+        surface={surface}
+        testID={`sidebar-workspace-menu-scan-chat-${workspaceKey}`}
+        leading={attachLeading}
+        status={scanning ? "pending" : "idle"}
+        onSelect={handleScanChat}
+      >
+        {t("workspace.git.pr.set.scanChatPullRequests")}
       </WorkspaceMenuItem>
       {onMarkAsRead ? (
         <WorkspaceMenuItem

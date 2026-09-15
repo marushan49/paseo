@@ -108,9 +108,13 @@ App slice shipped on `workspace-pr-curation`: curation model
 (`PullRequestCuration`, same shape as the future wire field),
 ephemeral per-workspace store, attach-by-number through the existing
 `forge.search` RPC with exact-number matching, remove via long-press on the
-expanded line, row-menu entry in kebab and context menu. The store is
+expanded line, row-menu entries (kebab + context menu) for attach and for
+"scan chat for PRs" — a bounded transcript walk that extracts `#123` refs
+and pull URLs and attaches what the forge confirms. The store is
 deliberately ephemeral; daemon persistence via `agent.pull_requests.curate`
-replaces it (store is then a write-through cache).
+replaces it (store is then a write-through cache). Full auto-attach on
+restart belongs daemon-side with that persistence (rate limits), not as an
+app-startup fan-out.
 
 Not shipped: daemon persistence, the curate RPC, and source 2 (session
 branches have no tracking to key off — needs recording at creation time).

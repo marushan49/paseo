@@ -62,6 +62,32 @@ export function applyPullRequestCuration(
 }
 
 /**
+ * Pull request numbers mentioned anywhere in free text: GitHub pull URLs
+ * (`.../pull/123`) and bare `#123` refs. sc-MR `!123` is deliberately
+ * excluded — it collides with Markdown image syntax. Capped and sorted;
+ * callers resolve the numbers against the forge, so a wrong guess only
+ * costs a lookup, never a wrong attachment.
+ */
+const PULL_URL_PATTERN = /https?:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/(\d{1,7})/g;
+const BARE_REF_PATTERN = /(?:^|[^\w/#])#(\d{2,7})(?![\w/])/g;
+const MAX_EXTRACTED_REFS = 50;
+
+export function extractPullRequestReferences(text: string): number[] {
+  const found = new Set<number>();
+  for (const pattern of [PULL_URL_PATTERN, BARE_REF_PATTERN]) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null && found.size < MAX_EXTRACTED_REFS) {
+      const number = Number.parseInt(match[1] ?? "", 10);
+      if (Number.isSafeInteger(number) && number > 0) {
+        found.add(number);
+      }
+    }
+  }
+  return [...found].sort((left, right) => left - right);
+}
+
+/**
  * A forge search hit becomes a set entry with origin "manual". Returns null
  * unless the hit is a change request in a known state — anything else cannot
  * join the row's health math.

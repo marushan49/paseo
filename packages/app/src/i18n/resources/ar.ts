@@ -965,6 +965,10 @@ export const ar: TranslationResources = {
           attachConfirm: "Attach",
           attachNotFound: "No pull request #{{number}} found in this repository.",
           removePullRequest: "Remove pull request #{{number}} from this workspace",
+          scanChatPullRequests: "Scan chat for PRs",
+          scanChatFound: "Found {{count}} pull requests in chat",
+          scanChatEmpty: "No pull requests found in chat",
+          scanChatNoAgent: "No agent chat found for this workspace",
         },
         checksSummary: {
           passedLabel: "نجح",

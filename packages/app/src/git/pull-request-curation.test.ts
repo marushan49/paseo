@@ -3,6 +3,7 @@ import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import {
   applyPullRequestCuration,
   EMPTY_PULL_REQUEST_CURATION,
+  extractPullRequestReferences,
   normalizePullRequestCuration,
   searchItemToRelatedPullRequest,
   type PullRequestCuration,
@@ -117,5 +118,23 @@ describe("searchItemToRelatedPullRequest", () => {
 
   it("rejects unknown states", () => {
     expect(searchItemToRelatedPullRequest({ ...searchItem(1), state: "draft" })).toBeNull();
+  });
+});
+
+describe("extractPullRequestReferences", () => {
+  it("finds pull URLs and bare refs", () => {
+    expect(
+      extractPullRequestReferences(
+        "Shipped https://github.com/9elf26/9elf26-ai-platform/pull/1371 and #1346, see #1346 again",
+      ),
+    ).toEqual([1346, 1371]);
+  });
+
+  it("ignores single-digit noise and markdown images", () => {
+    expect(extractPullRequestReferences("see #1 and ![alt](img.png) but !123")).toEqual([]);
+  });
+
+  it("returns nothing for plain text", () => {
+    expect(extractPullRequestReferences("no refs here")).toEqual([]);
   });
 });
