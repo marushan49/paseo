@@ -18,6 +18,8 @@ import { BackHandler, Keyboard, Pressable, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
+import { copyAgentTranscript } from "@/agent-transcript/copy";
+import type { TranscriptFormat } from "@/agent-transcript/serialize";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -411,6 +413,7 @@ interface MobileWorkspaceTabSwitcherProps {
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -518,6 +521,7 @@ function MobileWorkspaceTabOption({
   active,
   onPress,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -537,6 +541,7 @@ function MobileWorkspaceTabOption({
   active: boolean;
   onPress: () => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -551,6 +556,8 @@ function MobileWorkspaceTabOption({
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
     () => ({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
+      copyChatMarkdown: t("workspace.tabs.menu.copyChatMarkdown"),
+      copyChatJson: t("workspace.tabs.menu.copyChatJson"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),
@@ -574,6 +581,7 @@ function MobileWorkspaceTabOption({
     tabCount,
     menuTestIDBase,
     onCopyResumeCommand,
+    onCopyChat,
     onCopyAgentId,
     onCopyTerminalId,
     onCopyFilePath,
@@ -646,6 +654,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   normalizedWorkspaceId,
   onSelectSwitcherTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -703,6 +712,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           active={active}
           onPress={onPress}
           onCopyResumeCommand={onCopyResumeCommand}
+          onCopyChat={onCopyChat}
           onCopyAgentId={onCopyAgentId}
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
@@ -722,6 +732,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       normalizedServerId,
       normalizedWorkspaceId,
       onCopyResumeCommand,
+      onCopyChat,
       onCopyAgentId,
       onCopyTerminalId,
       onCopyFilePath,
@@ -2739,6 +2750,46 @@ function WorkspaceScreenContent({
     [normalizedServerId, toast, t],
   );
 
+  const handleCopyChat = useCallback(
+    async (agentId: string, format: TranscriptFormat) => {
+      if (!agentId) return;
+      if (!client || !isConnected) {
+        toast.error(t("workspace.terminal.hostDisconnected"));
+        return;
+      }
+
+      const agent =
+        useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
+
+      // A full export pages through the whole history, so it is not instant.
+      toast.show(t("workspace.tabs.toasts.copyingChat"), { durationMs: null });
+      try {
+        const result = await copyAgentTranscript({
+          agentId,
+          agentName: agent?.title ?? null,
+          provider: agent?.provider ?? null,
+          format,
+          fetchPage: (options) => client.fetchAgentTimeline(agentId, options),
+          writeToClipboard: async (text) => {
+            await Clipboard.setStringAsync(text);
+          },
+        });
+        if (result.status === "empty") {
+          toast.error(t("workspace.tabs.toasts.chatCopyEmpty"));
+          return;
+        }
+        toast.copied(
+          result.truncated
+            ? t("workspace.tabs.toasts.chatCopyTruncated")
+            : t("workspace.tabs.toasts.chatCopiedLabel"),
+        );
+      } catch {
+        toast.error(t("workspace.tabs.toasts.copyChatFailed"));
+      }
+    },
+    [client, isConnected, normalizedServerId, toast, t],
+  );
+
   const handleReloadAgent = useCallback(
     async (agentId: string) => {
       if (!client || !isConnected) {
@@ -3965,6 +4016,7 @@ function WorkspaceScreenContent({
         onNavigateTab={navigateToTabId}
         onCloseTab={handleCloseTabById}
         onCopyResumeCommand={handleCopyResumeCommand}
+        onCopyChat={handleCopyChat}
         onCopyAgentId={handleCopyAgentId}
         onCopyTerminalId={handleCopyTerminalId}
         onCopyFilePath={handleCopyFilePath}
@@ -4001,6 +4053,7 @@ function WorkspaceScreenContent({
     navigateToTabId,
     handleCloseTabById,
     handleCopyResumeCommand,
+    handleCopyChat,
     handleCopyAgentId,
     handleCopyTerminalId,
     handleCopyFilePath,
@@ -4044,6 +4097,7 @@ function WorkspaceScreenContent({
           normalizedWorkspaceId={normalizedWorkspaceId}
           onSelectSwitcherTab={handleSelectSwitcherTab}
           onCopyResumeCommand={handleCopyResumeCommand}
+          onCopyChat={handleCopyChat}
           onCopyAgentId={handleCopyAgentId}
           onCopyTerminalId={handleCopyTerminalId}
           onCopyFilePath={handleCopyFilePath}
@@ -4068,6 +4122,7 @@ function WorkspaceScreenContent({
             onNavigateTab={navigateToTabId}
             onCloseTab={handleCloseTabById}
             onCopyResumeCommand={handleCopyResumeCommand}
+            onCopyChat={handleCopyChat}
             onCopyAgentId={handleCopyAgentId}
             onCopyTerminalId={handleCopyTerminalId}
             onCopyFilePath={handleCopyFilePath}

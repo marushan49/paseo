@@ -1,4 +1,5 @@
 import type { ForgeSearchKind } from "@getpaseo/protocol/messages";
+import type { RelatedPullRequestFacts } from "../utils/related-pull-requests.js";
 
 export type ForgeSearchRequestKind = ForgeSearchKind | "github-issue" | "github-pr" | "pr";
 
@@ -472,6 +473,20 @@ export interface ForgeService {
       headRepositoryOwner?: string;
     } & ForgeReadOptions,
   ): Promise<CurrentPullRequestStatus | null>;
+  /**
+   * Every change request that belongs with `number` — its GitHub stack, plus anything opened
+   * from `headRef`. Optional because stacks are a GitHub concept; an adapter that omits this
+   * leaves the row with the single change request it already resolved.
+   */
+  getRelatedPullRequests?(
+    options: {
+      cwd: string;
+      number: number;
+      headRef: string;
+      /** Part of the cache key: a new head means the set may have changed. */
+      headSha?: string;
+    } & ForgeReadOptions,
+  ): Promise<RelatedPullRequestFacts[]>;
   getPullRequestTimeline(options: GetPullRequestTimelineOptions): Promise<PullRequestTimeline>;
   getCheckDetails(options: GetCheckDetailsOptions): Promise<CheckDetails>;
   searchIssuesAndPrs(options: SearchIssuesAndPrsOptions): Promise<SearchResult>;

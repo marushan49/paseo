@@ -3620,6 +3620,9 @@ export const ServerInfoStatusPayloadSchema = z
         providerSubagents: z.boolean().optional(),
         // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove gates after 2027-03-14; retain wire field.
         projectedSubagentTimeline: z.boolean().optional(),
+        // COMPAT(relatedPullRequests): added in v0.8.1, remove gates once the daemon
+        // floor ships githubRuntime.relatedPullRequests; retain wire field.
+        relatedPullRequests: z.boolean().optional(),
         // COMPAT(providerSubagentNesting): added in v0.7, remove gate after 2027-03-04.
         providerSubagentNesting: z.boolean().optional(),
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
@@ -3937,6 +3940,32 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
         github: z.unknown().optional(),
       })
       .nullable()
+      .optional(),
+    // COMPAT(relatedPullRequests): added in v0.8.1. Gate consumers on
+    // server_info.features.relatedPullRequests; remove that gate once the supported
+    // daemon floor ships this field. A workspace whose change requests form a GitHub
+    // stack, or whose session opened several, reports every one of them here. The
+    // singular `pullRequest` above stays authoritative for the checked-out branch.
+    relatedPullRequests: z
+      .array(
+        z.object({
+          number: z.number(),
+          url: z.string(),
+          title: z.string().optional(),
+          state: z.enum(["open", "merged", "closed"]),
+          isDraft: z.boolean().optional(),
+          headRefName: z.string().optional(),
+          baseRefName: z.string().optional(),
+          additions: z.number().optional(),
+          deletions: z.number().optional(),
+          checksStatus: z.enum(["none", "pending", "success", "failure"]).optional(),
+          // How this change request entered the set. Kept on the wire so the row can
+          // explain itself and so a later curation step can tell derived from chosen.
+          origin: z.enum(["stack", "branch", "current", "manual"]),
+          // Position in the GitHub stack, bottom first. Absent for unstacked entries.
+          stackIndex: z.number().optional(),
+        }),
+      )
       .optional(),
     error: z
       .object({

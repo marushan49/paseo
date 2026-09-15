@@ -1,5 +1,11 @@
 import { z } from "zod";
 import {
+  parseGhPullRequestList,
+  parseGitHubStackResponse,
+  RELATED_PULL_REQUEST_JSON_FIELDS,
+  type RelatedPullRequestFacts,
+} from "../utils/related-pull-requests.js";
+import {
   isGitHubHost,
   parseGitHubRemoteUrl,
   parseGitRemoteLocation,
@@ -2173,6 +2179,71 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
       });
     },
 
+    getRelatedPullRequests(input) {
+      return cached({
+        cwd: input.cwd,
+        method: "getRelatedPullRequests",
+        // Keyed on the head as well as the number: the set only changes when the change
+        // request does, so a poll that finds the same head reuses this answer instead of
+        // spending two more forge calls.
+        args: { number: input.number, headRef: input.headRef, headSha: input.headSha },
+        readOptions: input,
+        load: async () => {
+          const stackNumbers = await loadGitHubStackNumbers({
+            cwd: input.cwd,
+            number: input.number,
+            run,
+          });
+
+          // One list call answers both halves: the stack members by number, and anything
+          // opened from this head. `additions`/`deletions` ride along, so per-change-request
+          // diff figures cost nothing extra.
+          const searchNumbers = [...new Set([...stackNumbers, input.number])];
+          const listArgs = [
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--limit",
+            String(Math.max(searchNumbers.length, 1) + RELATED_PULL_REQUEST_HEAD_SLACK),
+            "--head",
+            input.headRef,
+            "--json",
+            RELATED_PULL_REQUEST_JSON_FIELDS.join(","),
+          ];
+          const byHead = parseGhPullRequestList(
+            await runGhJson(listArgs, { cwd: input.cwd }, z.unknown(), "[]"),
+          );
+
+          const missing = searchNumbers.filter(
+            (number) => !byHead.some((facts) => facts.number === number),
+          );
+          const byNumber: RelatedPullRequestFacts[] = [];
+          for (const number of missing) {
+            const view = await runGhJson(
+              ["pr", "view", String(number), "--json", RELATED_PULL_REQUEST_JSON_FIELDS.join(",")],
+              { cwd: input.cwd },
+              z.unknown(),
+              "{}",
+            ).catch(() => null);
+            if (view) byNumber.push(...parseGhPullRequestList([view]));
+          }
+
+          const ordered: RelatedPullRequestFacts[] = [];
+          for (const number of stackNumbers) {
+            const facts =
+              byNumber.find((entry) => entry.number === number) ??
+              byHead.find((entry) => entry.number === number);
+            if (facts) ordered.push(facts);
+          }
+          for (const facts of [...byHead, ...byNumber]) {
+            if (!ordered.some((entry) => entry.number === facts.number)) ordered.push(facts);
+          }
+          return ordered;
+        },
+      });
+    },
+
     getPullRequestTimeline(input) {
       return cached({
         cwd: input.cwd,
@@ -2828,6 +2899,35 @@ const githubCliRunner = createForgeCliRunner({
     createCommandError: (params) => new GitHubCommandError(params),
   },
 });
+
+/**
+ * Room for change requests that share this head beyond the stack itself — a reopened one, a
+ * closed duplicate. Small on purpose: the list is a sidebar row, not a report.
+ */
+const RELATED_PULL_REQUEST_HEAD_SLACK = 5;
+
+/**
+ * GitHub's own stack membership for a change request. The endpoint is public preview and
+ * answers `[]` for anything unstacked, so a failure here degrades to "no stack" rather than
+ * failing the resolve — the branch half of the set still stands on its own.
+ */
+async function loadGitHubStackNumbers(input: {
+  cwd: string;
+  number: number;
+  run: (args: string[], options: GitHubCommandRunnerOptions) => Promise<string>;
+}): Promise<number[]> {
+  try {
+    const stdout = await input.run(
+      ["api", `repos/{owner}/{repo}/stacks?pull_request=${input.number}`],
+      { cwd: input.cwd },
+    );
+    return parseGitHubStackResponse(JSON.parse(stdout || "[]"));
+  } catch {
+    // Preview endpoint, unauthenticated host, or a repo without stacks: the head-branch half
+    // of the set still stands on its own, so degrade instead of failing the resolve.
+    return [];
+  }
+}
 
 async function runGhCommand(
   args: string[],

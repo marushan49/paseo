@@ -5597,6 +5597,9 @@ export class Session {
     return {
       featuresEnabled: snapshot.forge.featuresEnabled,
       pullRequest: snapshot.forge.pullRequest,
+      ...(snapshot.forge.relatedPullRequests
+        ? { relatedPullRequests: snapshot.forge.relatedPullRequests }
+        : {}),
       error: snapshot.forge.error,
     };
   }

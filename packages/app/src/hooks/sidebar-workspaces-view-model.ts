@@ -1,4 +1,5 @@
 import type { PrHint } from "@/git/pr-hint";
+import { selectRelatedPullRequests, type RelatedPullRequest } from "@/git/related-pull-requests";
 import { selectPrHintFromStatus } from "@/git/pr-hint";
 import { type HostProjectListItem } from "@/projects/host-project-model";
 import type { PendingCreateAttempt } from "@/stores/create-flow-store";
@@ -48,6 +49,8 @@ export interface SidebarWorkspaceEntry extends SidebarStatusWorkspacePlacement {
   archivingAt: string | null;
   diffStat: { additions: number; deletions: number } | null;
   prHint: PrHint | null;
+  /** Absent against a daemon that predates the field; the row then keeps its single-PR shape. */
+  relatedPullRequests?: readonly RelatedPullRequest[];
   archiveHasUncommittedChanges: boolean | null;
   archiveUnpushedCommitCount: number | null;
   scripts: WorkspaceDescriptor["scripts"];
@@ -177,6 +180,7 @@ export function createSidebarWorkspaceEntry(input: {
       input.workspace.githubRuntime?.pullRequest,
       input.workspace.forge,
     ),
+    relatedPullRequests: selectRelatedPullRequests(input.workspace.githubRuntime),
     archiveHasUncommittedChanges: input.workspace.gitRuntime?.isDirty ?? null,
     archiveUnpushedCommitCount: input.workspace.gitRuntime?.aheadOfOrigin ?? null,
     scripts: input.workspace.scripts,
