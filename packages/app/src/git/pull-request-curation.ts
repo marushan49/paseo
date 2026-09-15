@@ -70,14 +70,18 @@ export function searchItemToRelatedPullRequest(item: ForgeSearchItem): RelatedPu
   if (item.kind !== "change_request") {
     return null;
   }
-  if (item.state !== "open" && item.state !== "merged" && item.state !== "closed") {
+  // Forge search items carry the raw `gh` state ("OPEN"); the daemon's
+  // derived sets arrive lowercased. Accept both so manual attach works
+  // regardless of which path produced the facts.
+  const state = item.state.toLowerCase();
+  if (state !== "open" && state !== "merged" && state !== "closed") {
     return null;
   }
   return {
     number: item.number,
     url: item.url,
     title: item.title,
-    state: item.state,
+    state,
     headRefName: item.headRefName ?? undefined,
     baseRefName: item.baseRefName ?? undefined,
     origin: "manual",
