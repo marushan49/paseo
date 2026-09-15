@@ -113,6 +113,8 @@ interface SidebarWorkspaceMenuItemsProps extends Omit<
   "onArchive" | "open" | "onOpenChange"
 > {
   onArchive?: () => void;
+  /** Opener for the attach dialog, which renders outside the menu content. */
+  openAttachDialog: () => void;
 }
 
 type MenuSurface = "context" | "dropdown";
@@ -148,6 +150,7 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openAttachDialog,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -162,13 +165,6 @@ function SidebarWorkspaceMenuItems({
     () => <ThemedGitPullRequest size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
-  // The attach flow owns its dialog: every row menu (kebab or context menu,
-  // all row renderers) gets it without threading state through the row tree.
-  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
-    serverId,
-    workspaceId,
-    workspaceKey,
-  });
 
   return (
     <>
@@ -267,7 +263,6 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
-      {attachDialog}
     </>
   );
 }
@@ -300,6 +295,13 @@ export function SidebarWorkspaceMenu({
     [serverId, workspaceId, workspaceLabels],
   );
   const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  // The attach dialog lives outside the menu content: selecting its item
+  // closes the menu, which would unmount a dialog rendered inside it.
+  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
+    serverId,
+    workspaceId,
+    workspaceKey,
+  });
   return (
     <DropdownMenu compactMode="sheet" open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
@@ -336,8 +338,10 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openAttachDialog={openAttachDialog}
         />
       </DropdownMenuContent>
+      {attachDialog}
     </DropdownMenu>
   );
 }
@@ -373,7 +377,7 @@ export function SidebarWorkspaceContextMenu({
   highlightStyle,
   ...triggerProps
 }: PropsWithChildren<
-  SidebarWorkspaceMenuItemsProps &
+  Omit<SidebarWorkspaceMenuItemsProps, "openAttachDialog"> &
     ContextTriggerProps & {
       contextMenuOpen: boolean;
       onContextMenuOpenChange: (open: boolean) => void;
@@ -413,6 +417,12 @@ export function SidebarWorkspaceContextMenu({
     [workspace],
   );
   const pages = useWorkspaceLabelMenuPages(workspaceTarget);
+  // Same as the kebab menu above: the dialog must outlive the menu content.
+  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
+    serverId: workspaceTarget.serverId,
+    workspaceId: workspaceTarget.workspaceId,
+    workspaceKey,
+  });
 
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
@@ -449,8 +459,10 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openAttachDialog={openAttachDialog}
         />
       </ContextMenuContent>
+      {attachDialog}
     </ContextMenu>
   );
 }
