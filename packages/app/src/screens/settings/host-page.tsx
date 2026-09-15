@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
-import type { TerminalProfile } from "@getpaseo/protocol/messages";
+import type { ResourcePolicy, TerminalProfile } from "@getpaseo/protocol/messages";
 import {
   getTerminalProfileIcon,
   DEFAULT_TERMINAL_PROFILES,
@@ -27,6 +27,7 @@ import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-moda
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -279,6 +280,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
         <SettingsSection title={t("settings.hostSections.agents")}>
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
+          <ResourcePolicyCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
         </SettingsSection>
       ) : (
@@ -889,6 +891,75 @@ function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
           value={config?.mcp.injectIntoAgents !== false}
           onValueChange={handleValueChange}
           accessibilityLabel={t("settings.host.orchestration.enableTools.accessibilityLabel")}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ResourcePolicyCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, isLoading, patchConfig } = useDaemonConfig(serverId);
+  const [isSaving, setIsSaving] = useState(false);
+  const selectedPolicy: ResourcePolicy = config?.resourcePolicy ?? "balanced";
+
+  const options = useMemo(
+    () =>
+      (["economy", "balanced", "deep"] as const).map((value) => ({
+        value,
+        label: t(`settings.host.orchestration.resourcePolicy.options.${value}.label`),
+        testID: `host-page-resource-policy-${value}`,
+        disabled: isLoading || isSaving || config === null,
+      })),
+    [config, isLoading, isSaving, t],
+  );
+
+  const handleValueChange = useCallback(
+    (next: ResourcePolicy) => {
+      setIsSaving(true);
+      void patchConfig({ resourcePolicy: next })
+        .catch((error) => {
+          console.error("[HostPage] Failed to update resource policy", error);
+          Alert.alert(
+            t("common.errors.unableToSave"),
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => setIsSaving(false));
+    },
+    [patchConfig, t],
+  );
+
+  if (!isConnected) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-resource-policy-card">
+      <View style={styles.resourcePolicyRow}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.orchestration.resourcePolicy.title")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.orchestration.resourcePolicy.hint")}
+          </Text>
+          <Text
+            style={styles.resourcePolicyDescription}
+            testID="host-page-resource-policy-description"
+          >
+            {isLoading
+              ? t("settings.host.orchestration.resourcePolicy.loading")
+              : t(
+                  `settings.host.orchestration.resourcePolicy.options.${selectedPolicy}.description`,
+                )}
+          </Text>
+        </View>
+        <SegmentedControl
+          options={options}
+          value={selectedPolicy}
+          onValueChange={handleValueChange}
+          size="sm"
+          testID="host-page-resource-policy-control"
         />
       </View>
     </View>
@@ -1765,6 +1836,14 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: theme.spacing[2],
+  },
+  resourcePolicyRow: {
+    gap: theme.spacing[3],
+  },
+  resourcePolicyDescription: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[1],
   },
   emptyCard: {
     padding: theme.spacing[4],

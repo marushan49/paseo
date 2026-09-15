@@ -44,6 +44,7 @@ const daemonConfig: MutableDaemonConfig = {
   autoArchiveAfterMerge: false,
   enableTerminalAgentHooks: false,
   appendSystemPrompt: "",
+  resourcePolicy: "balanced",
 };
 
 function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}): {

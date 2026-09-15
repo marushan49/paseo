@@ -167,6 +167,7 @@ import { wrapSessionMessage, type SessionOutboundMessage } from "./messages.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import { createConfiguredTerminalManager } from "../terminal/terminal-manager-factory.js";
 import { applyTerminalAgentHookSetting } from "../terminal/agent-hooks/terminal-agent-hook-setting.js";
+import { ResourcePolicyRuntime, resolveResourcePolicy } from "./resource-policy.js";
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/index.js";
@@ -178,6 +179,7 @@ import type {
   AgentSkillSelection,
   FirstAgentContext,
   PluginSource,
+  ResourcePolicy,
   TerminalProfile,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -403,6 +405,7 @@ export interface PaseoDaemonConfig {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  resourcePolicy?: ResourcePolicy;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
@@ -549,6 +552,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
+    resourcePolicy: resolveResourcePolicy(config.resourcePolicy),
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
@@ -599,6 +603,9 @@ export async function createPaseoDaemon(
         };
       },
     },
+  });
+  const resourcePolicyRuntime = new ResourcePolicyRuntime({
+    getPolicy: () => daemonConfigStore.get().resourcePolicy ?? "balanced",
   });
   const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
   void orchestrationSkills.autoUpdate().catch((error) => {
@@ -925,6 +932,7 @@ export async function createPaseoDaemon(
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
     appendSystemPrompt: config.appendSystemPrompt,
+    resourcePolicy: config.resourcePolicy,
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
@@ -1338,8 +1346,15 @@ export async function createPaseoDaemon(
     createDirectoryWorkspace: createScheduleLocalWorkspaceExternal,
     createPaseoWorktreeWorkspace: createSchedulePaseoWorktreeExternal,
     archiveWorkspace: archiveScheduleWorkspaceExternal,
+    resourcePolicyRuntime,
   });
   await scheduleService.start();
+  daemonConfigStore.onFieldChange("resourcePolicy", (value) => {
+    if (value === "economy" || value === "balanced" || value === "deep") {
+      agentManager.setResourcePolicy(value);
+      void scheduleService.syncResourcePolicy();
+    }
+  });
   agentManager.setAgentArchivedCallback(async (agentId) => {
     try {
       await scheduleService.completeForAgent(agentId);
@@ -1369,6 +1384,7 @@ export async function createPaseoDaemon(
     scheduleService,
     providerSnapshotManager,
     daemonConfigStore,
+    resourcePolicyRuntime,
     github,
     workspaceGitService,
     findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
@@ -1717,6 +1733,7 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              resourcePolicyRuntime,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

@@ -2341,6 +2341,25 @@ export const zhCN: TranslationResources = {
           hint: "Agent 将能够管理 worktree、Agent 和计划",
           accessibilityLabel: "注入 Paseo tools",
         },
+        resourcePolicy: {
+          title: "资源使用",
+          hint: "控制此 Host 上的状态读取和自动化工作",
+          loading: "正在加载资源策略...",
+          options: {
+            economy: {
+              label: "节省",
+              description: "每次运行只读取一次状态。自动轮询和计划保持关闭。",
+            },
+            balanced: {
+              label: "平衡",
+              description: "为日常使用提供有界的状态检查和自动化工作。",
+            },
+            deep: {
+              label: "深度工作",
+              description: "为较长的活跃工作流提供更多有界的状态检查。",
+            },
+          },
+        },
         systemPrompt: {
           title: "System prompt",
           hint: "为所有 Agent 添加 system prompt",

@@ -46,6 +46,28 @@ describe("PersistedConfigSchema daemon append system prompt config", () => {
   });
 });
 
+describe("PersistedConfigSchema daemon resource policy config", () => {
+  test("defaults an omitted resource policy to balanced", () => {
+    const parsed = PersistedConfigSchema.parse({ daemon: {} });
+
+    expect(parsed.daemon?.resourcePolicy).toBe("balanced");
+  });
+
+  test("accepts each resource policy", () => {
+    for (const resourcePolicy of ["economy", "balanced", "deep"] as const) {
+      expect(
+        PersistedConfigSchema.parse({ daemon: { resourcePolicy } }).daemon?.resourcePolicy,
+      ).toBe(resourcePolicy);
+    }
+  });
+
+  test("rejects an unknown resource policy", () => {
+    expect(
+      PersistedConfigSchema.safeParse({ daemon: { resourcePolicy: "unlimited" } }).success,
+    ).toBe(false);
+  });
+});
+
 describe("PersistedConfigSchema daemon browser tools config", () => {
   test("accepts optional browser tools opt-in", () => {
     const parsed = PersistedConfigSchema.parse({

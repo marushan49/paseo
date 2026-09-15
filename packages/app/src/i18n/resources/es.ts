@@ -2421,6 +2421,28 @@ export const es: TranslationResources = {
           hint: "Los agentes podrán gestionar árboles de trabajo, agentes y horarios.",
           accessibilityLabel: "Inyectar herramientasPaseo",
         },
+        resourcePolicy: {
+          title: "Uso de recursos",
+          hint: "Controla las lecturas de estado y el trabajo automatizado en este host",
+          loading: "Cargando la política de recursos...",
+          options: {
+            economy: {
+              label: "Económico",
+              description:
+                "Una lectura de estado por ejecución. El sondeo y los horarios automáticos permanecen desactivados.",
+            },
+            balanced: {
+              label: "Equilibrado",
+              description:
+                "Comprobaciones de estado y trabajo automatizado limitados para el uso diario.",
+            },
+            deep: {
+              label: "Trabajo profundo",
+              description:
+                "Más comprobaciones de estado limitadas para flujos de trabajo activos y largos.",
+            },
+          },
+        },
         systemPrompt: {
           title: "Aviso del sistema",
           hint: "Agrega un mensaje del sistema a todos los agentes.",

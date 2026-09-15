@@ -15,6 +15,7 @@ import type { ProjectUpdate } from "./workspace-reconciliation-service.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-manager.js";
 import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
+import { ResourcePolicyRuntime } from "./resource-policy.js";
 import {
   type ServerInfoStatusPayload,
   type SessionOutboundMessage,
@@ -542,6 +543,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly paseoHome: string;
   private readonly worktreesRoot: string | undefined;
   private readonly daemonConfigStore: DaemonConfigStore;
+  private readonly resourcePolicyRuntime: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   private readonly pushNotifications: PushNotifications;
   private readonly pushNotificationSender: PushNotificationSender;
   private readonly mcpBaseUrl: string | null;
@@ -631,6 +633,7 @@ export class VoiceAssistantWebSocketServer {
     pluginRuntime?: SessionOptions["pluginRuntime"],
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
+    resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -666,6 +669,11 @@ export class VoiceAssistantWebSocketServer {
     this.paseoHome = paseoHome;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
+    this.resourcePolicyRuntime =
+      resourcePolicyRuntime ??
+      new ResourcePolicyRuntime({
+        getPolicy: () => daemonConfigStore.get().resourcePolicy ?? "balanced",
+      });
     this.mcpBaseUrl = mcpBaseUrl;
     this.assignOptionalServices({
       speech,
@@ -1436,6 +1444,7 @@ export class VoiceAssistantWebSocketServer {
       workspaceGitService: this.workspaceGitService,
       workspaceAutoName: this.workspaceAutoName,
       daemonConfigStore: this.daemonConfigStore,
+      resourcePolicyRuntime: this.resourcePolicyRuntime,
       pluginRuntime: this.pluginRuntime,
       orchestrationSkills: this.orchestrationSkills,
       mcpBaseUrl: this.mcpBaseUrl,

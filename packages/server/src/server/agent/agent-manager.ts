@@ -77,6 +77,8 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { buildResourcePolicyPrompt, resolveResourcePolicy } from "../resource-policy.js";
+import type { ResourcePolicy } from "@getpaseo/protocol/messages";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
@@ -305,6 +307,7 @@ export interface AgentManagerOptions {
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   appendSystemPrompt?: string;
+  resourcePolicy?: ResourcePolicy;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
   beforeSteerUnavailableFallback?: (input: {
@@ -722,6 +725,7 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
@@ -742,6 +746,7 @@ export class AgentManager {
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
+    this.resourcePolicy = resolveResourcePolicy(options.resourcePolicy);
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
       reloadSessionCloseMs:
@@ -851,6 +856,10 @@ export class AgentManager {
 
   setAppendSystemPrompt(prompt: string | null | undefined): void {
     this.appendSystemPrompt = prompt ?? "";
+  }
+
+  setResourcePolicy(policy: ResourcePolicy): void {
+    this.resourcePolicy = policy;
   }
 
   public getMetricsSnapshot(): AgentMetricsSnapshot {
@@ -5192,13 +5201,18 @@ export class AgentManager {
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
     const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+    const resourcePolicyPrompt = buildResourcePolicyPrompt(this.resourcePolicy);
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
 
-    return daemonAppendSystemPrompt
+    const combinedPrompt = [daemonAppendSystemPrompt, resourcePolicyPrompt]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
+
+    return combinedPrompt
       ? {
           ...next,
-          daemonAppendSystemPrompt,
+          daemonAppendSystemPrompt: combinedPrompt,
         }
       : next;
   }
