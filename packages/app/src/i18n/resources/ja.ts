@@ -975,6 +975,12 @@ export const ja: TranslationResources = {
           passing: "成功",
           draft: "下書き",
           toggleAccessibility: "{{count}} 件のプルリクエストをすべて表示",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "PR number, e.g. 1346",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
         },
         checksSummary: {
           passedLabel: "成功",

@@ -89,17 +89,31 @@ Removing a pull request lives in the expanded line's context menu.
 
 Shipped: the wire field `githubRuntime.relatedPullRequests` with its
 `server_info.features.relatedPullRequests` gate, the merge and parse rules in
-`packages/server/src/utils/related-pull-requests.ts`, and the row — collapsed
-`3 PRs · 1 failed`, expanded one line per change request with its own additions and deletions.
+`packages/server/src/utils/related-pull-requests.ts`, the fetch in the forge
+poll (`github-service.ts#getRelatedPullRequests`, cached per poll identity,
+called from `workspace-git-service.ts#resolveRelatedPullRequests`), and the
+row — collapsed `3 PRs · 1 failed`, expanded one line per change request with
+its own additions and deletions.
 
-Not shipped: the daemon does not fetch the set yet, so the field is always absent and every row
-still renders its single change request. The fetch belongs in the forge poll in
-`workspace-git-service.ts` around `buildForgeSnapshotFromStatus`, and the open decision is
-cadence. Resolving on every poll doubles forge traffic for a set that only changes when the
-change request does, so key the resolve on the poll identity (`headRef` plus head sha) and reuse
-the previous answer while that identity holds.
+Known gap: the fetch keys off the checked-out branch's current PR number, so
+a workspace on a base branch (e.g. `development`) resolves nothing even when
+its session produced PRs on other branches. Sources 2 and 3 below exist to
+close exactly that gap.
 
 Phase 1 is useful alone: it ends the "reports passed while siblings are red" failure.
+
+### Phase 2 status (2026-09-15)
+
+App slice shipped on `workspace-pr-curation`: curation model
+(`PullRequestCuration`, same shape as the future wire field),
+ephemeral per-workspace store, attach-by-number through the existing
+`forge.search` RPC with exact-number matching, remove via long-press on the
+expanded line, row-menu entry in kebab and context menu. The store is
+deliberately ephemeral; daemon persistence via `agent.pull_requests.curate`
+replaces it (store is then a write-through cache).
+
+Not shipped: daemon persistence, the curate RPC, and source 2 (session
+branches have no tracking to key off — needs recording at creation time).
 
 ## Open
 

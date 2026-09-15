@@ -95,19 +95,35 @@ const HEALTH_LABEL_KEYS = {
  */
 export function ChangeRequestSetList({
   pullRequests,
+  onRemovePullRequest,
 }: {
   pullRequests: readonly RelatedPullRequest[];
+  /**
+   * Long-press a line to cut it from this workspace's set. Absent where
+   * there is nothing to curate against (previews).
+   */
+  onRemovePullRequest?: (number: number) => void;
 }) {
   return (
     <View style={styles.list} testID="workspace-change-request-set-list">
       {pullRequests.map((pullRequest) => (
-        <ChangeRequestSetRow key={pullRequest.number} pullRequest={pullRequest} />
+        <ChangeRequestSetRow
+          key={pullRequest.number}
+          pullRequest={pullRequest}
+          onRemove={onRemovePullRequest}
+        />
       ))}
     </View>
   );
 }
 
-function ChangeRequestSetRow({ pullRequest }: { pullRequest: RelatedPullRequest }) {
+function ChangeRequestSetRow({
+  pullRequest,
+  onRemove,
+}: {
+  pullRequest: RelatedPullRequest;
+  onRemove?: (number: number) => void;
+}) {
   const { t } = useTranslation();
 
   const handlePressIn = useCallback((event: GestureResponderEvent) => event.stopPropagation(), []);
@@ -118,6 +134,13 @@ function ChangeRequestSetRow({ pullRequest }: { pullRequest: RelatedPullRequest 
     },
     [pullRequest.url],
   );
+  const handleLongPress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      onRemove?.(pullRequest.number);
+    },
+    [onRemove, pullRequest.number],
+  );
 
   const hasDiff = pullRequest.additions !== undefined || pullRequest.deletions !== undefined;
 
@@ -127,9 +150,15 @@ function ChangeRequestSetRow({ pullRequest }: { pullRequest: RelatedPullRequest 
       accessibilityLabel={t("workspace.git.pr.accessibility.pullRequest", {
         number: pullRequest.number,
       })}
+      accessibilityHint={
+        onRemove
+          ? t("workspace.git.pr.set.removePullRequest", { number: pullRequest.number })
+          : undefined
+      }
       hitSlop={4}
       onPressIn={handlePressIn}
       onPress={handlePress}
+      onLongPress={onRemove ? handleLongPress : undefined}
       style={listRowStyle}
       testID={`workspace-change-request-${pullRequest.number}`}
     >

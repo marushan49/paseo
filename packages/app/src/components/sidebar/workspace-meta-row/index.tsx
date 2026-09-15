@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -17,6 +17,11 @@ import { useSidebarMetaPreferences } from "@/components/sidebar/display-preferen
 import type { Theme } from "@/styles/theme";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
 import type { RelatedPullRequest } from "@/git/related-pull-requests";
+import { applyPullRequestCuration } from "@/git/pull-request-curation";
+import {
+  pullRequestCurationStore,
+  usePullRequestCuration,
+} from "@/git/pull-request-curation-store";
 import { ChangeRequestSetItem, ChangeRequestSetList } from "./change-request-set";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
@@ -63,6 +68,7 @@ const dangerMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
  * read first, and it stays the same height as the rest of the line.
  */
 export function WorkspaceMetaRow({
+  workspaceKey = null,
   currentBranch,
   projectName,
   hostBadge,
@@ -71,6 +77,11 @@ export function WorkspaceMetaRow({
   serviceSummary,
   labels = EMPTY_LABELS,
 }: {
+  /**
+   * Sidebar identity for user curation. Absent in previews: the row then
+   * shows exactly what the daemon derived, with nothing removable.
+   */
+  workspaceKey?: string | null;
   currentBranch: string | null;
   projectName: string | null;
   hostBadge: HostBadgeModel | null;
@@ -84,12 +95,28 @@ export function WorkspaceMetaRow({
   // so it stays local rather than becoming another field in the sidebar's persisted state.
   const [expanded, setExpanded] = useState(false);
   const handleToggle = useCallback(() => setExpanded((open) => !open), []);
+  const curation = usePullRequestCuration(workspaceKey ?? "");
+  const curatedPullRequests = useMemo(
+    () =>
+      workspaceKey
+        ? applyPullRequestCuration(relatedPullRequests, curation.facts, curation.curation)
+        : relatedPullRequests,
+    [workspaceKey, relatedPullRequests, curation],
+  );
+  const handleRemovePullRequest = useCallback(
+    (number: number) => {
+      if (workspaceKey) {
+        pullRequestCurationStore.remove(workspaceKey, number);
+      }
+    },
+    [workspaceKey],
+  );
   const items = selectMetaRowItems({
     currentBranch,
     projectName,
     hasHostBadge: hostBadge !== null,
     prHint,
-    relatedPullRequests,
+    relatedPullRequests: curatedPullRequests,
     setExpanded: expanded,
     serviceSummary,
     labels,
@@ -117,7 +144,10 @@ export function WorkspaceMetaRow({
         ))}
       </View>
       {expandedSet?.kind === "changeRequestSet" ? (
-        <ChangeRequestSetList pullRequests={expandedSet.pullRequests} />
+        <ChangeRequestSetList
+          pullRequests={expandedSet.pullRequests}
+          onRemovePullRequest={workspaceKey ? handleRemovePullRequest : undefined}
+        />
       ) : null}
     </View>
   );

@@ -994,6 +994,12 @@ export const fr: TranslationResources = {
           passing: "réussi",
           draft: "brouillon",
           toggleAccessibility: "Afficher les {{count}} pull requests",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "PR number, e.g. 1346",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
         },
         checksSummary: {
           passedLabel: "succès",
