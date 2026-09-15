@@ -304,6 +304,7 @@ export const ptBR: TranslationResources = {
     },
     actions: {
       copyCode: "Copiar código",
+      copyText: "Copiar texto",
       copyTurn: "Copiar turno",
       copyMessage: "Copiar mensagem",
       forkMenu: "Bifurcar mensagem",
@@ -314,6 +315,9 @@ export const ptBR: TranslationResources = {
       forkFailed: "Falha ao bifurcar o chat",
       openFile: "Abrir arquivo",
       copied: "Copiado",
+    },
+    writingBlock: {
+      untitled: "Texto",
     },
     attachments: {
       dismissImage: "Dispensar imagem",
@@ -2436,6 +2440,28 @@ export const ptBR: TranslationResources = {
           title: "Ativar ferramentas do Paseo",
           hint: "Agentes poderão gerenciar worktrees, agentes e agendamentos",
           accessibilityLabel: "Injetar ferramentas do Paseo",
+        },
+        resourcePolicy: {
+          title: "Uso de recursos",
+          hint: "Controla leituras de status e trabalho automatizado neste host",
+          loading: "Carregando a política de recursos...",
+          options: {
+            economy: {
+              label: "Econômico",
+              description:
+                "Uma leitura de status por execução. A sondagem e os agendamentos automáticos ficam desativados.",
+            },
+            balanced: {
+              label: "Equilibrado",
+              description:
+                "Verificações de status e trabalho automatizado limitados para o uso diário.",
+            },
+            deep: {
+              label: "Trabalho profundo",
+              description:
+                "Mais verificações de status limitadas para fluxos de trabalho longos e ativos.",
+            },
+          },
         },
         systemPrompt: {
           title: "Prompt do sistema",

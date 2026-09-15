@@ -2,6 +2,7 @@ import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
+import { composeDaemonAppendSystemPrompt } from "./writing-block-instruction.js";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -78,6 +79,8 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { buildResourcePolicyPrompt, resolveResourcePolicy } from "../resource-policy.js";
+import type { ResourcePolicy } from "@getpaseo/protocol/messages";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
@@ -125,7 +128,7 @@ export class AgentManagerShuttingDownError extends Error {
 }
 
 export class AgentRunCancellationError extends Error {
-  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop") {
+  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop" | "switch") {
     super(
       `Cannot ${action} agent ${agentId} because its active run cancellation was not acknowledged`,
     );
@@ -306,6 +309,7 @@ export interface AgentManagerOptions {
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   appendSystemPrompt?: string;
+  resourcePolicy?: ResourcePolicy;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
   beforeSteerUnavailableFallback?: (input: {
@@ -723,6 +727,7 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
@@ -743,6 +748,7 @@ export class AgentManager {
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
+    this.resourcePolicy = resolveResourcePolicy(options.resourcePolicy);
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
       reloadSessionCloseMs:
@@ -852,6 +858,10 @@ export class AgentManager {
 
   setAppendSystemPrompt(prompt: string | null | undefined): void {
     this.appendSystemPrompt = prompt ?? "";
+  }
+
+  setResourcePolicy(policy: ResourcePolicy): void {
+    this.resourcePolicy = policy;
   }
 
   public getMetricsSnapshot(): AgentMetricsSnapshot {
@@ -1567,6 +1577,139 @@ export class AgentManager {
         existing.lifecycle = "error";
         existing.lastError = error instanceof Error ? error.message : String(error);
         this.emitState(existing);
+      }
+      throw error;
+    } finally {
+      if (!handedToRegistration) {
+        if (hadPreviousPaseoToolPolicy) {
+          this.paseoToolPolicies.set(agentId, previousPaseoToolPolicy);
+        } else {
+          this.paseoToolPolicies.delete(agentId);
+        }
+        if (session) {
+          await this.closeUnregisteredSession(session);
+        }
+      }
+    }
+  }
+
+  /**
+   * Move a live agent to another provider. The Paseo agent id, workspace,
+   * labels, timestamps, and timeline survive the switch; the provider session
+   * does not.
+   *
+   * The new runtime is created, never resumed: a persisted session belongs to
+   * the provider that minted it. `registerSession` re-derives `persistence` and
+   * `runtimeInfo` from the session it installs, so the previous provider's
+   * handle leaves the record with it. A surviving handle would point the next
+   * `ensureAgentLoaded()` at a foreign session.
+   *
+   * Mode, thinking option, features, and provider options are dropped for the
+   * same reason: each names something only the old provider offers.
+   *
+   * A failed switch leaves the agent closed on its old provider, as reload
+   * does. The record still resumes its original session, so the switch is
+   * retryable and nothing is lost by declining it.
+   */
+  setAgentProvider(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    return this.trackAgentRegistrationOperation(
+      this.runLifecycleMutation(agentId, () =>
+        this.setAgentProviderInternal(agentId, provider, modelId),
+      ),
+    );
+  }
+
+  private async setAgentProviderInternal(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    this.assertAcceptingAgentRegistrations();
+    let existing = this.requireSessionAgent(agentId);
+    if (existing.provider === provider) {
+      throw new Error(`Agent ${agentId} already runs on provider '${provider}'`);
+    }
+    this.requireEnabledProvider(provider);
+    const client = await this.requireAvailableClient({ provider });
+    if (this.hasInFlightRun(agentId)) {
+      await this.cancelAgentRunBefore(agentId, "switch");
+      existing = this.requireSessionAgent(agentId);
+    }
+
+    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+      {
+        provider,
+        cwd: existing.cwd,
+        model: modelId ?? undefined,
+        systemPrompt: existing.config.systemPrompt,
+        mcpServers: existing.config.mcpServers,
+        toolPolicy: existing.config.toolPolicy,
+      },
+      agentId,
+    );
+
+    const preservedLastUsage = existing.lastUsage;
+    const preservedLastError = existing.lastError;
+    const preservedAttention = existing.attention;
+    const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
+    const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
+
+    let session: AgentSession | undefined;
+    let closedExisting: ManagedAgentClosed | undefined;
+    let handedToRegistration = false;
+    try {
+      // A persisted thread can have only one writer, even when its turn is idle.
+      await this.closeReloadedSession(existing.session, agentId);
+      await this.drainSessionEvents(agentId);
+      this.cancelRunningProviderSubagents(agentId);
+      closedExisting = this.prepareAgentForClosure(existing, "agent provider switched");
+      await this.persistSnapshot(closedExisting);
+      this.assertAcceptingAgentRegistrations();
+
+      this.paseoToolPolicies.set(agentId, paseoToolPolicy);
+      const launchContext = await this.buildLaunchContext(
+        agentId,
+        client,
+        storedConfig.cwd,
+        paseoToolPolicy,
+        undefined,
+        { reason: "create", purpose: "interactive", workspaceId: existing.workspaceId ?? null },
+      );
+      const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
+      session = await client.createSession(providerLaunchConfig, launchContext);
+      await this.requireExternalMcpSupport(session, storedConfig);
+      this.assertAcceptingAgentRegistrations();
+
+      handedToRegistration = true;
+      const switched = await this.registerSession(session, storedConfig, agentId, {
+        labels: existing.labels,
+        workspaceId: existing.workspaceId,
+        owner: existing.owner,
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+        lastUserMessageAt: existing.lastUserMessageAt,
+        // The canonical timeline is already primed and the new provider has no
+        // history of its own to replay into it.
+        historyPrimed: true,
+        lastUsage: preservedLastUsage,
+        lastError: preservedLastError,
+        attention: preservedAttention,
+      });
+      // One timeline stretches across two provider sessions, so mark where the
+      // cut is: everything above it was said by a different brain.
+      await this.appendTimelineItem(agentId, {
+        type: "notification",
+        level: "info",
+        message: `Switched provider: ${existing.provider} → ${provider}`,
+      });
+      return switched;
+    } catch (error) {
+      if (closedExisting) {
+        this.emitClosedAgent(closedExisting, { persist: false });
       }
       throw error;
     } finally {
@@ -3045,7 +3188,7 @@ export class AgentManager {
 
   private async cancelAgentRunBefore(
     agentId: string,
-    action: "reload" | "replace" | "rewind",
+    action: "reload" | "replace" | "rewind" | "switch",
   ): Promise<void> {
     const result = await this.cancelAgentRun(agentId);
     if (result.status === "refused") {
@@ -5094,16 +5237,19 @@ export class AgentManager {
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
-    const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+    // The writing-block convention always ships; operator and resource policy prompts follow it.
+    const daemonAppendSystemPrompt = composeDaemonAppendSystemPrompt(
+      [this.appendSystemPrompt.trim(), buildResourcePolicyPrompt(this.resourcePolicy)]
+        .filter((part) => part.length > 0)
+        .join("\n\n"),
+    );
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
 
-    return daemonAppendSystemPrompt
-      ? {
-          ...next,
-          daemonAppendSystemPrompt,
-        }
-      : next;
+    return {
+      ...next,
+      daemonAppendSystemPrompt,
+    };
   }
 
   private async buildLaunchContext(

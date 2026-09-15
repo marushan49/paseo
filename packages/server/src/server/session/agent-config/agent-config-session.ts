@@ -28,6 +28,7 @@ export interface AgentConfigOperations {
   ensureLoaded(agentId: string): Promise<void>;
   setMode(agentId: string, modeId: string): Promise<AgentProviderNotice | null>;
   setModel(agentId: string, modelId: string | null): Promise<void>;
+  setProvider(agentId: string, provider: string, modelId: string | null): Promise<void>;
   setFeature(agentId: string, featureId: string, value: unknown): Promise<void>;
   setThinking(
     agentId: string,
@@ -99,6 +100,29 @@ export class AgentConfigSession {
         return undefined;
       },
       emitResponse: (payload) => this.host.emit({ type: "set_agent_model_response", payload }),
+    });
+  }
+
+  /**
+   * Unlike its siblings, this one replaces the provider runtime instead of
+   * reconfiguring it. `ensureLoaded` still runs first: the switch reads the
+   * live agent's config and closes its session, so there has to be one.
+   */
+  handleSetAgentProviderRequest(
+    msg: Extract<SessionInboundMessage, { type: "set_agent_provider_request" }>,
+  ): Promise<void> {
+    const { agentId, provider, modelId, requestId } = msg;
+    return this.applyConfigChange({
+      agentId,
+      requestId,
+      logLabel: "set_agent_provider_request",
+      logFields: { agentId, provider, modelId, requestId },
+      failureText: "Failed to switch agent provider",
+      run: async () => {
+        await this.operations.setProvider(agentId, provider, modelId);
+        return undefined;
+      },
+      emitResponse: (payload) => this.host.emit({ type: "set_agent_provider_response", payload }),
     });
   }
 

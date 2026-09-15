@@ -318,6 +318,17 @@ export async function expectHostInjectMcpCard(page: Page): Promise<void> {
   await expect(card.getByRole("switch", { name: "Inject Paseo tools" })).toBeVisible();
 }
 
+export async function expectHostResourcePolicyCard(page: Page): Promise<void> {
+  const card = page.getByTestId("host-page-resource-policy-card");
+  await expect(card).toBeVisible();
+  await expect(card.getByText("Resource usage", { exact: true })).toBeVisible();
+  await expect(card.getByTestId("host-page-resource-policy-control")).toBeVisible();
+  await expect(card.getByTestId("host-page-resource-policy-balanced")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+}
+
 export async function openHostSection(
   page: Page,
   serverId: string,

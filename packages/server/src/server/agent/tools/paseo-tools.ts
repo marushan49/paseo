@@ -94,6 +94,7 @@ import type {
 } from "./types.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+import type { ResourcePolicyRuntime } from "../../resource-policy.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -103,6 +104,7 @@ export interface PaseoToolHostDependencies {
   scheduleService?: ScheduleService | null;
   providerSnapshotManager: ProviderSnapshotManager;
   daemonConfigStore?: Pick<DaemonConfigStore, "get">;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   github?: ForgeService;
   workspaceGitService?: Pick<
     WorkspaceGitService,
@@ -550,6 +552,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     scheduleService,
     providerSnapshotManager,
     daemonConfigStore,
+    resourcePolicyRuntime,
     callerAgentId,
     resolveSpeakHandler,
     resolveCallerContext,
@@ -557,6 +560,18 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
+  const checkStatusRead = (requestKey: string): void => {
+    const decision = resourcePolicyRuntime?.checkStatusRead({
+      consumerId: callerAgentId ?? "mcp",
+      requestKey,
+      ...(callerAgentId
+        ? { runKey: agentManager.getAgent(callerAgentId)?.activeForegroundTurnId ?? undefined }
+        : {}),
+    });
+    if (decision && !decision.allowed) {
+      throw new Error(decision.reason ?? "The resource policy limits status reads.");
+    }
+  };
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
     const inputSchema = tool.inputSchema;
@@ -1970,6 +1985,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId }) => {
+      checkStatusRead(`agent:${agentId}`);
       const snapshot = agentManager.getAgent(agentId);
       if (snapshot) {
         const structuredSnapshot = await serializeSnapshotWithMetadata(
@@ -2028,6 +2044,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ includeArchived = false, cwd, sinceHours = 48, statuses, limit = 50 }) => {
+      checkStatusRead(
+        JSON.stringify({ includeArchived, cwd, sinceHours, statuses: statuses ?? null, limit }),
+      );
       const callerCwd = callerAgentId ? resolveCallerAgent()?.cwd : undefined;
       const requestedCwd = cwd?.trim() ? expandUserPath(cwd) : callerCwd;
       const statusFilter = statuses && statuses.length > 0 ? new Set(statuses) : null;

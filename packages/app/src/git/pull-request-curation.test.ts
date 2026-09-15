@@ -119,6 +119,18 @@ describe("searchItemToRelatedPullRequest", () => {
   it("rejects unknown states", () => {
     expect(searchItemToRelatedPullRequest({ ...searchItem(1), state: "draft" })).toBeNull();
   });
+
+  it("accepts the raw uppercase gh state the daemon search returns", () => {
+    expect(searchItemToRelatedPullRequest({ ...searchItem(1346), state: "OPEN" })).toEqual({
+      number: 1346,
+      url: "https://github.com/o/r/pull/1346",
+      title: "PR 1346",
+      state: "open",
+      headRefName: undefined,
+      baseRefName: undefined,
+      origin: "manual",
+    });
+  });
 });
 
 describe("extractPullRequestReferences", () => {

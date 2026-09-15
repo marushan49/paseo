@@ -301,6 +301,7 @@ export const zhCN: TranslationResources = {
     },
     actions: {
       copyCode: "复制代码",
+      copyText: "复制文本",
       copyTurn: "复制回合",
       copyMessage: "复制消息",
       forkMenu: "分叉消息",
@@ -311,6 +312,9 @@ export const zhCN: TranslationResources = {
       forkFailed: "分叉聊天失败",
       openFile: "打开文件",
       copied: "已复制",
+    },
+    writingBlock: {
+      untitled: "文本",
     },
     attachments: {
       dismissImage: "关闭图片",
@@ -2373,6 +2377,25 @@ export const zhCN: TranslationResources = {
           title: "启用 Paseo tools",
           hint: "Agent 将能够管理 worktree、Agent 和计划",
           accessibilityLabel: "注入 Paseo tools",
+        },
+        resourcePolicy: {
+          title: "资源使用",
+          hint: "控制此 Host 上的状态读取和自动化工作",
+          loading: "正在加载资源策略...",
+          options: {
+            economy: {
+              label: "节省",
+              description: "每次运行只读取一次状态。自动轮询和计划保持关闭。",
+            },
+            balanced: {
+              label: "平衡",
+              description: "为日常使用提供有界的状态检查和自动化工作。",
+            },
+            deep: {
+              label: "深度工作",
+              description: "为较长的活跃工作流提供更多有界的状态检查。",
+            },
+          },
         },
         systemPrompt: {
           title: "System prompt",

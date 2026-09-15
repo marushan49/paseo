@@ -301,6 +301,7 @@ export const ar: TranslationResources = {
     },
     actions: {
       copyCode: "نسخ الرمز",
+      copyText: "نسخ النص",
       copyTurn: "نسخ بدوره",
       copyMessage: "انسخ الرسالة",
       forkMenu: "تفريع الرسالة",
@@ -311,6 +312,9 @@ export const ar: TranslationResources = {
       forkFailed: "فشل تفريع المحادثة",
       openFile: "افتح الملف",
       copied: "منقول",
+    },
+    writingBlock: {
+      untitled: "نص",
     },
     attachments: {
       dismissImage: "تجاهل الصورة",
@@ -2399,6 +2403,25 @@ export const ar: TranslationResources = {
           title: "تمكين أدوات Paseo",
           hint: "سيتمكن الوكلاء من إدارة أشجار العمل والوكلاء والجداول الزمنية",
           accessibilityLabel: "حقن أدوات Paseo",
+        },
+        resourcePolicy: {
+          title: "استخدام الموارد",
+          hint: "يتحكم في قراءات الحالة والعمل الآلي على هذا المضيف",
+          loading: "جارٍ تحميل سياسة الموارد...",
+          options: {
+            economy: {
+              label: "اقتصادي",
+              description: "قراءة حالة واحدة لكل تشغيل. يظل الاستطلاع والجداول الآلية متوقفين.",
+            },
+            balanced: {
+              label: "متوازن",
+              description: "فحوصات حالة وعمل آلي محدود للاستخدام اليومي.",
+            },
+            deep: {
+              label: "عمل عميق",
+              description: "فحوصات حالة محدودة أكثر لسير العمل النشط والطويل.",
+            },
+          },
         },
         systemPrompt: {
           title: "موجه النظام",

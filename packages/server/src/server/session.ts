@@ -69,6 +69,7 @@ import {
   type WorkspaceScriptsService,
 } from "./session/workspace-scripts/workspace-scripts-service.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
+import { ResourcePolicyRuntime } from "./resource-policy.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -472,6 +473,7 @@ export interface SessionOptions {
   workspaceGitService: WorkspaceGitService;
   workspaceAutoName: WorkspaceAutoName;
   daemonConfigStore: DaemonConfigStore;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   pluginRuntime?: {
     before: import("./plugins/lifecycle/index.js").PluginLifecycle["before"];
     emit: import("./plugins/lifecycle/index.js").PluginLifecycle["emit"];
@@ -655,6 +657,18 @@ interface ClientActivity {
   appVisibilityChangedAt: Date;
 }
 
+function resolveResourcePolicyRuntime(
+  daemonConfigStore: DaemonConfigStore,
+  resourcePolicyRuntime: SessionOptions["resourcePolicyRuntime"],
+): Pick<ResourcePolicyRuntime, "checkStatusRead"> {
+  return (
+    resourcePolicyRuntime ??
+    new ResourcePolicyRuntime({
+      getPolicy: () => daemonConfigStore.get().resourcePolicy ?? "balanced",
+    })
+  );
+}
+
 export class Session {
   readonly delivery = new SessionDelivery(
     (source, message) => {
@@ -719,6 +733,7 @@ export class Session {
   private readonly workspaceProvisioning: WorkspaceProvisioningService;
   private readonly workspaceRecovery: WorkspaceRecoveryService;
   private readonly daemonConfigStore: DaemonConfigStore;
+  private readonly resourcePolicyRuntime: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
@@ -996,6 +1011,9 @@ export class Session {
         setMode: async (agentId, modeId) =>
           (await setAgentModeCommand({ agentManager }, { agentId, modeId })).notice,
         setModel: (agentId, modelId) => agentManager.setAgentModel(agentId, modelId),
+        setProvider: async (agentId, provider, modelId) => {
+          await agentManager.setAgentProvider(agentId, provider, modelId);
+        },
         setFeature: (agentId, featureId, value) =>
           agentManager.setAgentFeature(agentId, featureId, value),
         setThinking: (agentId, thinkingOptionId) =>
@@ -1054,6 +1072,10 @@ export class Session {
         })
       : null;
     this.daemonConfigStore = daemonConfigStore;
+    this.resourcePolicyRuntime = resolveResourcePolicyRuntime(
+      daemonConfigStore,
+      options.resourcePolicyRuntime,
+    );
     this.terminalManager = terminalManager;
     this.terminalController = new TerminalSessionController({
       terminalManager,
@@ -2715,6 +2737,8 @@ export class Session {
         return this.agentConfigSession.handleSetAgentModeRequest(msg);
       case "set_agent_model_request":
         return this.agentConfigSession.handleSetAgentModelRequest(msg);
+      case "set_agent_provider_request":
+        return this.agentConfigSession.handleSetAgentProviderRequest(msg);
       case "set_agent_feature_request":
         return this.agentConfigSession.handleSetAgentFeatureRequest(msg);
       case "set_agent_thinking_request":
@@ -6126,26 +6150,52 @@ export class Session {
     await this.emitWorkspaceUpdatesForWorkspaceIds(workspaceIds, options);
   }
 
+  private assertResourcePolicyStatusReadAllowed(
+    request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
+  ): void {
+    const statusRead = this.resourcePolicyRuntime.checkStatusRead({
+      consumerId: this.clientId,
+      requestKey: JSON.stringify({
+        scope: request.scope ?? null,
+        filter: request.filter ?? null,
+        sort: request.sort ?? null,
+        sync: request.sync ?? null,
+      }),
+    });
+    if (!statusRead.allowed) {
+      throw new SessionRequestError(
+        "resource_policy_status_limit",
+        statusRead.reason ?? "The resource policy limits status reads.",
+      );
+    }
+  }
+
   private async handleFetchAgents(
     request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
   ): Promise<void> {
-    const owner = request.subscribe
-      ? this.delivery.begin("agents", request.subscribe.subscriptionId, (id) => {
-          this.agentUpdates.clearSubscription(id);
-          this.refreshObservationProducers();
-        })
-      : null;
-    const subscriptionId = owner?.responseId;
+    let owner: ReturnType<SessionDelivery["begin"]> | null = null;
+    let subscriptionId: string | undefined;
     try {
+      this.assertResourcePolicyStatusReadAllowed(request);
+      owner = request.subscribe
+        ? this.delivery.begin("agents", request.subscribe.subscriptionId, (id) => {
+            this.agentUpdates.clearSubscription(id);
+            this.refreshObservationProducers();
+          })
+        : null;
+      subscriptionId = owner?.responseId;
       if (owner) {
+        const subscriptionOwner = owner;
         this.agentUpdates.beginSubscription({
-          subscriptionId: owner.id,
+          subscriptionId: subscriptionOwner.id,
           isProviderVisible: (provider) =>
-            this.delivery.forSource(owner.source, () => this.isProviderVisibleToClient(provider)),
+            this.delivery.forSource(subscriptionOwner.source, () =>
+              this.isProviderVisibleToClient(provider),
+            ),
           filter: request.filter,
           syncEnabled: Boolean(request.sync),
           emit: (message) => {
-            if (message.type === "agent_update") owner.emit(message);
+            if (message.type === "agent_update") subscriptionOwner.emit(message);
           },
         });
         this.refreshObservationProducers();
@@ -6171,8 +6221,8 @@ export class Session {
         },
       });
 
-      if (subscriptionId) {
-        this.agentUpdates.flushBootstrapped(owner!.id, { snapshotUpdatedAtByAgentId });
+      if (subscriptionId && owner) {
+        this.agentUpdates.flushBootstrapped(owner.id, { snapshotUpdatedAtByAgentId });
       }
     } catch (error) {
       if (subscriptionId) {

@@ -304,6 +304,7 @@ export const ru: TranslationResources = {
     },
     actions: {
       copyCode: "Скопировать код",
+      copyText: "Скопировать текст",
       copyTurn: "Скопировать ответ",
       copyMessage: "Копировать сообщение",
       forkMenu: "Форкнуть чат отсюда",
@@ -314,6 +315,9 @@ export const ru: TranslationResources = {
       forkFailed: "Не удалось создать форк чата",
       openFile: "Открыть файл",
       copied: "Скопировано",
+    },
+    writingBlock: {
+      untitled: "Текст",
     },
     attachments: {
       dismissImage: "Закрыть изображение",
@@ -2443,6 +2447,28 @@ export const ru: TranslationResources = {
           title: "Включить инструменты Paseo",
           hint: "Агенты смогут управлять worktree, агентами и расписаниями.",
           accessibilityLabel: "Добавить инструменты Paseo",
+        },
+        resourcePolicy: {
+          title: "Использование ресурсов",
+          hint: "Управляет чтением статуса и автоматической работой на этом хосте",
+          loading: "Загрузка политики ресурсов...",
+          options: {
+            economy: {
+              label: "Экономный",
+              description:
+                "Одно чтение статуса за запуск. Автоматический опрос и расписания отключены.",
+            },
+            balanced: {
+              label: "Сбалансированный",
+              description:
+                "Ограниченные проверки статуса и автоматическая работа для повседневного использования.",
+            },
+            deep: {
+              label: "Глубокая работа",
+              description:
+                "Больше ограниченных проверок статуса для длительных активных процессов.",
+            },
+          },
         },
         systemPrompt: {
           title: "Системный промпт",

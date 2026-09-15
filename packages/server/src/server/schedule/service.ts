@@ -28,6 +28,7 @@ import type {
   UpdateScheduleNewAgentConfig,
 } from "@getpaseo/protocol/schedule/types";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import type { ResourcePolicyRuntime } from "../resource-policy.js";
 
 const SCHEDULE_TICK_INTERVAL_MS = 1000;
 
@@ -240,6 +241,7 @@ export interface ScheduleServiceOptions {
   archiveWorkspace: (workspaceId: string) => Promise<void>;
   now?: () => Date;
   runner?: (schedule: StoredSchedule, runId: string) => Promise<ScheduleExecutionResult>;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "canStartAutomatedLoop">;
 }
 
 export class ScheduleService {
@@ -260,6 +262,10 @@ export class ScheduleService {
     schedule: StoredSchedule,
     runId: string,
   ) => Promise<ScheduleExecutionResult>;
+  private readonly resourcePolicyRuntime: Pick<
+    ResourcePolicyRuntime,
+    "canStartAutomatedLoop"
+  > | null;
   private readonly runningScheduleIds = new Set<string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -274,9 +280,15 @@ export class ScheduleService {
     this.archiveWorkspace = options.archiveWorkspace;
     this.now = options.now ?? (() => new Date());
     this.runner = options.runner ?? ((schedule, runId) => this.executeSchedule(schedule, runId));
+    this.resourcePolicyRuntime = options.resourcePolicyRuntime ?? null;
   }
 
   async start(): Promise<void> {
+    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
+    if (policyDecision && !policyDecision.allowed) {
+      this.logger.info({ policy: policyDecision.policy }, policyDecision.reason);
+      return;
+    }
     await this.recoverInterruptedRuns();
     await this.sweepOrphanedSchedules();
     if (this.tickTimer) {
@@ -289,6 +301,15 @@ export class ScheduleService {
     }, SCHEDULE_TICK_INTERVAL_MS);
     (timer as unknown as { unref?: () => void }).unref?.();
     this.tickTimer = timer;
+  }
+
+  async syncResourcePolicy(): Promise<void> {
+    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
+    if (policyDecision && !policyDecision.allowed) {
+      await this.stop();
+      return;
+    }
+    await this.start();
   }
 
   async stop(): Promise<void> {
@@ -547,6 +568,10 @@ export class ScheduleService {
   }
 
   async tick(): Promise<void> {
+    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
+    if (policyDecision && !policyDecision.allowed) {
+      return;
+    }
     const now = this.now();
     const schedules = await this.store.list();
     for (const schedule of schedules) {

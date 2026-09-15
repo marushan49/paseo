@@ -299,6 +299,7 @@ export const en = {
     },
     actions: {
       copyCode: "Copy code",
+      copyText: "Copy text",
       copyTurn: "Copy turn",
       copyMessage: "Copy message",
       forkMenu: "Fork chat from here",
@@ -309,6 +310,9 @@ export const en = {
       forkFailed: "Failed to fork chat",
       openFile: "Open file",
       copied: "Copied",
+    },
+    writingBlock: {
+      untitled: "Text",
     },
     attachments: {
       dismissImage: "Dismiss image",
@@ -2523,6 +2527,25 @@ export const en = {
           title: "Enable Paseo tools",
           hint: "Agents will be able to manage worktrees, agents and schedules",
           accessibilityLabel: "Inject Paseo tools",
+        },
+        resourcePolicy: {
+          title: "Resource usage",
+          hint: "Controls status reads and automated work on this host",
+          loading: "Loading resource policy...",
+          options: {
+            economy: {
+              label: "Economy",
+              description: "One status read per run. Automated polling and schedules stay off.",
+            },
+            balanced: {
+              label: "Balanced",
+              description: "Bounded status checks and automated work for everyday use.",
+            },
+            deep: {
+              label: "Deep work",
+              description: "More bounded status checks for longer, active workflows.",
+            },
+          },
         },
         systemPrompt: {
           title: "System prompt",

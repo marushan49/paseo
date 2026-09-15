@@ -41,6 +41,7 @@ import {
 } from "./service.js";
 import { ScheduleStore } from "./store.js";
 import type { ScheduleExecutionResult, StoredSchedule } from "@getpaseo/protocol/schedule/types";
+import { ResourcePolicyRuntime } from "../resource-policy.js";
 
 interface ScheduleServiceInternals {
   executeSchedule(schedule: StoredSchedule, runId: string): Promise<ScheduleExecutionResult>;
@@ -350,6 +351,37 @@ describe("ScheduleService", () => {
       output: "ran:Review new PRs",
     });
     expect(inspected.nextRunAt).toBe("2026-01-01T00:02:00.000Z");
+  });
+
+  test("blocks automated economy ticks while allowing a manual run once", async () => {
+    const service = createScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: new AgentManager({ logger: createTestLogger() }),
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+      resourcePolicyRuntime: new ResourcePolicyRuntime({ getPolicy: () => "economy" }),
+      runner: async () => ({
+        agentId: null,
+        output: "manual",
+      }),
+    });
+    const created = await service.create({
+      prompt: "Check status",
+      cadence: { type: "every", everyMs: 60_000 },
+      target: {
+        type: "new-agent",
+        config: { provider: "claude", cwd: tempDir },
+      },
+    });
+
+    now = new Date("2026-01-01T00:01:00.000Z");
+    await service.tick();
+    expect((await service.inspect(created.id)).runs).toHaveLength(0);
+
+    await service.runOnce(created.id);
+    expect((await service.inspect(created.id)).runs).toHaveLength(1);
   });
 
   test("pause and resume update persisted schedule state", async () => {

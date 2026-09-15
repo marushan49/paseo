@@ -305,6 +305,7 @@ export const es: TranslationResources = {
     },
     actions: {
       copyCode: "Copiar código",
+      copyText: "Copiar texto",
       copyTurn: "Copiar turno",
       copyMessage: "Copiar mensaje",
       forkMenu: "Bifurcar mensaje",
@@ -315,6 +316,9 @@ export const es: TranslationResources = {
       forkFailed: "No se pudo bifurcar el chat",
       openFile: "Abrir archivo",
       copied: "Copiado",
+    },
+    writingBlock: {
+      untitled: "Texto",
     },
     attachments: {
       dismissImage: "Descartar imagen",
@@ -2454,6 +2458,28 @@ export const es: TranslationResources = {
           title: "Habilitar herramientasPaseo",
           hint: "Los agentes podrán gestionar árboles de trabajo, agentes y horarios.",
           accessibilityLabel: "Inyectar herramientasPaseo",
+        },
+        resourcePolicy: {
+          title: "Uso de recursos",
+          hint: "Controla las lecturas de estado y el trabajo automatizado en este host",
+          loading: "Cargando la política de recursos...",
+          options: {
+            economy: {
+              label: "Económico",
+              description:
+                "Una lectura de estado por ejecución. El sondeo y los horarios automáticos permanecen desactivados.",
+            },
+            balanced: {
+              label: "Equilibrado",
+              description:
+                "Comprobaciones de estado y trabajo automatizado limitados para el uso diario.",
+            },
+            deep: {
+              label: "Trabajo profundo",
+              description:
+                "Más comprobaciones de estado limitadas para flujos de trabajo activos y largos.",
+            },
+          },
         },
         systemPrompt: {
           title: "Aviso del sistema",

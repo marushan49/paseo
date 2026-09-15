@@ -41,7 +41,6 @@ import {
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
-import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
@@ -108,6 +107,12 @@ export interface SidebarWorkspaceMenuProps {
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
   /**
+   * Opens the attach-PR dialog. The dialog itself renders at row level:
+   * mounting it inside the menu would unmount it the moment the menu
+   * closes on select (the kebab owner is hover-gated).
+   */
+  openAttachDialog: () => void;
+  /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
    */
@@ -155,6 +160,7 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openAttachDialog,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -169,13 +175,6 @@ function SidebarWorkspaceMenuItems({
     () => <ThemedGitPullRequest size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
-  // The attach flow owns its dialog: every row menu (kebab or context menu,
-  // all row renderers) gets it without threading state through the row tree.
-  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
-    serverId,
-    workspaceId,
-    workspaceKey,
-  });
   const { scanChat, scanning } = useScanWorkspaceChat({ serverId, workspaceId, workspaceKey });
   const handleScanChat = useCallback(() => {
     void scanChat();
@@ -287,7 +286,6 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
-      {attachDialog}
     </>
   );
 }
@@ -310,6 +308,7 @@ export function SidebarWorkspaceMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openAttachDialog,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -356,6 +355,7 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openAttachDialog={openAttachDialog}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -389,6 +389,7 @@ export function SidebarWorkspaceContextMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openAttachDialog,
   accessibilityLabel,
   highlightStyle,
   ...triggerProps
@@ -433,7 +434,6 @@ export function SidebarWorkspaceContextMenu({
     [workspace],
   );
   const pages = useWorkspaceLabelMenuPages(workspaceTarget);
-
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
       <ContextMenuTrigger
@@ -469,6 +469,7 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openAttachDialog={openAttachDialog}
         />
       </ContextMenuContent>
     </ContextMenu>
