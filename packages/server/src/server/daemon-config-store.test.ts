@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { DaemonConfigStore, applyMutableProviderConfigToOverrides } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import type { PersistedConfig } from "./persisted-config.js";
-import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
+import { MutableDaemonConfigSchema, type MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
 function reloadableConfig(
   persisted: PersistedConfig,
@@ -27,6 +27,7 @@ function reloadableConfig(
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: daemon.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: daemon.appendSystemPrompt ?? "",
+    resourcePolicy: MutableDaemonConfigSchema.shape.resourcePolicy.parse(daemon.resourcePolicy),
     terminalProfiles: daemon.terminalProfiles,
     agentProfiles: daemon.agentProfiles,
     cors: { allowedOrigins: [] },
@@ -110,6 +111,7 @@ describe("DaemonConfigStore", () => {
       autoArchiveAfterMerge: false,
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
+      resourcePolicy: "balanced",
     });
     const changes: unknown[] = [];
     store.onFieldChange("relay.enabled", (value) => changes.push(value));
@@ -680,6 +682,30 @@ describe("DaemonConfigStore", () => {
 
     const persisted = loadPersistedConfig(paseoHome);
     expect(persisted.daemon?.appendSystemPrompt).toBe("Prefer terse replies.");
+  });
+
+  test("patch persists resource policy and emits its field change", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+      resourcePolicy: "balanced",
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("resourcePolicy", (value) => changes.push(value));
+
+    store.patch({ resourcePolicy: "deep" });
+
+    expect(changes).toEqual(["deep"]);
+    expect(store.get().resourcePolicy).toBe("deep");
+    expect(loadPersistedConfig(paseoHome).daemon?.resourcePolicy).toBe("deep");
   });
 
   test("patch persists browser tools opt-in into config.json", () => {

@@ -2431,6 +2431,28 @@ export const ptBR: TranslationResources = {
           hint: "Agentes poderão gerenciar worktrees, agentes e agendamentos",
           accessibilityLabel: "Injetar ferramentas do Paseo",
         },
+        resourcePolicy: {
+          title: "Uso de recursos",
+          hint: "Controla leituras de status e trabalho automatizado neste host",
+          loading: "Carregando a política de recursos...",
+          options: {
+            economy: {
+              label: "Econômico",
+              description:
+                "Uma leitura de status por execução. A sondagem e os agendamentos automáticos ficam desativados.",
+            },
+            balanced: {
+              label: "Equilibrado",
+              description:
+                "Verificações de status e trabalho automatizado limitados para o uso diário.",
+            },
+            deep: {
+              label: "Trabalho profundo",
+              description:
+                "Mais verificações de status limitadas para fluxos de trabalho longos e ativos.",
+            },
+          },
+        },
         systemPrompt: {
           title: "Prompt do sistema",
           hint: "Adiciona um prompt do sistema a todos os agentes",

@@ -2454,6 +2454,28 @@ export const fr: TranslationResources = {
           hint: "Les agents pourront gérer les arbres de travail, les agents et les horaires",
           accessibilityLabel: "Injecter les outilsPaseo",
         },
+        resourcePolicy: {
+          title: "Utilisation des ressources",
+          hint: "Contrôle les lectures d'état et le travail automatisé sur cet hôte",
+          loading: "Chargement de la politique de ressources...",
+          options: {
+            economy: {
+              label: "Économie",
+              description:
+                "Une lecture d'état par exécution. L'interrogation et les horaires automatiques restent désactivés.",
+            },
+            balanced: {
+              label: "Équilibré",
+              description:
+                "Des vérifications d'état et un travail automatisé limités pour un usage quotidien.",
+            },
+            deep: {
+              label: "Travail approfondi",
+              description:
+                "Davantage de vérifications d'état limitées pour les flux de travail actifs et longs.",
+            },
+          },
+        },
         systemPrompt: {
           title: "Invite système",
           hint: "Ajoute une invite système à tous les agents",

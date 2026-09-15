@@ -2518,6 +2518,25 @@ export const en = {
           hint: "Agents will be able to manage worktrees, agents and schedules",
           accessibilityLabel: "Inject Paseo tools",
         },
+        resourcePolicy: {
+          title: "Resource usage",
+          hint: "Controls status reads and automated work on this host",
+          loading: "Loading resource policy...",
+          options: {
+            economy: {
+              label: "Economy",
+              description: "One status read per run. Automated polling and schedules stay off.",
+            },
+            balanced: {
+              label: "Balanced",
+              description: "Bounded status checks and automated work for everyday use.",
+            },
+            deep: {
+              label: "Deep work",
+              description: "More bounded status checks for longer, active workflows.",
+            },
+          },
+        },
         systemPrompt: {
           title: "System prompt",
           hint: "Adds a system prompt to all agents",

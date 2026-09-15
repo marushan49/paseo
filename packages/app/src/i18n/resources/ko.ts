@@ -2405,6 +2405,25 @@ export const ko: TranslationResources = {
           hint: "에이전트가 워크트리, 에이전트, 일정을 관리할 수 있습니다",
           accessibilityLabel: "Paseo 도구 주입",
         },
+        resourcePolicy: {
+          title: "리소스 사용량",
+          hint: "이 호스트의 상태 조회와 자동 작업을 제어합니다",
+          loading: "리소스 정책을 불러오는 중...",
+          options: {
+            economy: {
+              label: "절약",
+              description: "실행마다 상태를 한 번만 조회합니다. 자동 폴링과 일정은 중지됩니다.",
+            },
+            balanced: {
+              label: "균형",
+              description: "일상적인 사용을 위해 상태 확인과 자동 작업을 제한합니다.",
+            },
+            deep: {
+              label: "심층 작업",
+              description: "오래 실행되는 활성 작업을 위해 제한된 상태 확인을 더 허용합니다.",
+            },
+          },
+        },
         systemPrompt: {
           title: "시스템 프롬프트",
           hint: "모든 에이전트에 시스템 프롬프트를 추가합니다",

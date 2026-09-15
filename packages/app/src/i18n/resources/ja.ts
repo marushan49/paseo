@@ -2416,6 +2416,26 @@ export const ja: TranslationResources = {
           hint: "エージェントがワークツリー、エージェント、スケジュールを管理できるようになります",
           accessibilityLabel: "Paseoツールを有効にする",
         },
+        resourcePolicy: {
+          title: "リソース使用量",
+          hint: "このホストでのステータス取得と自動処理を制御します",
+          loading: "リソースポリシーを読み込み中...",
+          options: {
+            economy: {
+              label: "節約",
+              description:
+                "実行ごとにステータスを1回だけ取得します。自動ポーリングとスケジュールは停止します。",
+            },
+            balanced: {
+              label: "バランス",
+              description: "日常的な利用向けにステータス確認と自動処理を制限します。",
+            },
+            deep: {
+              label: "深い作業",
+              description: "長時間のアクティブなワークフロー向けに、制限内で確認回数を増やします。",
+            },
+          },
+        },
         systemPrompt: {
           title: "システムプロンプト",
           hint: "すべてのエージェントにシステムプロンプトを追加します",
