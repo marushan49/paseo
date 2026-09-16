@@ -119,6 +119,13 @@ describe("desktop packaging", () => {
     expect(runtimeTrace).toContain('"packages/server/dist/server/skills/**"');
   });
 
+  it("verifies matching macOS Team IDs after signing", () => {
+    const afterSign = readFileSync(join(packageRoot, "scripts", "after-sign.js"), "utf8");
+
+    expect(afterSign).toContain("verifyMacBundleSignatures");
+    expect(afterSign).toContain("mac-signature-check");
+  });
+
   it("registers Paseo agent links with the operating system", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 
