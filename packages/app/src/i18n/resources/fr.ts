@@ -2483,7 +2483,6 @@ export const fr: TranslationResources = {
         },
         resourcePolicy: {
           title: "Utilisation des ressources",
-          hint: "Contrôle les lectures d'état et le travail automatisé sur cet hôte",
           loading: "Chargement de la politique de ressources...",
           options: {
             economy: {

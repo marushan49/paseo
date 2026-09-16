@@ -2460,7 +2460,6 @@ export const ptBR: TranslationResources = {
         },
         resourcePolicy: {
           title: "Uso de recursos",
-          hint: "Controla leituras de status e trabalho automatizado neste host",
           loading: "Carregando a política de recursos...",
           options: {
             economy: {

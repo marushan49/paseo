@@ -2397,7 +2397,6 @@ export const zhCN: TranslationResources = {
         },
         resourcePolicy: {
           title: "资源使用",
-          hint: "控制此 Host 上的状态读取和自动化工作",
           loading: "正在加载资源策略...",
           options: {
             economy: {

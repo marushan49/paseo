@@ -2467,7 +2467,6 @@ export const ru: TranslationResources = {
         },
         resourcePolicy: {
           title: "Использование ресурсов",
-          hint: "Управляет чтением статуса и автоматической работой на этом хосте",
           loading: "Загрузка политики ресурсов...",
           options: {
             economy: {

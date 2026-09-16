@@ -2423,7 +2423,6 @@ export const ar: TranslationResources = {
         },
         resourcePolicy: {
           title: "استخدام الموارد",
-          hint: "يتحكم في قراءات الحالة والعمل الآلي على هذا المضيف",
           loading: "جارٍ تحميل سياسة الموارد...",
           options: {
             economy: {

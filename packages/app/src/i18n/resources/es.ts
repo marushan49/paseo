@@ -2478,7 +2478,6 @@ export const es: TranslationResources = {
         },
         resourcePolicy: {
           title: "Uso de recursos",
-          hint: "Controla las lecturas de estado y el trabajo automatizado en este host",
           loading: "Cargando la política de recursos...",
           options: {
             economy: {

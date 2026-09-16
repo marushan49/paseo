@@ -935,18 +935,12 @@ function ResourcePolicyCard({ serverId }: { serverId: string }) {
 
   return (
     <View style={settingsStyles.card} testID="host-page-resource-policy-card">
-      <View style={styles.resourcePolicyRow}>
-        <View style={settingsStyles.rowContent}>
+      <View style={styles.resourcePolicyContent}>
+        <View>
           <Text style={settingsStyles.rowTitle}>
             {t("settings.host.orchestration.resourcePolicy.title")}
           </Text>
-          <Text style={settingsStyles.rowHint}>
-            {t("settings.host.orchestration.resourcePolicy.hint")}
-          </Text>
-          <Text
-            style={styles.resourcePolicyDescription}
-            testID="host-page-resource-policy-description"
-          >
+          <Text style={settingsStyles.rowHint} testID="host-page-resource-policy-description">
             {isLoading
               ? t("settings.host.orchestration.resourcePolicy.loading")
               : t(
@@ -1837,13 +1831,11 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "flex-end",
     gap: theme.spacing[2],
   },
-  resourcePolicyRow: {
+  resourcePolicyContent: {
+    alignItems: "flex-start",
     gap: theme.spacing[3],
-  },
-  resourcePolicyDescription: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    marginTop: theme.spacing[1],
+    paddingVertical: theme.spacing[4],
+    paddingHorizontal: theme.spacing[4],
   },
   emptyCard: {
     padding: theme.spacing[4],

@@ -2445,7 +2445,6 @@ export const ja: TranslationResources = {
         },
         resourcePolicy: {
           title: "リソース使用量",
-          hint: "このホストでのステータス取得と自動処理を制御します",
           loading: "リソースポリシーを読み込み中...",
           options: {
             economy: {

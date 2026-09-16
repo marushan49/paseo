@@ -2547,7 +2547,6 @@ export const en = {
         },
         resourcePolicy: {
           title: "Resource usage",
-          hint: "Controls status reads and automated work on this host",
           loading: "Loading resource policy...",
           options: {
             economy: {

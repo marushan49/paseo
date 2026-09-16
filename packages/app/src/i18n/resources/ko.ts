@@ -2434,7 +2434,6 @@ export const ko: TranslationResources = {
         },
         resourcePolicy: {
           title: "리소스 사용량",
-          hint: "이 호스트의 상태 조회와 자동 작업을 제어합니다",
           loading: "리소스 정책을 불러오는 중...",
           options: {
             economy: {
