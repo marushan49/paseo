@@ -1250,6 +1250,10 @@ export const fr: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Copie de travail : {{additions}} ajoutées, {{deletions}} supprimées par rapport à la base, travail non validé compris",
+      },
       status: {
         serviceRunning: "Service {{name}} en cours",
         serviceUnhealthy: "Service {{name}} en échec",

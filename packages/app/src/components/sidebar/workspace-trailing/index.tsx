@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
@@ -43,9 +44,17 @@ export function SidebarWorkspaceTrailingContent({
   workspace: SidebarWorkspaceEntry;
   trailing: SidebarWorkspaceTrailing;
 }) {
+  const { t } = useTranslation();
   if (trailing === "diff" && workspace.diffStat) {
     return (
-      <DiffStat additions={workspace.diffStat.additions} deletions={workspace.diffStat.deletions} />
+      <DiffStat
+        additions={workspace.diffStat.additions}
+        deletions={workspace.diffStat.deletions}
+        accessibilityLabel={t("sidebar.workspace.diffStat.accessibility", {
+          additions: workspace.diffStat.additions,
+          deletions: workspace.diffStat.deletions,
+        })}
+      />
     );
   }
   if (trailing === "timestamp" && workspace.statusEnteredAt) {

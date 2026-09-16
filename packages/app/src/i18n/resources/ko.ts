@@ -1222,6 +1222,10 @@ export const ko: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "워크트리: 기준 대비 {{additions}}줄 추가, {{deletions}}줄 삭제 (커밋하지 않은 작업 포함)",
+      },
       status: {
         serviceRunning: "서비스 {{name}} 실행 중",
         serviceUnhealthy: "서비스 {{name}} 비정상",

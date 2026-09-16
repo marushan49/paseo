@@ -1224,6 +1224,10 @@ export const en = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Worktree: {{additions}} added, {{deletions}} removed against the base, uncommitted work included",
+      },
       status: {
         serviceRunning: "Service {{name}} running",
         serviceUnhealthy: "Service {{name}} unhealthy",

@@ -1228,6 +1228,10 @@ export const ja: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "ワークツリー: ベースに対して {{additions}} 行追加、{{deletions}} 行削除（未コミット分を含む）",
+      },
       status: {
         serviceRunning: "サービス {{name}} 実行中",
         serviceUnhealthy: "サービス {{name}} 異常",

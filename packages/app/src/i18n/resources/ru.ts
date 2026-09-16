@@ -1232,6 +1232,10 @@ export const ru: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Рабочее дерево: {{additions}} добавлено, {{deletions}} удалено относительно базы, включая незакоммиченное",
+      },
       status: {
         serviceRunning: "Сервис {{name}} запущен",
         serviceUnhealthy: "Сервис {{name}} работает некорректно",

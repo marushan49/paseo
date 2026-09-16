@@ -1205,6 +1205,10 @@ export const zhCN: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "工作树：相对基线新增 {{additions}} 行、删除 {{deletions}} 行，含未提交的改动",
+      },
       status: {
         serviceRunning: "服务 {{name}} 运行中",
         serviceUnhealthy: "服务 {{name}} 异常",

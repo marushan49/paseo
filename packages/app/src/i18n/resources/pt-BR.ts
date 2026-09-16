@@ -1240,6 +1240,10 @@ export const ptBR: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Worktree: {{additions}} adicionadas, {{deletions}} removidas em relação à base, incluindo trabalho não commitado",
+      },
       status: {
         serviceRunning: "Serviço {{name}} em execução",
         serviceUnhealthy: "Serviço {{name}} com falha",

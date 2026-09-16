@@ -1215,6 +1215,10 @@ export const ar: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "شجرة العمل: {{additions}} مضافة و{{deletions}} محذوفة مقابل الأساس، بما في ذلك العمل غير المُودع",
+      },
       status: {
         serviceRunning: "الخدمة {{name}} قيد التشغيل",
         serviceUnhealthy: "الخدمة {{name}} غير سليمة",

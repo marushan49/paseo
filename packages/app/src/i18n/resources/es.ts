@@ -1250,6 +1250,10 @@ export const es: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Árbol de trabajo: {{additions}} añadidas, {{deletions}} eliminadas frente a la base, incluido el trabajo sin confirmar",
+      },
       status: {
         serviceRunning: "Servicio {{name}} en ejecución",
         serviceUnhealthy: "Servicio {{name}} con fallos",
