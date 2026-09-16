@@ -1030,6 +1030,11 @@ export const fr: TranslationResources = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Pull requests dans cette conversation",
+          scanChatSubtitle: "{{count}} trouvées. Choisissez celles qui concernent cet espace.",
+          scanChatMentions: "mentionnée {{count}}x",
+          scanChatAttach: "Joindre {{count}}",
+          scanChatUnresolved: "Introuvables sur la forge : {{numbers}}",
         },
         checksSummary: {
           passedLabel: "succès",

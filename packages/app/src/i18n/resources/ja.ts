@@ -1013,6 +1013,12 @@ export const ja: TranslationResources = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "このチャット内のプルリクエスト",
+          scanChatSubtitle:
+            "{{count}} 件見つかりました。このワークスペースに属するものを選んでください。",
+          scanChatMentions: "言及 {{count}} 回",
+          scanChatAttach: "{{count}} 件を追加",
+          scanChatUnresolved: "フォージで見つかりませんでした: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "成功",

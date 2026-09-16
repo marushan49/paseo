@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { collectAgentTranscript } from "@/agent-transcript/collect";
 import { pullRequestCurationStore } from "@/git/pull-request-curation-store";
 import { resolvePullRequestForAttach } from "@/git/use-attach-pull-request";
 import type { ForgeSearchClient } from "@/git/use-forge-search-query";
-import { scanTranscriptForPullRequests } from "@/git/scan-workspace-chat";
+import { scanTranscriptForPullRequests, type ScanRepository } from "@/git/scan-workspace-chat";
+import type { ScanChatFinding } from "@/git/scan-chat-dialog";
 import type { RelatedPullRequest } from "@/git/related-pull-requests";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -15,6 +16,8 @@ interface UseScanWorkspaceChatInput {
   serverId?: string;
   workspaceId?: string;
   workspaceKey: string;
+  /** Already-known pull requests, the only place the app learns its own repo. */
+  pullRequests?: readonly RelatedPullRequest[];
 }
 
 /** Bounded walk per agent: a scan must stay a background nicety, never a full export. */
@@ -23,16 +26,23 @@ const SCAN_MAX_PAGES = 8;
 /** How many of the workspace's agents to walk, most recent first. */
 const SCAN_MAX_AGENTS = 3;
 
+export interface ScanWorkspaceChatResult {
+  findings: ScanChatFinding[];
+  unresolved: number[];
+}
+
 /**
- * "PRs aus dem Chat übernehmen" for a sidebar workspace row: finds the
- * workspace's most recent agent, walks a bounded transcript tail for pull
- * request references, resolves them through forge search, and records the
- * hits in the ephemeral curation store. Manual trigger by design — the
- * automatic pass belongs daemon-side with the persisted curation it will
- * own (rate limits, persistence), not as an app-startup fan-out.
+ * "PRs aus dem Chat übernehmen" for a sidebar workspace row: walks a bounded
+ * transcript tail of the workspace's recent agents, resolves the pull requests
+ * its messages name, and hands the result back for someone to confirm.
+ *
+ * Nothing is attached here. A scan that attaches on its own is only correct when
+ * every number a conversation mentions belongs to it, and that is not how people
+ * talk: the sessions that ship eight pull requests reference older ones in the
+ * same breath. Deciding is the caller's job, and the person's.
  */
 export function useScanWorkspaceChat(input: UseScanWorkspaceChatInput): {
-  scanChat: () => Promise<void>;
+  scanChat: () => Promise<ScanWorkspaceChatResult | null>;
   scanning: boolean;
 } {
   const { t } = useTranslation();
@@ -40,24 +50,24 @@ export function useScanWorkspaceChat(input: UseScanWorkspaceChatInput): {
   const [scanning, setScanning] = useState(false);
   const client = useHostRuntimeClient(input.serverId ?? "");
   const workspace = useWorkspace(input.serverId ?? null, input.workspaceId ?? null);
+  const repo = useMemo(() => repositoryOf(input.pullRequests), [input.pullRequests]);
 
-  const scanChat = useCallback(async () => {
+  const scanChat = useCallback(async (): Promise<ScanWorkspaceChatResult | null> => {
     if (!client || !workspace?.workspaceDirectory) {
       toast.error(t("workspace.terminal.hostDisconnected"));
-      return;
+      return null;
     }
     const agents = findScanAgents(input.serverId, input.workspaceId);
     if (agents.length === 0) {
       toast.error(t("workspace.git.pr.set.scanChatNoAgent"));
-      return;
+      return null;
     }
     setScanning(true);
-    toast.show(t("workspace.git.pr.set.scanChatPullRequests"), { durationMs: null });
     try {
       const searchClient: ForgeSearchClient = {
         searchForge: (options) => client.searchForge(options),
       };
-      const attached: RelatedPullRequest[] = [];
+      const entries: unknown[] = [];
       for (const agent of agents) {
         const transcript = await collectAgentTranscript({
           fetchPage: (options) => client.fetchAgentTimeline(agent.id, options),
@@ -65,38 +75,68 @@ export function useScanWorkspaceChat(input: UseScanWorkspaceChatInput): {
           maxPages: SCAN_MAX_PAGES,
           maxRestarts: 0,
         });
-        const { attached: hits } = await scanTranscriptForPullRequests({
-          entries: transcript.entries,
-          resolveNumber: async (number) =>
-            resolvePullRequestForAttach({
-              client: searchClient,
-              cwd: workspace.workspaceDirectory,
-              number,
-            }).catch(() => null),
-        });
-        attached.push(...hits);
+        entries.push(...transcript.entries);
       }
-      const seen = new Set<number>();
-      for (const facts of attached) {
-        if (seen.has(facts.number)) {
-          continue;
-        }
-        seen.add(facts.number);
-        pullRequestCurationStore.attach(input.workspaceKey, facts);
-      }
-      if (seen.size > 0) {
-        toast.show(t("workspace.git.pr.set.scanChatFound", { count: seen.size }));
-      } else {
+      const scan = await scanTranscriptForPullRequests({
+        entries,
+        repo,
+        resolveNumber: async (number) =>
+          resolvePullRequestForAttach({
+            client: searchClient,
+            cwd: workspace.workspaceDirectory,
+            number,
+          }).catch(() => null),
+      });
+      if (scan.found.length === 0) {
         toast.show(t("workspace.git.pr.set.scanChatEmpty"));
+        return null;
       }
+      const byNumber = new Map(scan.candidates.map((entry) => [entry.number, entry.mentions]));
+      return {
+        findings: scan.found.map((pullRequest) => ({
+          pullRequest,
+          mentions: byNumber.get(pullRequest.number) ?? 0,
+        })),
+        unresolved: scan.unresolved,
+      };
     } catch {
       toast.error(t("workspace.git.pr.set.scanChatEmpty"));
+      return null;
     } finally {
       setScanning(false);
     }
-  }, [client, input.serverId, input.workspaceId, input.workspaceKey, workspace, t, toast]);
+  }, [client, input.serverId, input.workspaceId, repo, workspace, t, toast]);
 
   return { scanChat, scanning };
+}
+
+/** Records the confirmed choice, which is the only path that writes the set. */
+export function attachScannedPullRequests(
+  workspaceKey: string,
+  pullRequests: readonly RelatedPullRequest[],
+): void {
+  for (const facts of pullRequests) {
+    pullRequestCurationStore.attach(workspaceKey, facts);
+  }
+}
+
+/**
+ * The repo a workspace's pull requests live in, read off one of their URLs. A
+ * workspace with no pull requests yet has nothing to compare against, and a scan
+ * without that check is still better than no scan.
+ */
+function repositoryOf(
+  pullRequests: readonly RelatedPullRequest[] | undefined,
+): ScanRepository | null {
+  for (const pullRequest of pullRequests ?? []) {
+    const match = /https?:\/\/[^\s/]+\/([^\s/]+)\/([^\s/]+)\/pull\//.exec(pullRequest.url);
+    const owner = match?.[1];
+    const name = match?.[2];
+    if (owner && name) {
+      return { owner, name };
+    }
+  }
+  return null;
 }
 
 function findScanAgents(

@@ -1008,6 +1008,11 @@ export const en = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Pull requests in this chat",
+          scanChatSubtitle: "{{count}} found. Pick the ones that belong to this workspace.",
+          scanChatMentions: "mentioned {{count}}x",
+          scanChatAttach: "Attach {{count}}",
+          scanChatUnresolved: "Not found on the forge: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "passed",

@@ -1016,6 +1016,12 @@ export const ru: TranslationResources = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Пул-реквесты в этом чате",
+          scanChatSubtitle:
+            "Найдено: {{count}}. Выберите те, что относятся к этому рабочему пространству.",
+          scanChatMentions: "упомянут {{count}} раз",
+          scanChatAttach: "Прикрепить {{count}}",
+          scanChatUnresolved: "Не найдены на форже: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "успешно",

@@ -1005,6 +1005,11 @@ export const ko: TranslationResources = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "이 대화의 풀 리퀘스트",
+          scanChatSubtitle: "{{count}}개를 찾았습니다. 이 작업 공간에 속한 것을 선택하세요.",
+          scanChatMentions: "{{count}}회 언급",
+          scanChatAttach: "{{count}}개 추가",
+          scanChatUnresolved: "포지에서 찾지 못함: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "통과",

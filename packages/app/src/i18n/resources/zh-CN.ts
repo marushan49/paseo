@@ -990,6 +990,11 @@ export const zhCN: TranslationResources = {
           scanChatFound: "Found {{count}} pull requests in chat",
           scanChatEmpty: "No pull requests found in chat",
           scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "此对话中的拉取请求",
+          scanChatSubtitle: "找到 {{count}} 个。请选择属于此工作区的项。",
+          scanChatMentions: "提及 {{count}} 次",
+          scanChatAttach: "添加 {{count}} 个",
+          scanChatUnresolved: "在代码托管上未找到：{{numbers}}",
         },
         checksSummary: {
           passedLabel: "通过",

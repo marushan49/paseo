@@ -1,6 +1,7 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
-import { useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
+import { attachScannedPullRequests, useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
+import { ScanChatDialog, type ScanChatFinding } from "@/git/scan-chat-dialog";
 import {
   pullRequestCurationStore,
   usePullRequestCuration,
@@ -37,7 +38,16 @@ export function ManagedChangeRequestSetList({
     workspaceId,
     workspaceKey,
   });
-  const { scanChat, scanning } = useScanWorkspaceChat({ serverId, workspaceId, workspaceKey });
+  const { scanChat, scanning } = useScanWorkspaceChat({
+    serverId,
+    workspaceId,
+    workspaceKey,
+    pullRequests,
+  });
+  const [scanResult, setScanResult] = useState<{
+    findings: ScanChatFinding[];
+    unresolved: number[];
+  } | null>(null);
   const client = useHostRuntimeClient(serverId);
   const workspace = useWorkspace(serverId, workspaceId);
   const persisted = workspace?.pullRequestCuration;
@@ -68,8 +78,18 @@ export function ManagedChangeRequestSetList({
   );
 
   const handleScanChat = useCallback(() => {
-    void scanChat().then(persistCuration, persistCuration);
-  }, [scanChat, persistCuration]);
+    void scanChat().then(setScanResult);
+  }, [scanChat]);
+
+  const closeScanResult = useCallback(() => setScanResult(null), []);
+
+  const handleAttachScanned = useCallback(
+    (chosen: RelatedPullRequest[]) => {
+      attachScannedPullRequests(workspaceKey, chosen);
+      persistCuration();
+    },
+    [persistCuration, workspaceKey],
+  );
 
   // The attach dialog writes into the store on its own, so the decisions are followed rather
   // than intercepted: whatever lands there is what gets stored.
@@ -88,6 +108,14 @@ export function ManagedChangeRequestSetList({
         scanning={scanning}
       />
       {attachDialog}
+      {scanResult ? (
+        <ScanChatDialog
+          findings={scanResult.findings}
+          unresolved={scanResult.unresolved}
+          onAttach={handleAttachScanned}
+          onClose={closeScanResult}
+        />
+      ) : null}
     </>
   );
 }
