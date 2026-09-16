@@ -96,6 +96,7 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 import { buildTerminalRunMarker, readTerminalRun, terminalRunPollDelayMs } from "./terminal-run.js";
 import type { ResourcePolicyRuntime } from "../../resource-policy.js";
+import { applyPullRequestCurationChange } from "../../workspace-pull-request-curation.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -2256,6 +2257,71 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           workspaceId,
           title,
         }),
+      };
+    },
+  );
+
+  registerTool(
+    "curate_workspace_pull_requests",
+    {
+      title: "Curate workspace pull requests",
+      description:
+        "Attach pull request numbers to a workspace's set, or drop ones that do not belong to it. " +
+        "The decisions persist with the workspace and survive restarts. " +
+        "Omit workspaceId to curate your current workspace.",
+      inputSchema: {
+        workspaceId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Workspace id to curate. Omit for your current workspace."),
+        attach: z
+          .array(z.number().int().positive())
+          .optional()
+          .describe("Pull request numbers to add to this workspace's set."),
+        remove: z
+          .array(z.number().int().positive())
+          .optional()
+          .describe("Pull request numbers to drop from this workspace's set."),
+      },
+      outputSchema: {
+        workspaceId: z.string(),
+        added: z.array(z.number()),
+        removed: z.array(z.number()),
+      },
+    },
+    async ({ workspaceId: requestedWorkspaceId, attach, remove }) => {
+      if (!options.workspaceRegistry) {
+        throw new Error("Workspace registry is required to curate pull requests");
+      }
+      if (!options.emitWorkspaceUpdatesForWorkspaceIds) {
+        throw new Error("Workspace update emitter is required to curate pull requests");
+      }
+      if ((attach?.length ?? 0) === 0 && (remove?.length ?? 0) === 0) {
+        throw new Error("Pass at least one pull request number to attach or remove");
+      }
+
+      const workspaceId = resolveWorkspaceIdForRename(requestedWorkspaceId);
+      const existing = await options.workspaceRegistry.get(workspaceId);
+      if (!existing) {
+        throw new Error(`Workspace ${workspaceId} not found`);
+      }
+      const curation = applyPullRequestCurationChange({
+        stored: existing.pullRequestCuration,
+        attach,
+        remove,
+      });
+      await options.workspaceRegistry.upsert({
+        ...existing,
+        pullRequestCuration: curation,
+        updatedAt: new Date().toISOString(),
+      });
+      await options.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ workspaceId, ...curation }),
       };
     },
   );

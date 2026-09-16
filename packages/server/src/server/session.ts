@@ -8,6 +8,7 @@ import type { CreationSnapshot, AgentCreateRequest } from "@getpaseo/protocol/me
 import type { MessageReceipts } from "./message-receipts/index.js";
 import equal from "fast-deep-equal";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
+import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
 import { normalizeForgeConfigDir } from "./workspace-forge-account.js";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
@@ -3804,13 +3805,7 @@ export class Session {
       });
     };
 
-    // A number can only be one of the two, and the newer decision wins: attaching something
-    // that was dropped is the way to take the dropping back.
-    const removed = [...new Set(curation.removed)].sort((left, right) => left - right);
-    const added = [...new Set(curation.added)]
-      .filter((number) => !removed.includes(number))
-      .sort((left, right) => left - right);
-    const normalized = { added, removed };
+    const normalized = normalizePullRequestCuration(curation);
 
     try {
       const updatedAt = new Date().toISOString();
