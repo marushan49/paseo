@@ -102,6 +102,15 @@ const PersistedWorkspaceRecordSchema = z.object({
     .transform((value) => value ?? null),
   labels: z.array(z.string()).optional(),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
+  // COMPAT(workspaceForgeAccount): added in v0.8.1, remove optional parsing after 2027-06-30.
+  // Config directory of the forge CLI account this workspace speaks to, so a
+  // work and a private GitHub account can live on one machine. Null means the
+  // machine's default account. See server/workspace-forge-account.ts.
+  forgeConfigDir: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;

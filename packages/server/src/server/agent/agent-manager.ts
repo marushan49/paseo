@@ -3,6 +3,7 @@ import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { composeDaemonAppendSystemPrompt } from "./writing-block-instruction.js";
+import { forgeAccountEnvOverlay } from "../workspace-forge-account.js";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -316,6 +317,15 @@ export interface AgentManagerOptions {
     agentId: string;
     expectedTurnId: string;
   }) => Promise<void>;
+  /**
+   * The forge CLI account a workspace speaks to, as that account's config
+   * directory. Injected so the manager keeps no workspace-registry dependency.
+   * Null means the machine's default account.
+   */
+  resolveWorkspaceForgeConfigDir?: (input: {
+    workspaceId: string | null;
+    cwd: string;
+  }) => Promise<string | null> | string | null;
   logger: Logger;
 }
 
@@ -734,6 +744,7 @@ export class AgentManager {
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
+  private readonly resolveWorkspaceForgeConfigDir?: AgentManagerOptions["resolveWorkspaceForgeConfigDir"];
   private acceptingAgentRegistrations = true;
 
   constructor(options: AgentManagerOptions) {
@@ -757,6 +768,7 @@ export class AgentManager {
         options.rescueTimeouts?.interruptSessionMs ?? INTERRUPT_SESSION_TIMEOUT_MS,
     };
     this.beforeSteerUnavailableFallback = options.beforeSteerUnavailableFallback;
+    this.resolveWorkspaceForgeConfigDir = options.resolveWorkspaceForgeConfigDir;
     this.agentStreamCoalescer = new AgentStreamCoalescer({
       windowMs: options.agentStreamCoalesceWindowMs ?? AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS,
       timers: { setTimeout, clearTimeout },
@@ -5277,10 +5289,23 @@ export class AgentManager {
       const transformed = await this.pluginLifecycle.before("agent.session_open", request);
       env = transformed.env;
     }
+    // The agent runs `gh` itself, so the workspace's account has to reach the
+    // process, not just Paseo's own forge queries. An explicit value already in
+    // env wins: a caller or a session_open plugin that set it meant it.
+    const forgeEnv =
+      env?.GH_CONFIG_DIR === undefined
+        ? forgeAccountEnvOverlay(
+            await this.resolveWorkspaceForgeConfigDir?.({
+              workspaceId: opening?.workspaceId ?? null,
+              cwd,
+            }),
+          )
+        : {};
     const context: AgentLaunchContext = {
       agentId,
       env: {
         ...env,
+        ...forgeEnv,
         PASEO_AGENT_ID: agentId,
         PASEO_AGENT_CWD: cwd,
       },

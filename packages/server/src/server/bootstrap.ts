@@ -876,7 +876,15 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     workspaceRegistry,
   });
-  const github = createGitHubService();
+  // list() is served from the registry's in-memory cache, so resolving the
+  // account per gh call costs a lookup, not a read.
+  const resolveWorkspaceForgeConfigDirForCwd = async (cwd: string): Promise<string | null> => {
+    const records = (await workspaceRegistry?.list()) ?? [];
+    return records.find((record) => record.cwd === cwd)?.forgeConfigDir ?? null;
+  };
+  const github = createGitHubService({
+    resolveForgeConfigDir: resolveWorkspaceForgeConfigDirForCwd,
+  });
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger,
     paseoHome: config.paseoHome,
@@ -939,6 +947,13 @@ export async function createPaseoDaemon(
     mcpAuthToken: agentMcpAuthToken,
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    // An agent launched without a workspace id still runs somewhere, so fall
+    // back to the workspace that owns the cwd rather than silently handing it
+    // the machine's default account.
+    resolveWorkspaceForgeConfigDir: async ({ workspaceId, cwd }) =>
+      workspaceId
+        ? ((await workspaceRegistry?.get(workspaceId))?.forgeConfigDir ?? null)
+        : await resolveWorkspaceForgeConfigDirForCwd(cwd),
     logger,
   });
   const syncPluginProviders = () => {

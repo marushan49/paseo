@@ -14,6 +14,7 @@ import { findExecutable } from "../executable-resolution/executable-resolution.j
 import { runGitCommand } from "../utils/run-git-command.js";
 import { execCommand } from "../utils/spawn.js";
 import { resolveSshHostname } from "../utils/ssh-hostname.js";
+import { forgeAccountEnvOverlay } from "../server/workspace-forge-account.js";
 import {
   CLI_AUTH_PROBE_TIMEOUT_MS,
   createForgeCliRunner,
@@ -943,6 +944,13 @@ interface GitHubServiceDependencies {
    * per invocation.
    */
   resolveRepoSlug: (cwd: string) => Promise<string | null>;
+  /**
+   * Config directory of the account this workspace speaks to, or null for the
+   * machine's default. Set as GH_CONFIG_DIR so a work and a private account can
+   * coexist: without it every workspace polls as whichever account is active,
+   * which reads as a missing pull request rather than as the wrong login.
+   */
+  resolveForgeConfigDir: (cwd: string) => Promise<string | null>;
 }
 
 export interface GitHubCommandRunnerOptions {
@@ -1034,6 +1042,7 @@ interface CreateGitHubServiceOptions {
   now?: () => number;
   resolveRepoHost?: (cwd: string) => Promise<string | null>;
   resolveRepoSlug?: (cwd: string) => Promise<string | null>;
+  resolveForgeConfigDir?: (cwd: string) => Promise<string | null>;
 }
 
 type PullRequestCheckRunNode = z.infer<typeof PullRequestCheckRunNodeSchema>;
@@ -1115,6 +1124,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     now: options.now ?? Date.now,
     resolveRepoHost: options.resolveRepoHost ?? resolveGitHubEnterpriseHost,
     resolveRepoSlug: options.resolveRepoSlug ?? resolveGitHubSlugFromOrigin,
+    resolveForgeConfigDir: options.resolveForgeConfigDir ?? (async () => null),
   };
   // A resolved enterprise host is cached permanently; a null resolution (no
   // host, or the auth probe said no) expires so `gh auth login --hostname`
@@ -1310,10 +1320,18 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     // otherwise default to github.com regardless of the resolved repository,
     // which silently queries the wrong server on GitHub Enterprise. GH_HOST is
     // safe even for auto-routing subcommands because it matches the repo's host.
-    const host = await resolveRepoHostCached(runOptions.cwd);
-    const effectiveOptions: GitHubCommandRunnerOptions = host
-      ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, GH_HOST: host } }
-      : runOptions;
+    const [host, forgeConfigDir] = await Promise.all([
+      resolveRepoHostCached(runOptions.cwd),
+      deps.resolveForgeConfigDir(runOptions.cwd),
+    ]);
+    const extraOverlay: Record<string, string> = {
+      ...(host ? { GH_HOST: host } : {}),
+      ...forgeAccountEnvOverlay(forgeConfigDir),
+    };
+    const effectiveOptions: GitHubCommandRunnerOptions =
+      Object.keys(extraOverlay).length > 0
+        ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, ...extraOverlay } }
+        : runOptions;
     // One daemon serves workspaces from several GitHub accounts (e.g. a work
     // account for company repos, a private one for personal repos). gh only
     // knows the account from GH_CONFIG_DIR, so retry account-shaped failures

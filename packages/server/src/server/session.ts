@@ -8,6 +8,7 @@ import type { CreationSnapshot, AgentCreateRequest } from "@getpaseo/protocol/me
 import type { MessageReceipts } from "./message-receipts/index.js";
 import equal from "fast-deep-equal";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
+import { normalizeForgeConfigDir } from "./workspace-forge-account.js";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import { basename, resolve, sep } from "path";
@@ -2889,6 +2890,12 @@ export class Session {
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
+      case "workspace.forge_account.set.request":
+        return this.handleWorkspaceForgeAccountSetRequest(
+          msg.workspaceId,
+          msg.forgeConfigDir,
+          msg.requestId,
+        );
       default:
         return undefined;
     }
@@ -3764,6 +3771,59 @@ export class Session {
         },
       });
       emitResponse(false, null, getErrorMessageOr(error, "Failed to pin workspace"));
+    }
+  }
+
+  private async handleWorkspaceForgeAccountSetRequest(
+    workspaceId: string,
+    forgeConfigDir: string,
+    requestId: string,
+  ): Promise<void> {
+    const logContext = { workspaceId, requestId };
+    this.sessionLogger.info(logContext, "session: workspace.forge_account.set.request");
+    const emitResponse = (
+      accepted: boolean,
+      storedConfigDir: string | null,
+      error: string | null,
+    ) => {
+      this.emit({
+        type: "workspace.forge_account.set.response",
+        payload: { requestId, workspaceId, accepted, forgeConfigDir: storedConfigDir, error },
+      });
+    };
+
+    // Normalize before storing so every later reader gets the same directory,
+    // and so a path we would silently ignore is rejected while the user is
+    // still looking at the field.
+    const normalized = normalizeForgeConfigDir(forgeConfigDir);
+    if (forgeConfigDir.trim().length > 0 && normalized === null) {
+      emitResponse(false, null, "Enter an absolute directory, for example ~/.config/gh-work");
+      return;
+    }
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
+        ...existing,
+        forgeConfigDir: normalized,
+        updatedAt,
+      }));
+      if (!updated) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+      emitResponse(true, normalized, null);
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: workspace.forge_account.set.request error",
+      );
+      emitResponse(
+        false,
+        null,
+        getErrorMessageOr(error, "Failed to set the workspace's GitHub account"),
+      );
     }
   }
 
@@ -5582,6 +5642,7 @@ export class Session {
       name: resolveWorkspaceDisplayName(workspace),
       title: workspace.title,
       pinnedAt: workspace.pinnedAt,
+      forgeConfigDir: workspace.forgeConfigDir,
       ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
       archivingAt: null,
       status: "done",
@@ -5677,6 +5738,7 @@ export class Session {
       }),
       title: result.workspace.title,
       pinnedAt: result.workspace.pinnedAt,
+      forgeConfigDir: result.workspace.forgeConfigDir,
       ...(result.workspace.labels && result.workspace.labels.length > 0
         ? { labels: result.workspace.labels }
         : {}),
