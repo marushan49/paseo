@@ -79,7 +79,8 @@ import {
   type PendingForegroundRun,
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
-import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { formatSystemNotificationPrompt, isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { buildAgentHandoffNote } from "./handoff.js";
 import { buildResourcePolicyPrompt, resolveResourcePolicy } from "../resource-policy.js";
 import type { ResourcePolicy } from "@getpaseo/protocol/messages";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
@@ -712,6 +713,10 @@ export class AgentManager {
   private readonly providerDefinitions = new Map<AgentProvider, ProviderEnabledFlag>();
   private readonly agents = new Map<string, LiveManagedAgent>();
   private readonly timelineStore = new InMemoryAgentTimelineStore();
+  // A switched-to provider session starts empty. Its briefing waits here until
+  // the next prompt, so the switch itself costs no tokens and the note arrives
+  // attached to the thing it explains.
+  private readonly pendingHandoffs = new Map<string, string>();
   private readonly providerSubagents = new ProviderSubagentStore();
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
@@ -1564,6 +1569,7 @@ export class AgentManager {
         // Wipe the in-memory timeline so registerSession mints a new epoch and
         // hydrateTimelineFromProvider re-streams the freshly read provider history.
         this.timelineStore.delete(agentId);
+        this.pendingHandoffs.delete(agentId);
         for (const event of this.providerSubagents.deleteParent(agentId)) {
           this.dispatch({ type: "provider_subagent", event });
         }
@@ -1648,7 +1654,8 @@ export class AgentManager {
     }
     this.requireEnabledProvider(provider);
     const client = await this.requireAvailableClient({ provider });
-    if (this.hasInFlightRun(agentId)) {
+    const wasRunning = this.hasInFlightRun(agentId);
+    if (wasRunning) {
       await this.cancelAgentRunBefore(agentId, "switch");
       existing = this.requireSessionAgent(agentId);
     }
@@ -1665,6 +1672,15 @@ export class AgentManager {
       agentId,
     );
 
+    const persistedRecord = await this.registry?.get(agentId);
+    const handoffNote = buildAgentHandoffNote({
+      title: persistedRecord?.title ?? existing.config.title ?? null,
+      cwd: existing.cwd,
+      previous: { provider: existing.provider, model: existing.config.model ?? null },
+      next: { provider, model: modelId },
+      timeline: this.timelineStore.getItems(agentId),
+      interrupted: wasRunning,
+    });
     const preservedLastUsage = existing.lastUsage;
     const preservedLastError = existing.lastError;
     const preservedAttention = existing.attention;
@@ -1712,6 +1728,7 @@ export class AgentManager {
         lastError: preservedLastError,
         attention: preservedAttention,
       });
+      this.pendingHandoffs.set(agentId, handoffNote);
       // One timeline stretches across two provider sessions, so mark where the
       // cut is: everything above it was said by a different brain.
       await this.appendTimelineItem(agentId, {
@@ -2587,12 +2604,31 @@ export class AgentManager {
     }
   }
 
+  /**
+   * Hands the waiting briefing to the provider in front of the prompt it belongs
+   * to, once. It rides as a system envelope so the person never sees it as a
+   * message they supposedly sent.
+   */
+  private applyPendingHandoff(agentId: string, prompt: AgentPromptInput): AgentPromptInput {
+    const note = this.pendingHandoffs.get(agentId);
+    if (!note) {
+      return prompt;
+    }
+    this.pendingHandoffs.delete(agentId);
+    const envelope = formatSystemNotificationPrompt(note);
+    if (typeof prompt === "string") {
+      return `${envelope}\n\n${prompt}`;
+    }
+    return [{ type: "text", text: envelope }, ...prompt];
+  }
+
   streamAgent(
     agentId: string,
-    prompt: AgentPromptInput,
+    promptInput: AgentPromptInput,
     options?: AgentRunOptions,
   ): AsyncGenerator<AgentStreamEvent> {
     const existingAgent = this.requireSessionAgent(agentId);
+    const prompt = this.applyPendingHandoff(agentId, promptInput);
     this.logger.trace(
       {
         agentId,
