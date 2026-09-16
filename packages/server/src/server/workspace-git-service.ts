@@ -2505,6 +2505,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           if (!this.isActiveObservedWorkspaceTarget(target)) {
             return;
           }
+          // Publish the single status first so the row never waits on the set,
+          // then resolve the session's change requests and publish again. Only
+          // the self-heal poll used to resolve the set, so in normal operation
+          // it was never asked for and the row always showed one change request.
           this.rememberForgePrStatusSnapshot(
             target,
             buildForgeSnapshotFromStatus(status, resolution.forge),
@@ -2512,6 +2516,23 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
               notify: true,
             },
           );
+          void (async () => {
+            const related = await this.resolveRelatedPullRequests({
+              service: resolution.service,
+              cwd: target.cwd,
+              status,
+              headRef: pollTarget.headRef,
+              ...(pollTarget.headSha ? { headSha: pollTarget.headSha } : {}),
+            });
+            if (!related || !this.isActiveObservedWorkspaceTarget(target)) {
+              return;
+            }
+            this.rememberForgePrStatusSnapshot(
+              target,
+              buildForgeSnapshotFromStatus(status, resolution.forge, related),
+              { notify: true },
+            );
+          })();
         },
         onError: (error) => {
           this.logger.warn(
