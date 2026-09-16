@@ -94,6 +94,7 @@ import type {
 } from "./types.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+import { buildTerminalRunMarker, readTerminalRun, terminalRunPollDelayMs } from "./terminal-run.js";
 import type { ResourcePolicyRuntime } from "../../resource-policy.js";
 
 export interface PaseoToolHostDependencies {
@@ -2493,6 +2494,94 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           terminalId,
           lines: capture.lines,
           totalLines: capture.totalLines,
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "run_terminal_command",
+    {
+      title: "Run terminal command",
+      description:
+        "Run a command in a terminal and wait for it to finish. Returns its output and exit " +
+        "code. Use this instead of sending keys and capturing, which returns before the " +
+        "command is done.",
+      inputSchema: {
+        command: z.string().trim().min(1, "command is required"),
+        terminalId: z
+          .string()
+          .optional()
+          .describe("Run in this terminal. A new one is created for the cwd when omitted."),
+        cwd: z
+          .string()
+          .optional()
+          .describe("Working directory for a new terminal. Defaults to your own."),
+        timeoutSeconds: z
+          .number()
+          .int()
+          .positive()
+          .max(3600)
+          .optional()
+          .default(300)
+          .describe("How long to wait before giving up on the command finishing."),
+      },
+      outputSchema: {
+        terminalId: z.string(),
+        lines: z.array(z.string()),
+        exitCode: z.number().int().nullable(),
+        finished: z.boolean(),
+        timedOut: z.boolean(),
+      },
+    },
+    async ({ command, terminalId, cwd, timeoutSeconds = 300 }) => {
+      if (!terminalManager) {
+        throw new Error("Terminal manager is not configured");
+      }
+
+      let id = terminalId;
+      if (id) {
+        if (!terminalManager.getTerminal(id)) {
+          throw new Error(`Terminal ${id} not found`);
+        }
+      } else {
+        const resolvedCwd = resolveScopedCwd(cwd, { required: true });
+        const workspaceId = await resolveTerminalWorkspaceId(resolvedCwd);
+        const created = await terminalManager.createTerminal({ cwd: resolvedCwd, workspaceId });
+        id = created.id;
+      }
+
+      const terminal = terminalManager.getTerminal(id);
+      if (!terminal) {
+        throw new Error(`Terminal ${id} not found`);
+      }
+
+      // Where this command's output starts, so a terminal that has been used before does not
+      // hand back somebody else's scrollback.
+      const before = await terminalManager.captureTerminal(id, { stripAnsi: true });
+      const marker = buildTerminalRunMarker(command.trim());
+      terminal.send({ type: "input", data: marker.input });
+
+      const startedAt = Date.now();
+      const deadline = startedAt + timeoutSeconds * 1000;
+      let result = readTerminalRun([], marker);
+      while (Date.now() < deadline) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, terminalRunPollDelayMs(Date.now() - startedAt)),
+        );
+        const capture = await terminalManager.captureTerminal(id, { stripAnsi: true });
+        result = readTerminalRun(capture.lines, marker, before.totalLines);
+        if (result.finished) break;
+      }
+
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          terminalId: id,
+          lines: result.lines,
+          exitCode: result.exitCode,
+          finished: result.finished,
+          timedOut: !result.finished,
         }),
       };
     },
