@@ -889,19 +889,6 @@ export async function createPaseoDaemon(
     logger,
     paseoHome: config.paseoHome,
     worktreesRoot: config.worktreesRoot,
-    // A session is one worktree per ticket, so its change requests sit on the
-    // branches of the sibling workspaces in the same project. Archived ones are
-    // left out: their change requests are done being watched.
-    resolveSessionBranches: async (cwd) => {
-      const records = (await workspaceRegistry?.list()) ?? [];
-      const own = records.find((record) => record.cwd === cwd);
-      if (!own) {
-        return [];
-      }
-      return records
-        .filter((record) => record.projectId === own.projectId && record.archivedAt === null)
-        .flatMap((record) => (record.branch ? [record.branch] : []));
-    },
     deps: {
       forgeOverrides: { github },
     },

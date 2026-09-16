@@ -2505,13 +2505,17 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           if (!this.isActiveObservedWorkspaceTarget(target)) {
             return;
           }
-          // Publish the single status first so the row never waits on the set,
-          // then resolve the session's change requests and publish again. Only
-          // the self-heal poll used to resolve the set, so in normal operation
-          // it was never asked for and the row always showed one change request.
+          // Publish the fresh status immediately so the row never waits on the
+          // set, but keep the set the row already has: dropping it here and
+          // restoring it a moment later made every tick flip the row between
+          // one change request and its whole set.
           this.rememberForgePrStatusSnapshot(
             target,
-            buildForgeSnapshotFromStatus(status, resolution.forge),
+            buildForgeSnapshotFromStatus(
+              status,
+              resolution.forge,
+              target.latestForge?.relatedPullRequests,
+            ),
             {
               notify: true,
             },
