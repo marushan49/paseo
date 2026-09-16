@@ -964,6 +964,13 @@ export const ja: TranslationResources = {
         openFileIn: "{{target}}で{{fileName}}を開く",
         failedOpen: "ワークスペースを開けませんでした",
       },
+      forgeAccount: {
+        title: "GitHub アカウント",
+        placeholder: "gh 設定ディレクトリのパス（例: ~/.config/gh-work）",
+        confirm: "保存",
+        saved: "このワークスペースは {{path}} のアカウントとして動作します",
+        cleared: "このワークスペースは既定のアカウントに戻りました",
+      },
       pr: {
         actions: {
           viewPullRequest: "表示",

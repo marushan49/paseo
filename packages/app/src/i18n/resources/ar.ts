@@ -952,6 +952,13 @@ export const ar: TranslationResources = {
         openFileIn: "Open {{fileName}} in {{target}}",
         failedOpen: "فشل في فتح مساحة العمل",
       },
+      forgeAccount: {
+        title: "حساب GitHub",
+        placeholder: "مسار دليل إعدادات gh، مثل ~/.config/gh-work",
+        confirm: "حفظ",
+        saved: "تعمل مساحة العمل هذه الآن بالحساب الموجود في {{path}}",
+        cleared: "عادت مساحة العمل إلى الحساب الافتراضي",
+      },
       pr: {
         actions: {
           viewPullRequest: "عرض",

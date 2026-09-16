@@ -961,6 +961,13 @@ export const en = {
         openFileIn: "Open {{fileName}} in {{target}}",
         failedOpen: "Failed to open workspace",
       },
+      forgeAccount: {
+        title: "GitHub account",
+        placeholder: "Path to a gh config directory, e.g. ~/.config/gh-work",
+        confirm: "Save",
+        saved: "This workspace now acts as the account in {{path}}",
+        cleared: "This workspace uses the default account again",
+      },
       pr: {
         actions: {
           viewPullRequest: "View",

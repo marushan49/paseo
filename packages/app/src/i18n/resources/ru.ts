@@ -968,6 +968,13 @@ export const ru: TranslationResources = {
         openFileIn: "Открыть {{fileName}} в {{target}}",
         failedOpen: "Не удалось открыть рабочее пространство",
       },
+      forgeAccount: {
+        title: "Учётная запись GitHub",
+        placeholder: "Путь к каталогу конфигурации gh, например ~/.config/gh-work",
+        confirm: "Сохранить",
+        saved: "Это рабочее пространство теперь работает под учётной записью из {{path}}",
+        cleared: "Рабочее пространство снова использует учётную запись по умолчанию",
+      },
       pr: {
         actions: {
           viewPullRequest: "Просмотреть",

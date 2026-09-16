@@ -21,6 +21,8 @@ export interface AdaptiveRenameModalProps {
   onSubmit: (value: string) => Promise<void> | void;
   validate?: (value: string) => string | null;
   maxLength?: number;
+  /** For fields where empty is an answer, e.g. clearing an override back to a default. */
+  allowEmpty?: boolean;
   testID?: string;
 }
 
@@ -34,6 +36,7 @@ export function AdaptiveRenameModal({
   onSubmit,
   validate,
   maxLength,
+  allowEmpty = false,
   testID,
 }: AdaptiveRenameModalProps) {
   const { t } = useTranslation();
@@ -67,10 +70,10 @@ export function AdaptiveRenameModal({
 
   const computeError = useCallback(
     (value: string): string | null => {
-      if (!value.trim()) return t("common.errors.nameRequired");
+      if (!value.trim() && !allowEmpty) return t("common.errors.nameRequired");
       return validate ? validate(value) : null;
     },
-    [validate, t],
+    [validate, allowEmpty, t],
   );
 
   const handleChange = useCallback((value: string) => {

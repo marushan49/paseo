@@ -2973,6 +2973,30 @@ export class DaemonClient {
     return { title: payload.title };
   }
 
+  /**
+   * Point one workspace's gh at its own config directory, so its agents and Paseo's own gh
+   * calls act as that account. An empty string clears it back to the machine's default.
+   */
+  async setWorkspaceForgeAccount(
+    workspaceId: string,
+    forgeConfigDir: string,
+    requestId?: string,
+  ): Promise<{ forgeConfigDir: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "workspace.forge_account.set.request",
+        workspaceId,
+        forgeConfigDir,
+      },
+      responseType: "workspace.forge_account.set.response",
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setWorkspaceForgeAccount rejected");
+    }
+    return { forgeConfigDir: payload.forgeConfigDir };
+  }
+
   async setWorkspacePinned(
     workspaceId: string,
     pinned: boolean,

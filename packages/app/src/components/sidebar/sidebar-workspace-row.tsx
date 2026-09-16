@@ -34,6 +34,7 @@ import {
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
+import { useForgeAccountDialog } from "@/git/use-forge-account-dialog";
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
@@ -124,6 +125,10 @@ export function SidebarWorkspaceRow({
 
   // Row-level like rename: the dialog must survive the hover-gated kebab
   // menu unmounting when its item is selected.
+  const { forgeAccountDialog, openForgeAccountDialog } = useForgeAccountDialog({
+    serverId: workspace.serverId,
+    workspaceId: workspace.workspaceId,
+  });
 
   const archiveShortcutKeys = useShortcutKeys("archive-workspace");
   const { hasClearableAttention, canMarkUnread, clearAttention, markUnread } =
@@ -177,6 +182,7 @@ export function SidebarWorkspaceRow({
         onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
         onMarkAsUnread={canMarkUnread ? handleMarkAsUnread : undefined}
         archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+        openForgeAccountDialog={openForgeAccountDialog}
       />
       <WorkspaceRenameModal
         visible={isRenameOpen}
@@ -184,6 +190,7 @@ export function SidebarWorkspaceRow({
         onClose={handleCloseRename}
         testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
       />
+      {forgeAccountDialog}
     </>
   );
 }
@@ -210,6 +217,7 @@ interface WorkspaceRowBodyProps {
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  openForgeAccountDialog?: () => void;
 }
 
 function WorkspaceRowBody({
@@ -234,6 +242,7 @@ function WorkspaceRowBody({
   onMarkAsRead,
   onMarkAsUnread,
   archiveShortcutKeys,
+  openForgeAccountDialog,
 }: WorkspaceRowBodyProps) {
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
@@ -311,6 +320,7 @@ function WorkspaceRowBody({
               archiveStatus={archiveStatus}
               archivePendingLabel={archivePendingLabel}
               archiveShortcutKeys={archiveShortcutKeys}
+              openForgeAccountDialog={openForgeAccountDialog}
               openInFileManagerPath={workspace.workspaceDirectory}
               disabled={isArchiving}
               aria-selected={selected}
@@ -348,6 +358,7 @@ function WorkspaceRowBody({
                   archiveStatus={archiveStatus}
                   archivePendingLabel={archivePendingLabel}
                   archiveShortcutKeys={archiveShortcutKeys}
+                  openForgeAccountDialog={openForgeAccountDialog}
                   onArchive={onArchive}
                   onCopyBranchName={onCopyBranchName}
                   onCopyPath={onCopyPath}
@@ -377,6 +388,7 @@ function WorkspaceRowTrailingActions({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  openForgeAccountDialog,
   onArchive,
   onMarkAsRead,
   onMarkAsUnread,
@@ -396,6 +408,7 @@ function WorkspaceRowTrailingActions({
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  openForgeAccountDialog?: () => void;
   onArchive?: () => void;
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
@@ -452,6 +465,7 @@ function WorkspaceRowTrailingActions({
                 archiveStatus={archiveStatus}
                 archivePendingLabel={archivePendingLabel}
                 archiveShortcutKeys={archiveShortcutKeys}
+                openForgeAccountDialog={openForgeAccountDialog}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>

@@ -944,6 +944,13 @@ export const zhCN: TranslationResources = {
         openFileIn: "在 {{target}} 中打开 {{fileName}}",
         failedOpen: "打开 workspace 失败",
       },
+      forgeAccount: {
+        title: "GitHub 账户",
+        placeholder: "gh 配置目录的路径，例如 ~/.config/gh-work",
+        confirm: "保存",
+        saved: "此工作区现在以 {{path}} 中的账户运行",
+        cleared: "此工作区重新使用默认账户",
+      },
       pr: {
         actions: {
           viewPullRequest: "查看",

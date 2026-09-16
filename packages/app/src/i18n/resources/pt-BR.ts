@@ -974,6 +974,13 @@ export const ptBR: TranslationResources = {
         openFileIn: "Abrir {{fileName}} em {{target}}",
         failedOpen: "Falha ao abrir workspace",
       },
+      forgeAccount: {
+        title: "Conta do GitHub",
+        placeholder: "Caminho para um diretório de configuração do gh, por ex. ~/.config/gh-work",
+        confirm: "Salvar",
+        saved: "Este workspace agora atua como a conta em {{path}}",
+        cleared: "Este workspace voltou a usar a conta padrão",
+      },
       pr: {
         actions: {
           viewPullRequest: "Ver",

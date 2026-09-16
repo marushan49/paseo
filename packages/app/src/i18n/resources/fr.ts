@@ -983,6 +983,13 @@ export const fr: TranslationResources = {
         openFileIn: "Open {{fileName}} in {{target}}",
         failedOpen: "Échec de l'ouverture de l'espace de travail",
       },
+      forgeAccount: {
+        title: "Compte GitHub",
+        placeholder: "Chemin vers un dossier de configuration gh, par ex. ~/.config/gh-work",
+        confirm: "Enregistrer",
+        saved: "Cet espace de travail agit désormais comme le compte dans {{path}}",
+        cleared: "Cet espace de travail utilise à nouveau le compte par défaut",
+      },
       pr: {
         actions: {
           viewPullRequest: "Voir",

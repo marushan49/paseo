@@ -984,6 +984,13 @@ export const es: TranslationResources = {
         openFileIn: "Open {{fileName}} in {{target}}",
         failedOpen: "No se pudo abrir el espacio de trabajo",
       },
+      forgeAccount: {
+        title: "Cuenta de GitHub",
+        placeholder: "Ruta a un directorio de configuración de gh, p. ej. ~/.config/gh-work",
+        confirm: "Guardar",
+        saved: "Este espacio de trabajo ahora actúa como la cuenta en {{path}}",
+        cleared: "Este espacio de trabajo vuelve a usar la cuenta predeterminada",
+      },
       pr: {
         actions: {
           viewPullRequest: "Ver",

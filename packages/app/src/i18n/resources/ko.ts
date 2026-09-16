@@ -959,6 +959,13 @@ export const ko: TranslationResources = {
         openFileIn: "{{target}}에서 {{fileName}} 열기",
         failedOpen: "워크스페이스를 열지 못했습니다",
       },
+      forgeAccount: {
+        title: "GitHub 계정",
+        placeholder: "gh 설정 디렉터리 경로, 예: ~/.config/gh-work",
+        confirm: "저장",
+        saved: "이 워크스페이스는 이제 {{path}} 의 계정으로 동작합니다",
+        cleared: "이 워크스페이스가 기본 계정을 다시 사용합니다",
+      },
       pr: {
         actions: {
           viewPullRequest: "보기",
