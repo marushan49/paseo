@@ -77,8 +77,32 @@ export class AttachPullRequestNotFoundError extends Error {
   }
 }
 
-export function parseAttachPullRequestNumber(raw: string): number | null {
-  const match = raw.trim().match(/^#?(\d{1,7})$/);
+/**
+ * Pull request numbers the way people have them to hand: one number, a
+ * comma-separated list, or a column pasted out of a table. A single bad token
+ * invalidates the whole input rather than being dropped, so a typo in a list of
+ * eight is reported instead of silently costing one pull request.
+ */
+export function parseAttachPullRequestNumbers(raw: string): number[] | null {
+  const tokens = raw.split(/[\s,;]+/).filter((token) => token.length > 0);
+  if (tokens.length === 0) {
+    return null;
+  }
+  const numbers: number[] = [];
+  for (const token of tokens) {
+    const number = parseSinglePullRequestNumber(token);
+    if (number === null) {
+      return null;
+    }
+    if (!numbers.includes(number)) {
+      numbers.push(number);
+    }
+  }
+  return numbers;
+}
+
+function parseSinglePullRequestNumber(token: string): number | null {
+  const match = token.match(/^#?(\d{1,7})$/);
   if (!match) {
     return null;
   }
@@ -87,32 +111,47 @@ export function parseAttachPullRequestNumber(raw: string): number | null {
 }
 
 /**
- * The dialog submit: validate, resolve through forge search, and record the
- * facts in the ephemeral curation store under the workspace key. Pure
- * apart from the store write, so the dialog shell stays thin and this is
- * fully testable with a fake search client.
+ * The dialog submit: validate, resolve every number through forge search, and
+ * record the facts in the curation store under the workspace key. Pure apart
+ * from the store write, so the dialog shell stays thin and this is fully
+ * testable with a fake search client.
+ *
+ * Numbers that resolve are attached even when a later one is missing: a list of
+ * eight with one stale number should cost that one, not the other seven.
  */
-export async function submitAttachPullRequest(input: {
+export async function submitAttachPullRequests(input: {
   client: ForgeSearchClient;
   cwd: string;
   workspaceKey: string;
   rawValue: string;
   formatInvalid: () => string;
-  formatNotFound: (number: number) => string;
-}): Promise<RelatedPullRequest> {
-  const number = parseAttachPullRequestNumber(input.rawValue);
-  if (number === null) {
+  formatNotFound: (numbers: number[]) => string;
+}): Promise<RelatedPullRequest[]> {
+  const numbers = parseAttachPullRequestNumbers(input.rawValue);
+  if (numbers === null) {
     throw new Error(input.formatInvalid());
   }
-  let facts: RelatedPullRequest;
-  try {
-    facts = await resolvePullRequestForAttach({ client: input.client, cwd: input.cwd, number });
-  } catch (error) {
-    if (error instanceof AttachPullRequestNotFoundError) {
-      throw new Error(input.formatNotFound(number), { cause: error });
+  const attached: RelatedPullRequest[] = [];
+  const missing: number[] = [];
+  for (const number of numbers) {
+    try {
+      const facts = await resolvePullRequestForAttach({
+        client: input.client,
+        cwd: input.cwd,
+        number,
+      });
+      pullRequestCurationStore.attach(input.workspaceKey, facts);
+      attached.push(facts);
+    } catch (error) {
+      if (error instanceof AttachPullRequestNotFoundError) {
+        missing.push(number);
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
-  pullRequestCurationStore.attach(input.workspaceKey, facts);
-  return facts;
+  if (missing.length > 0) {
+    throw new Error(input.formatNotFound(missing));
+  }
+  return attached;
 }

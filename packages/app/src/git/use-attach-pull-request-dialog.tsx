@@ -2,8 +2,8 @@ import { useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import {
-  parseAttachPullRequestNumber,
-  submitAttachPullRequest,
+  parseAttachPullRequestNumbers,
+  submitAttachPullRequests,
 } from "@/git/use-attach-pull-request";
 import type { ForgeSearchClient } from "@/git/use-forge-search-query";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -43,7 +43,7 @@ export function useAttachPullRequestDialog(input: UseAttachPullRequestDialogInpu
 
   const handleValidate = useCallback(
     (value: string): string | null => {
-      if (parseAttachPullRequestNumber(value) === null) {
+      if (parseAttachPullRequestNumbers(value) === null) {
         return t("workspace.git.pr.set.attachPlaceholder");
       }
       return null;
@@ -59,13 +59,16 @@ export function useAttachPullRequestDialog(input: UseAttachPullRequestDialogInpu
       const searchClient: ForgeSearchClient = {
         searchForge: (options) => client.searchForge(options),
       };
-      await submitAttachPullRequest({
+      await submitAttachPullRequests({
         client: searchClient,
         cwd,
         workspaceKey: input.workspaceKey,
         rawValue: value,
         formatInvalid: () => t("workspace.git.pr.set.attachPlaceholder"),
-        formatNotFound: (number) => t("workspace.git.pr.set.attachNotFound", { number }),
+        formatNotFound: (numbers) =>
+          numbers.length === 1
+            ? t("workspace.git.pr.set.attachNotFound", { number: numbers[0] })
+            : t("workspace.git.pr.set.attachNotFoundMany", { numbers: numbers.join(", ") }),
       });
     },
     [client, cwd, input.workspaceKey, t],

@@ -3,9 +3,9 @@ import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { ForgeSearchClient } from "./use-forge-search-query";
 import {
   AttachPullRequestNotFoundError,
-  parseAttachPullRequestNumber,
+  parseAttachPullRequestNumbers,
   resolvePullRequestForAttach,
-  submitAttachPullRequest,
+  submitAttachPullRequests,
 } from "./use-attach-pull-request";
 import { pullRequestCurationStore } from "./pull-request-curation-store";
 
@@ -32,18 +32,28 @@ function clientWith(items: ForgeSearchItem[]): ForgeSearchClient & { calls: unkn
   };
 }
 
-describe("parseAttachPullRequestNumber", () => {
+describe("parseAttachPullRequestNumbers", () => {
+  it("takes a pasted list, in any of the separators people paste with", () => {
+    expect(parseAttachPullRequestNumbers("1335,1346,1350")).toEqual([1335, 1346, 1350]);
+    expect(parseAttachPullRequestNumbers("1335 1346\n#1350")).toEqual([1335, 1346, 1350]);
+    expect(parseAttachPullRequestNumbers("1335, 1335")).toEqual([1335]);
+  });
+
+  it("rejects the whole list when one entry is not a number", () => {
+    expect(parseAttachPullRequestNumbers("1335, nope, 1350")).toBeNull();
+  });
+
   it("accepts plain numbers and #prefixed numbers", () => {
-    expect(parseAttachPullRequestNumber("1346")).toBe(1346);
-    expect(parseAttachPullRequestNumber("  #1371 ")).toBe(1371);
+    expect(parseAttachPullRequestNumbers("1346")).toEqual([1346]);
+    expect(parseAttachPullRequestNumbers("  #1371 ")).toEqual([1371]);
   });
 
   it("rejects urls, ranges, and garbage", () => {
-    expect(parseAttachPullRequestNumber("https://github.com/o/r/pull/1346")).toBeNull();
-    expect(parseAttachPullRequestNumber("1346-1350")).toBeNull();
-    expect(parseAttachPullRequestNumber("")).toBeNull();
-    expect(parseAttachPullRequestNumber("0")).toBeNull();
-    expect(parseAttachPullRequestNumber("abc")).toBeNull();
+    expect(parseAttachPullRequestNumbers("https://github.com/o/r/pull/1346")).toBeNull();
+    expect(parseAttachPullRequestNumbers("1346-1350")).toBeNull();
+    expect(parseAttachPullRequestNumbers("")).toBeNull();
+    expect(parseAttachPullRequestNumbers("0")).toBeNull();
+    expect(parseAttachPullRequestNumbers("abc")).toBeNull();
   });
 });
 
@@ -96,13 +106,13 @@ describe("resolvePullRequestForAttach", () => {
   });
 });
 
-describe("submitAttachPullRequest", () => {
+describe("submitAttachPullRequests", () => {
   const formatInvalid = () => "invalid";
-  const formatNotFound = (number: number) => `missing #${number}`;
+  const formatNotFound = (numbers: number[]) => `missing ${numbers.join(", ")}`;
 
   it("resolves and records the attachment in the workspace store", async () => {
     const client = clientWith([searchItem(1346)]);
-    const facts = await submitAttachPullRequest({
+    const facts = await submitAttachPullRequests({
       client,
       cwd: "/repo",
       workspaceKey: "srv:ws-submit",
@@ -110,7 +120,7 @@ describe("submitAttachPullRequest", () => {
       formatInvalid,
       formatNotFound,
     });
-    expect(facts.number).toBe(1346);
+    expect(facts.map((fact) => fact.number)).toEqual([1346]);
     expect(pullRequestCurationStore.getCuration("srv:ws-submit")).toEqual({
       added: [1346],
       removed: [],
@@ -118,10 +128,29 @@ describe("submitAttachPullRequest", () => {
     pullRequestCurationStore.clear("srv:ws-submit");
   });
 
+  it("keeps the pull requests it found when one number in the list is stale", async () => {
+    const client = clientWith([searchItem(1346), searchItem(1350)]);
+    await expect(
+      submitAttachPullRequests({
+        client,
+        cwd: "/repo",
+        workspaceKey: "srv:ws-partial",
+        rawValue: "1346, 1349, 1350",
+        formatInvalid,
+        formatNotFound,
+      }),
+    ).rejects.toThrow("missing 1349");
+    expect(pullRequestCurationStore.getCuration("srv:ws-partial")).toEqual({
+      added: [1346, 1350],
+      removed: [],
+    });
+    pullRequestCurationStore.clear("srv:ws-partial");
+  });
+
   it("rejects invalid input without touching the store", async () => {
     const client = clientWith([searchItem(1346)]);
     await expect(
-      submitAttachPullRequest({
+      submitAttachPullRequests({
         client,
         cwd: "/repo",
         workspaceKey: "srv:ws-submit-invalid",
@@ -139,7 +168,7 @@ describe("submitAttachPullRequest", () => {
   it("maps a missed lookup to the not-found message", async () => {
     const client = clientWith([]);
     await expect(
-      submitAttachPullRequest({
+      submitAttachPullRequests({
         client,
         cwd: "/repo",
         workspaceKey: "srv:ws-submit-miss",
@@ -147,6 +176,6 @@ describe("submitAttachPullRequest", () => {
         formatInvalid,
         formatNotFound,
       }),
-    ).rejects.toThrow("missing #9999");
+    ).rejects.toThrow("missing 9999");
   });
 });
