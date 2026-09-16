@@ -15,7 +15,14 @@ function parseTeamIdentifier(output) {
     return "";
   }
   const match = text.match(/TeamIdentifier=([A-Za-z0-9]+)/);
-  return match ? match[1] : null;
+  if (match) {
+    return match[1];
+  }
+  // An Apple Distribution certificate prints no TeamIdentifier line at all; the
+  // team sits in parentheses on the leaf Authority line. Without this the check
+  // reads "no team" and fails a correctly signed build.
+  const authority = text.match(/^Authority=.*\(([A-Z0-9]{10})\)\s*$/m);
+  return authority ? authority[1] : null;
 }
 
 function defaultRunVvv(targetPath) {
@@ -26,7 +33,7 @@ function defaultRunVvv(targetPath) {
     });
   } catch (error) {
     const combined = [error?.stdout, error?.stderr, error?.message].filter(Boolean).join("\n");
-    if (combined.includes("TeamIdentifier=")) {
+    if (combined.includes("TeamIdentifier=") || combined.includes("Authority=")) {
       return combined;
     }
     throw error;
