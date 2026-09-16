@@ -63,6 +63,24 @@ describe("resolvePullRequestForAttach", () => {
     expect(result.number).toBe(1346);
   });
 
+  it("falls back to merged pull requests", async () => {
+    const calls: unknown[] = [];
+    const client: ForgeSearchClient = {
+      searchForge: vi.fn(async (options: { query: string }) => {
+        calls.push(options);
+        const items =
+          options.query === "1377 is:merged" ? [searchItem(1377, "change_request", "MERGED")] : [];
+        return { items, authState: "authenticated", error: null, requestId: "test" };
+      }),
+    };
+    const result = await resolvePullRequestForAttach({ client, cwd: "/repo", number: 1377 });
+    expect(result).toMatchObject({ number: 1377, state: "merged" });
+    expect(calls).toEqual([
+      { cwd: "/repo", query: "1377", limit: 10, kinds: ["change_request"] },
+      { cwd: "/repo", query: "1377 is:merged", limit: 10, kinds: ["change_request"] },
+    ]);
+  });
+
   it("throws not-found when nothing matches exactly", async () => {
     const client = clientWith([searchItem(13460)]);
     await expect(

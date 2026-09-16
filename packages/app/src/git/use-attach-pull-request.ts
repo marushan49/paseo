@@ -1,4 +1,4 @@
-import { ForgeSearchItemSchema, type ForgeSearchItem } from "@getpaseo/protocol/messages";
+import { ForgeSearchItemSchema } from "@getpaseo/protocol/messages";
 import type { ForgeSearchClient } from "@/git/use-forge-search-query";
 import { searchItemToRelatedPullRequest } from "@/git/pull-request-curation";
 import { pullRequestCurationStore } from "@/git/pull-request-curation-store";
@@ -8,23 +8,63 @@ import type { RelatedPullRequest } from "@/git/related-pull-requests";
  * Resolves a pull request number the user typed into set facts, through the
  * existing forge search RPC — no new daemon call needed. Only an exact
  * number match on a change request counts; fuzzy search hits never attach.
+ * Looks in open pull requests first, then merged ones: `gh pr list` is
+ * open-only, so without the second query every merged change request is
+ * invisible to attach and scan.
  */
 export async function resolvePullRequestForAttach(input: {
   client: ForgeSearchClient;
   cwd: string;
   number: number;
 }): Promise<RelatedPullRequest> {
-  const payload = await input.client.searchForge({
+  const open = await searchExactPullRequest({
+    client: input.client,
     cwd: input.cwd,
     query: String(input.number),
+    number: input.number,
+  });
+  if (open) {
+    return open;
+  }
+  const merged = await searchExactPullRequest({
+    client: input.client,
+    cwd: input.cwd,
+    query: `${input.number} is:merged`,
+    number: input.number,
+  });
+  if (merged) {
+    return merged;
+  }
+  throw new AttachPullRequestNotFoundError(input.number);
+}
+
+async function searchExactPullRequest(input: {
+  client: ForgeSearchClient;
+  cwd: string;
+  query: string;
+  number: number;
+}): Promise<RelatedPullRequest | null> {
+  const payload = await input.client.searchForge({
+    cwd: input.cwd,
+    query: input.query,
     limit: 10,
     kinds: ["change_request"],
   });
-  const match = findExactPullRequest(payload.items, input.number);
-  if (!match) {
-    throw new AttachPullRequestNotFoundError(input.number);
+  for (const item of payload.items) {
+    const parsed = ForgeSearchItemSchema.safeParse(item);
+    if (!parsed.success) {
+      continue;
+    }
+    const candidate = parsed.data;
+    if (candidate.kind !== "change_request" || candidate.number !== input.number) {
+      continue;
+    }
+    const related = searchItemToRelatedPullRequest(candidate);
+    if (related) {
+      return related;
+    }
   }
-  return match;
+  return null;
 }
 
 export class AttachPullRequestNotFoundError extends Error {
@@ -35,27 +75,6 @@ export class AttachPullRequestNotFoundError extends Error {
     this.name = "AttachPullRequestNotFoundError";
     this.number = number;
   }
-}
-
-function findExactPullRequest(
-  items: readonly unknown[],
-  number: number,
-): RelatedPullRequest | null {
-  for (const item of items) {
-    const parsed = ForgeSearchItemSchema.safeParse(item);
-    if (!parsed.success) {
-      continue;
-    }
-    const candidate: ForgeSearchItem = parsed.data;
-    if (candidate.kind !== "change_request" || candidate.number !== number) {
-      continue;
-    }
-    const related = searchItemToRelatedPullRequest(candidate);
-    if (related) {
-      return related;
-    }
-  }
-  return null;
 }
 
 export function parseAttachPullRequestNumber(raw: string): number | null {
