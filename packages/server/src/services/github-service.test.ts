@@ -10,7 +10,9 @@ import {
   GITHUB_POLL_ALIGNMENT_MS,
   computeGithubNextInterval,
   createGitHubService,
+  isGhAccountFallbackError,
   parseStatusCheckRollup,
+  resolveGhConfigDirChain,
   type GitHubCommandRunner,
   type GitHubCommandRunnerOptions,
   type CurrentPullRequestStatus,
@@ -529,6 +531,7 @@ describe("ForgeService", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it.each([
@@ -4436,6 +4439,111 @@ describe("ForgeService", () => {
     // GH_HOST is injected on every gh call (the slug lookup and the POST alike).
     expect(runner.calls[0]?.envOverlay).toMatchObject({ GH_HOST: "github.acme.internal" });
     expect(runner.calls[1]?.envOverlay).toMatchObject({ GH_HOST: "github.acme.internal" });
+  });
+
+  describe("gh account fallback chain", () => {
+    const prJson = JSON.stringify({
+      number: 1371,
+      title: "Phase 2 acceptance",
+      url: "https://github.com/acme/repo/pull/1371",
+      state: "OPEN",
+      body: null,
+      labels: [],
+      baseRefName: "main",
+      headRefName: "feature",
+      updatedAt: "2026-09-16T00:00:00Z",
+    });
+
+    function notFoundError(): GitHubCommandError {
+      return new GitHubCommandError({
+        args: ["pr", "view", "1371"],
+        cwd: "/tmp/repo",
+        exitCode: 1,
+        stderr: "GraphQL: Could not resolve to a PullRequest",
+      });
+    }
+
+    it("retries a not-found poll with the next GH_CONFIG_DIR and succeeds", async () => {
+      vi.stubEnv("PASEO_GH_CONFIG_DIRS", "/cfg/work:/cfg/private");
+      const runner = createScriptedRunner([{ error: notFoundError() }, prJson]);
+      const service = createGitHubService({
+        runner: runner.runner,
+        resolveRepoHost: async () => null,
+      });
+
+      await expect(
+        service.getPullRequest({ cwd: "/tmp/repo", number: 1371 }),
+      ).resolves.toMatchObject({ number: 1371 });
+
+      expect(runner.calls).toHaveLength(2);
+      expect(runner.calls[0]?.envOverlay).toMatchObject({ GH_CONFIG_DIR: "/cfg/work" });
+      expect(runner.calls[1]?.envOverlay).toMatchObject({ GH_CONFIG_DIR: "/cfg/private" });
+    });
+
+    it("keeps a single attempt when no chain is configured", async () => {
+      vi.stubEnv("PASEO_GH_CONFIG_DIRS", "");
+      const runner = createScriptedRunner([{ error: notFoundError() }]);
+      const service = createGitHubService({
+        runner: runner.runner,
+        resolveRepoHost: async () => null,
+      });
+
+      await expect(service.getPullRequest({ cwd: "/tmp/repo", number: 1371 })).rejects.toThrow(
+        "gh pr view 1371",
+      );
+      expect(runner.calls).toHaveLength(1);
+      expect(runner.calls[0]?.envOverlay?.GH_CONFIG_DIR).toBeUndefined();
+    });
+
+    it("does not retry rate-limited calls on another account", async () => {
+      vi.stubEnv("PASEO_GH_CONFIG_DIRS", "/cfg/work:/cfg/private");
+      const runner = createScriptedRunner([
+        {
+          error: new GitHubCommandError({
+            args: ["pr", "view", "1371"],
+            cwd: "/tmp/repo",
+            exitCode: 1,
+            stderr: "API rate limit exceeded for user ID 1.",
+          }),
+        },
+      ]);
+      const service = createGitHubService({
+        runner: runner.runner,
+        resolveRepoHost: async () => null,
+      });
+
+      await expect(service.getPullRequest({ cwd: "/tmp/repo", number: 1371 })).rejects.toThrow(
+        "gh pr view 1371",
+      );
+      expect(runner.calls).toHaveLength(1);
+    });
+
+    it("resolves the chain from env with an explicit dir first", () => {
+      vi.stubEnv("PASEO_GH_CONFIG_DIRS", "/cfg/work:/cfg/private");
+      expect(resolveGhConfigDirChain("/cfg/explicit")).toEqual([
+        "/cfg/explicit",
+        "/cfg/work",
+        "/cfg/private",
+      ]);
+      expect(resolveGhConfigDirChain()).toEqual(["/cfg/work", "/cfg/private"]);
+      vi.stubEnv("PASEO_GH_CONFIG_DIRS", "");
+      expect(resolveGhConfigDirChain()).toEqual([undefined]);
+    });
+
+    it("classifies account-shaped failures for fallback", () => {
+      expect(isGhAccountFallbackError(new GitHubAuthenticationError({ stderr: "x" }))).toBe(true);
+      expect(isGhAccountFallbackError(notFoundError())).toBe(true);
+      expect(
+        isGhAccountFallbackError(
+          new GitHubCommandError({
+            args: ["pr", "view"],
+            cwd: "/tmp/repo",
+            exitCode: 1,
+            stderr: "no pull requests found for branch",
+          }),
+        ),
+      ).toBe(false);
+    });
   });
 
   it.skipIf(isPlatform("win32"))(

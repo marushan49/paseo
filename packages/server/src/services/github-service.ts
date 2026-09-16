@@ -1314,15 +1314,36 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     const effectiveOptions: GitHubCommandRunnerOptions = host
       ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, GH_HOST: host } }
       : runOptions;
-    try {
-      const result = await deps.runner(args, effectiveOptions);
-      return result.stdout.trim();
-    } catch (error) {
-      throw githubCliRunner.normalizeError(error, {
-        args,
-        cwd: runOptions.cwd,
-      });
+    // One daemon serves workspaces from several GitHub accounts (e.g. a work
+    // account for company repos, a private one for personal repos). gh only
+    // knows the account from GH_CONFIG_DIR, so retry account-shaped failures
+    // with the next configured directory instead of failing the poll.
+    const configDirs = resolveGhConfigDirChain(effectiveOptions.envOverlay?.GH_CONFIG_DIR);
+    let firstError: unknown = null;
+    for (let index = 0; index < configDirs.length; index += 1) {
+      const dir = configDirs[index];
+      const attemptOptions =
+        dir === undefined
+          ? effectiveOptions
+          : {
+              ...effectiveOptions,
+              envOverlay: { ...effectiveOptions.envOverlay, GH_CONFIG_DIR: dir },
+            };
+      try {
+        const result = await deps.runner(args, attemptOptions);
+        return result.stdout.trim();
+      } catch (error) {
+        const normalized = githubCliRunner.normalizeError(error, {
+          args,
+          cwd: runOptions.cwd,
+        });
+        firstError ??= normalized;
+        if (index + 1 >= configDirs.length || !isGhAccountFallbackError(normalized)) {
+          throw index === 0 ? normalized : (firstError ?? normalized);
+        }
+      }
     }
+    throw firstError;
   }
 
   async function runGhJson<T>(
@@ -3017,6 +3038,60 @@ function isAuthFailureText(text: string): boolean {
     normalized.includes("authentication required") ||
     normalized.includes("bad credentials") ||
     normalized.includes("http 401")
+  );
+}
+
+/**
+ * Ordered GH_CONFIG_DIR chain for daemon gh calls. `PASEO_GH_CONFIG_DIRS`
+ * is colon-separated (e.g. work config first, private config second); an
+ * explicit per-call GH_CONFIG_DIR leads. Unset means current behavior: a
+ * single attempt inheriting the process environment. Resolved per call so
+ * tests and restarts pick up changes without a rebuild.
+ */
+export function resolveGhConfigDirChain(explicitDir?: string): (string | undefined)[] {
+  const fromEnv = (process.env.PASEO_GH_CONFIG_DIRS ?? "")
+    .split(":")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const chain: (string | undefined)[] = [];
+  if (explicitDir !== undefined && explicitDir.length > 0) {
+    chain.push(explicitDir);
+  }
+  for (const dir of fromEnv) {
+    if (!chain.includes(dir)) {
+      chain.push(dir);
+    }
+  }
+  if (chain.length === 0 && explicitDir === undefined) {
+    chain.push(undefined);
+  }
+  return chain;
+}
+
+/**
+ * Failures worth retrying with the next GitHub account: auth failures and
+ * "not found" shapes (a repo invisible to the current account 404s instead
+ * of 403ing). Rate limits are deliberately excluded — hammering a second
+ * account must stay an explicit choice, not a silent fallback.
+ */
+export function isGhAccountFallbackError(error: unknown): boolean {
+  if (error instanceof GitHubAuthenticationError) {
+    return true;
+  }
+  if (!(error instanceof GitHubCommandError)) {
+    return false;
+  }
+  if (isGitHubRateLimitError(error)) {
+    return false;
+  }
+  const text = error.stderr.toLowerCase();
+  return (
+    isAuthFailureText(error.stderr) ||
+    text.includes("could not resolve to a repository") ||
+    text.includes("could not resolve to a pullrequest") ||
+    text.includes("not found") ||
+    text.includes("http 404") ||
+    text.includes("http 403")
   );
 }
 
