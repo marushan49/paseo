@@ -991,7 +991,6 @@ export const es: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "Adjuntar una pull request a este espacio de trabajo",
           toggleOneAccessibility: "Mostrar la pull request #{{number}}",
-          manageTitle: "Pull requests",
           addAction: "Añadir",
           scanAction: "Escanear chat",
           emptyList: "Aún no hay pull requests",

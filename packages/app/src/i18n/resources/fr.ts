@@ -990,7 +990,6 @@ export const fr: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "Associer une pull request à cet espace de travail",
           toggleOneAccessibility: "Afficher la pull request #{{number}}",
-          manageTitle: "Pull requests",
           addAction: "Ajouter",
           scanAction: "Analyser le chat",
           emptyList: "Aucune pull request",

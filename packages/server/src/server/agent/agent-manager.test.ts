@@ -8854,7 +8854,8 @@ test("turn_failed surfaces provider code and diagnostic in system error message"
         item.type === "assistant_message" && item.text.includes("[System Error]"),
     );
   expect(systemError?.text).toContain("Provider execution failed");
-  expect(systemError?.text).toContain("code: 126");
+  // The code rides in the sentence now rather than on a line of its own.
+  expect(systemError?.text).toContain("(126)");
   expect(systemError?.text).toContain("No preset version installed for command claude");
 });
 

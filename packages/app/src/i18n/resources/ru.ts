@@ -975,7 +975,6 @@ export const ru: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "Прикрепить пулреквест к этому рабочему пространству",
           toggleOneAccessibility: "Показать пулреквест #{{number}}",
-          manageTitle: "Пулреквесты",
           addAction: "Добавить",
           scanAction: "Сканировать чат",
           emptyList: "Пулреквестов пока нет",

@@ -981,7 +981,6 @@ export const ptBR: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "Anexar um pull request a este workspace",
           toggleOneAccessibility: "Mostrar o pull request #{{number}}",
-          manageTitle: "Pull requests",
           addAction: "Adicionar",
           scanAction: "Varrer chat",
           emptyList: "Nenhum pull request ainda",

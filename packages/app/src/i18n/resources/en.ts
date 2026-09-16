@@ -968,7 +968,6 @@ export const en = {
         set: {
           toggleEmptyAccessibility: "Attach a pull request to this workspace",
           toggleOneAccessibility: "Show pull request #{{number}}",
-          manageTitle: "Pull requests",
           addAction: "Add",
           scanAction: "Scan chat",
           emptyList: "No pull requests yet",

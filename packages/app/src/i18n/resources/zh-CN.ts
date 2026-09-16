@@ -951,7 +951,6 @@ export const zhCN: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "将拉取请求附加到此工作区",
           toggleOneAccessibility: "显示拉取请求 #{{number}}",
-          manageTitle: "拉取请求",
           addAction: "添加",
           scanAction: "扫描聊天",
           emptyList: "暂无拉取请求",

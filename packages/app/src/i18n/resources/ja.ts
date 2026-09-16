@@ -971,7 +971,6 @@ export const ja: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "このワークスペースにプルリクエストを追加",
           toggleOneAccessibility: "プルリクエスト #{{number}} を表示",
-          manageTitle: "プルリクエスト",
           addAction: "追加",
           scanAction: "チャットを検索",
           emptyList: "プルリクエストはまだありません",

@@ -133,7 +133,9 @@ const CHECK_LABEL_KEYS = {
 
 /**
  * The expanded set: one change request per line, in the order the daemon resolved, inside a
- * panel of its own. It is where the set is read *and* kept — adding and dropping entries belong
+ * panel of its own. Its header is the count and nothing else — a word naming what a list of
+ * pull requests is costs a line of sidebar to say what the glyph above already said. It is
+ * where the set is read *and* kept — adding and dropping entries belong
  * next to the list they change, not in a kebab menu two clicks away from what it edits.
  *
  * Each line carries its own check state and its own additions and deletions. They come from the
@@ -166,9 +168,6 @@ export function ChangeRequestSetList({
     <View style={styles.panel} testID="workspace-change-request-set-list">
       <View style={styles.panelHeader}>
         <Text style={styles.panelTitle} numberOfLines={1}>
-          {t("workspace.git.pr.set.manageTitle")}
-        </Text>
-        <Text style={styles.panelCount} numberOfLines={1}>
           {t("workspace.git.pr.set.count", { count: pullRequests.length })}
         </Text>
         {manageable ? (
@@ -434,17 +433,11 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   panelTitle: {
-    color: theme.colors.foregroundMuted,
+    color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
     fontWeight: "600",
     flexShrink: 1,
-  },
-  panelCount: {
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    flexShrink: 0,
   },
   panelActions: {
     flexDirection: "row",

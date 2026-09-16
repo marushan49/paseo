@@ -959,7 +959,6 @@ export const ar: TranslationResources = {
         set: {
           toggleEmptyAccessibility: "إرفاق طلب سحب بمساحة العمل هذه",
           toggleOneAccessibility: "عرض طلب السحب رقم {{number}}",
-          manageTitle: "طلبات السحب",
           addAction: "إضافة",
           scanAction: "فحص المحادثة",
           emptyList: "لا توجد طلبات سحب بعد",

@@ -87,6 +87,7 @@ import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtim
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import { describeProviderFailure } from "./provider-failure.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -4832,14 +4833,11 @@ export class AgentManager {
   private formatTurnFailedMessage(
     event: Extract<AgentStreamEvent, { type: "turn_failed" }>,
   ): string {
-    const base = event.error.trim();
-    const parts = [base.length > 0 ? base : "Provider run failed"];
-    const code = event.code?.trim();
-    if (code) {
-      parts.push(`code: ${code}`);
-    }
+    // Providers serialize their whole error object into this string. Read it, don't print it.
+    const failure = describeProviderFailure(event.error, event.code);
+    const parts = [failure.message];
     const diagnostic = event.diagnostic?.trim();
-    if (diagnostic && diagnostic !== base) {
+    if (diagnostic && diagnostic !== event.error.trim() && diagnostic !== failure.message) {
       parts.push(diagnostic);
     }
     return parts.join("\n\n");
