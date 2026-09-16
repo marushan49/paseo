@@ -41,7 +41,6 @@ import {
 } from "lucide-react-native";
 import { useToast } from "@/contexts/toast-context";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
-import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { useWorkspaceArchive } from "@/workspace/use-workspace-archive";
@@ -639,11 +638,6 @@ function StatusWorkspaceRowWithMenu({
 
   // Row-level like rename: the dialog must survive the hover-gated kebab
   // menu unmounting when its item is selected.
-  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
-    serverId: workspace.serverId,
-    workspaceId: workspace.workspaceId,
-    workspaceKey: workspace.workspaceKey,
-  });
   const isPinned = workspace.pinnedAt != null;
   const handleTogglePin = useCallback(() => {
     onToggleWorkspacePin(workspace);
@@ -707,7 +701,6 @@ function StatusWorkspaceRowWithMenu({
         drag={drag}
         isDragging={isDragging}
         dragHandleProps={dragHandleProps}
-        openAttachDialog={openAttachDialog}
       />
       <WorkspaceRenameModal
         visible={isRenameOpen}
@@ -715,7 +708,6 @@ function StatusWorkspaceRowWithMenu({
         onClose={handleCloseRename}
         testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
       />
-      {attachDialog}
     </>
   );
 }
@@ -743,7 +735,6 @@ interface StatusWorkspaceRowInnerProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   reserveIdleStatusIndicatorSpace?: boolean;
-  openAttachDialog: () => void;
   /** Pinned rows are flat under their own header; status-group rows indent from theirs. */
   inStatusGroup?: boolean;
   drag?: () => void;
@@ -795,7 +786,6 @@ function StatusWorkspaceRowInnerContent({
   isDragging = false,
   dragHandleProps,
   dragInteraction,
-  openAttachDialog,
 }: StatusWorkspaceRowInnerProps & {
   dragInteraction?: ReturnType<typeof useLongPressDragInteraction>;
 }) {
@@ -892,7 +882,6 @@ function StatusWorkspaceRowInnerContent({
               isPinned={isPinned}
               onTogglePin={onTogglePin}
               openInFileManagerPath={workspace.workspaceDirectory}
-              openAttachDialog={openAttachDialog}
               disabled={isArchiving}
               accessibilityRole="button"
               accessibilityState={accessibilityState}
@@ -938,7 +927,6 @@ function StatusWorkspaceRowInnerContent({
                     archiveStatus={archiveStatus}
                     archivePendingLabel={archivePendingLabel}
                     archiveShortcutKeys={archiveShortcutKeys}
-                    openAttachDialog={openAttachDialog}
                   />
                 ) : null}
               </SidebarWorkspaceRowContent>
@@ -970,7 +958,6 @@ function StatusWorkspaceActionSlot({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
-  openAttachDialog,
 }: {
   workspace: SidebarWorkspaceEntry;
   backdrop: SidebarSurfaceBackdrop;
@@ -987,7 +974,6 @@ function StatusWorkspaceActionSlot({
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   onArchive?: () => void;
-  openAttachDialog: () => void;
   archiveLabel?: string;
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
@@ -1022,7 +1008,6 @@ function StatusWorkspaceActionSlot({
             archiveShortcutKeys={archiveShortcutKeys}
             isPinned={isPinned}
             onTogglePin={onTogglePin}
-            openAttachDialog={openAttachDialog}
           />
         ) : null}
       </SidebarWorkspaceTrailingActionOverlay>

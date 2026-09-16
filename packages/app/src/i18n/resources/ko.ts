@@ -964,6 +964,7 @@ export const ko: TranslationResources = {
           openOn: "{{brand}}에서 열기",
         },
         set: {
+          toggleOneAccessibility: "풀 리퀘스트 #{{number}} 표시",
           manageTitle: "풀 리퀘스트",
           addAction: "추가",
           scanAction: "채팅 검색",

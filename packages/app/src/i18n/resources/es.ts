@@ -989,6 +989,7 @@ export const es: TranslationResources = {
           openOn: "Abrir en {{brand}}",
         },
         set: {
+          toggleOneAccessibility: "Mostrar la pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Añadir",
           scanAction: "Escanear chat",

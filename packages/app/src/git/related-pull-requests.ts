@@ -59,11 +59,12 @@ export function relatedPullRequestsHealthCount(summary: RelatedPullRequestsSumma
 }
 
 /**
- * One entry is what the single-change-request row already showed, so it keeps showing that and
- * nothing expands. The set only earns its own presentation once it can disagree with itself.
+ * One change request is still a set of one: it is the row you expand to add the second. The
+ * collapsed line keeps naming that single number rather than counting to one, so nothing is
+ * lost by making it the same control.
  */
 export function shouldPresentAsSet(pullRequests: readonly RelatedPullRequest[]): boolean {
-  return pullRequests.length > 1;
+  return pullRequests.length > 0;
 }
 
 export function selectRelatedPullRequests(

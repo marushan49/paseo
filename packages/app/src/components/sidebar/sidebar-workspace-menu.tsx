@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  type ComponentProps,
-  type PropsWithChildren,
-  type ReactNode,
-} from "react";
+import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -13,7 +7,6 @@ import {
   Circle,
   CircleCheck,
   Copy,
-  GitPullRequest,
   MoreVertical,
   Pencil,
   Pin,
@@ -41,7 +34,6 @@ import {
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
-import { useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
   workspaceServiceLabelKey,
@@ -59,7 +51,6 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 });
 
 const ThemedMoreVertical = withUnistyles(MoreVertical);
-const ThemedGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedArchive = withUnistyles(Archive);
 const ThemedCircle = withUnistyles(Circle);
@@ -106,12 +97,6 @@ export interface SidebarWorkspaceMenuProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
-  /**
-   * Opens the attach-PR dialog. The dialog itself renders at row level:
-   * mounting it inside the menu would unmount it the moment the menu
-   * closes on select (the kebab owner is hover-gated).
-   */
-  openAttachDialog: () => void;
   /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
@@ -160,7 +145,6 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
-  openAttachDialog,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -171,14 +155,6 @@ function SidebarWorkspaceMenuItems({
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
-  const attachLeading = useMemo(
-    () => <ThemedGitPullRequest size={14} uniProps={foregroundMutedColorMapping} />,
-    [],
-  );
-  const { scanChat, scanning } = useScanWorkspaceChat({ serverId, workspaceId, workspaceKey });
-  const handleScanChat = useCallback(() => {
-    void scanChat();
-  }, [scanChat]);
 
   return (
     <>
@@ -212,23 +188,6 @@ function SidebarWorkspaceMenuItems({
           {t("sidebar.workspace.actions.rename")}
         </WorkspaceMenuItem>
       ) : null}
-      <WorkspaceMenuItem
-        surface={surface}
-        testID={`sidebar-workspace-menu-attach-pr-${workspaceKey}`}
-        leading={attachLeading}
-        onSelect={openAttachDialog}
-      >
-        {t("workspace.git.pr.set.attachPullRequest")}
-      </WorkspaceMenuItem>
-      <WorkspaceMenuItem
-        surface={surface}
-        testID={`sidebar-workspace-menu-scan-chat-${workspaceKey}`}
-        leading={attachLeading}
-        status={scanning ? "pending" : "idle"}
-        onSelect={handleScanChat}
-      >
-        {t("workspace.git.pr.set.scanChatPullRequests")}
-      </WorkspaceMenuItem>
       {onMarkAsRead ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -308,7 +267,6 @@ export function SidebarWorkspaceMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
-  openAttachDialog,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -355,7 +313,6 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
-          openAttachDialog={openAttachDialog}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -389,7 +346,6 @@ export function SidebarWorkspaceContextMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
-  openAttachDialog,
   accessibilityLabel,
   highlightStyle,
   ...triggerProps
@@ -469,7 +425,6 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
-          openAttachDialog={openAttachDialog}
         />
       </ContextMenuContent>
     </ContextMenu>

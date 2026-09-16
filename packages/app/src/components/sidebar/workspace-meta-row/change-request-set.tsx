@@ -30,9 +30,10 @@ const ThemedX = withUnistyles(X);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 /**
- * The collapsed stand-in for several change requests: how many there are, and the worst thing
- * happening across them. It replaces the single change request and its CI on the line, because
- * a row that reports the checked-out layer's `passed` beside a red sibling reads as finished.
+ * The collapsed stand-in for a workspace's change requests: with several, how many there are
+ * and the worst thing happening across them; with one, that change request's own number. It
+ * replaces the single change request and its CI on the line, because a row that reports the
+ * checked-out layer's `passed` beside a red sibling reads as finished.
  *
  * The health word carries its own count — one red change request and six red ones are different
  * mornings, and this line is what decides which one gets opened first.
@@ -42,10 +43,13 @@ const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted })
  */
 export function ChangeRequestSetItem({
   summary,
+  soleNumber,
   expanded,
   onToggle,
 }: {
   summary: RelatedPullRequestsSummary;
+  /** Set when the set holds exactly one change request: the line names it instead of counting. */
+  soleNumber: number | null;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -67,9 +71,11 @@ export function ChangeRequestSetItem({
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
-      accessibilityLabel={t("workspace.git.pr.set.toggleAccessibility", {
-        count: summary.total,
-      })}
+      accessibilityLabel={
+        soleNumber === null
+          ? t("workspace.git.pr.set.toggleAccessibility", { count: summary.total })
+          : t("workspace.git.pr.set.toggleOneAccessibility", { number: soleNumber })
+      }
       hitSlop={4}
       onPressIn={handlePressIn}
       onPress={handlePress}
@@ -79,7 +85,9 @@ export function ChangeRequestSetItem({
       <Chevron size={12} uniProps={mutedMapping} />
       <ThemedGitPullRequest size={12} uniProps={mutedMapping} />
       <Text style={styles.countText} numberOfLines={1}>
-        {t("workspace.git.pr.set.count", { count: summary.total })}
+        {soleNumber === null
+          ? t("workspace.git.pr.set.count", { count: summary.total })
+          : soleNumber}
       </Text>
       {summary.health === "unknown" ? null : (
         <>

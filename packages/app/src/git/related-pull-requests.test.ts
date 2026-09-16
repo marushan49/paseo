@@ -99,13 +99,13 @@ describe("relatedPullRequestsHealthCount", () => {
 });
 
 describe("shouldPresentAsSet", () => {
-  test("a single change request keeps the row it already had", () => {
-    expect(shouldPresentAsSet([pr(1)])).toBe(false);
-    expect(shouldPresentAsSet([])).toBe(false);
+  test("one change request is the row you expand to add the second", () => {
+    expect(shouldPresentAsSet([pr(1)])).toBe(true);
+    expect(shouldPresentAsSet([pr(1), pr(2)])).toBe(true);
   });
 
-  test("two or more earn the set presentation", () => {
-    expect(shouldPresentAsSet([pr(1), pr(2)])).toBe(true);
+  test("a workspace with no change request has no set to show", () => {
+    expect(shouldPresentAsSet([])).toBe(false);
   });
 });
 

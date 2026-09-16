@@ -30,6 +30,8 @@ export type MetaRowItem =
       kind: "changeRequestSet";
       pullRequests: readonly RelatedPullRequest[];
       summary: RelatedPullRequestsSummary;
+      /** The one change request's number when that is all there is, so the line names it. */
+      soleNumber: number | null;
       expanded: boolean;
     }
   | { kind: "checks"; summary: CheckSummary; label: boolean }
@@ -89,6 +91,7 @@ export function selectMetaRowItems(input: {
       kind: "changeRequestSet",
       pullRequests: relatedPullRequests,
       summary: summarizeRelatedPullRequests(relatedPullRequests),
+      soleNumber: soleChangeRequestNumber(relatedPullRequests),
       expanded: input.setExpanded === true,
     });
   } else if (prHint && visible.changeRequest) {
@@ -115,4 +118,12 @@ export function selectMetaRowItems(input: {
   }
 
   return items;
+}
+
+/** The number to name on the collapsed line, or null when the set has more than one. */
+function soleChangeRequestNumber(pullRequests: readonly RelatedPullRequest[]): number | null {
+  if (pullRequests.length !== 1) {
+    return null;
+  }
+  return pullRequests[0]?.number ?? null;
 }

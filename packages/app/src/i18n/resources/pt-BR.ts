@@ -979,6 +979,7 @@ export const ptBR: TranslationResources = {
           openOn: "Abrir no {{brand}}",
         },
         set: {
+          toggleOneAccessibility: "Mostrar o pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Adicionar",
           scanAction: "Varrer chat",

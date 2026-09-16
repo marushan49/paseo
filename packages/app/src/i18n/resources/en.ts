@@ -966,6 +966,7 @@ export const en = {
           openOn: "Open on {{brand}}",
         },
         set: {
+          toggleOneAccessibility: "Show pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Add",
           scanAction: "Scan chat",

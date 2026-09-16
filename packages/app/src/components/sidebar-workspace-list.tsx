@@ -35,7 +35,6 @@ import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { type GestureType } from "react-native-gesture-handler";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
-import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
 import { ExternalLink, Settings, MoreVertical, Plus, Trash2 } from "lucide-react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
@@ -290,7 +289,6 @@ interface WorkspaceRowInnerProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   reserveIdleStatusIndicatorSpace?: boolean;
-  openAttachDialog: () => void;
 }
 
 export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewStyle> }) {
@@ -621,7 +619,6 @@ function WorkspaceRowRightGroup({
   onRename,
   isPinned,
   onTogglePin,
-  openAttachDialog,
 }: {
   workspace: SidebarWorkspaceEntry;
   backdrop: SidebarSurfaceBackdrop;
@@ -642,7 +639,6 @@ function WorkspaceRowRightGroup({
   onRename?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
-  openAttachDialog: () => void;
 }) {
   const workspacePath = workspace.workspaceDirectory ?? workspace.projectRootPath;
   const { t } = useTranslation();
@@ -698,7 +694,6 @@ function WorkspaceRowRightGroup({
                 isPinned={isPinned}
                 onTogglePin={onTogglePin}
                 openInFileManagerPath={workspacePath}
-                openAttachDialog={openAttachDialog}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>
@@ -1080,7 +1075,6 @@ function WorkspaceRowInner({
   isPinned,
   onTogglePin,
   reserveIdleStatusIndicatorSpace = true,
-  openAttachDialog,
 }: WorkspaceRowInnerProps) {
   const isCompact = useIsCompactFormFactor();
   const [isPressed, setIsPressed] = useState(false);
@@ -1157,7 +1151,6 @@ function WorkspaceRowInner({
               isPinned={isPinned}
               onTogglePin={onTogglePin}
               openInFileManagerPath={workspace.workspaceDirectory}
-              openAttachDialog={openAttachDialog}
               disabled={isArchiving}
               aria-selected={selected}
               accessibilityRole="button"
@@ -1204,7 +1197,6 @@ function WorkspaceRowInner({
                   onMarkAsUnread={onMarkAsUnread}
                   isPinned={isPinned}
                   onTogglePin={onTogglePin}
-                  openAttachDialog={openAttachDialog}
                 />
               </SidebarWorkspaceRowContent>
             </SidebarWorkspaceContextMenu>
@@ -1299,11 +1291,6 @@ function WorkspaceRowWithMenu({
 
   // Row-level like rename: the dialog must survive the hover-gated kebab
   // menu unmounting when its item is selected.
-  const { attachDialog, openAttachDialog } = useAttachPullRequestDialog({
-    serverId: workspace.serverId,
-    workspaceId: workspace.workspaceId,
-    workspaceKey: workspace.workspaceKey,
-  });
 
   const isPinned = workspace.pinnedAt != null;
   const handleTogglePin = useCallback(() => {
@@ -1369,7 +1356,6 @@ function WorkspaceRowWithMenu({
         isPinned={isPinned}
         onTogglePin={onTogglePin}
         reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-        openAttachDialog={openAttachDialog}
       />
       <WorkspaceRenameModal
         visible={isRenameOpen}
@@ -1377,7 +1363,6 @@ function WorkspaceRowWithMenu({
         onClose={handleCloseRename}
         testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
       />
-      {attachDialog}
     </>
   );
 }

@@ -969,6 +969,7 @@ export const ja: TranslationResources = {
           openOn: "{{brand}}で開く",
         },
         set: {
+          toggleOneAccessibility: "プルリクエスト #{{number}} を表示",
           manageTitle: "プルリクエスト",
           addAction: "追加",
           scanAction: "チャットを検索",

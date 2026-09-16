@@ -231,6 +231,7 @@ function MetaItemNode({
     return (
       <ChangeRequestSetItem
         summary={item.summary}
+        soleNumber={item.soleNumber}
         expanded={item.expanded}
         onToggle={onToggleSet}
       />

@@ -957,6 +957,7 @@ export const ar: TranslationResources = {
           openOn: "فتح على {{brand}}",
         },
         set: {
+          toggleOneAccessibility: "عرض طلب السحب رقم {{number}}",
           manageTitle: "طلبات السحب",
           addAction: "إضافة",
           scanAction: "فحص المحادثة",
