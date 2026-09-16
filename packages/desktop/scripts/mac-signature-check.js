@@ -1,4 +1,4 @@
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const path = require("node:path");
 
 const EXECUTABLE_NAME = "Paseo";
@@ -26,18 +26,23 @@ function parseTeamIdentifier(output) {
 }
 
 function defaultRunVvv(targetPath) {
-  try {
-    return execFileSync("codesign", ["-dvv", targetPath], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (error) {
-    const combined = [error?.stdout, error?.stderr, error?.message].filter(Boolean).join("\n");
-    if (combined.includes("TeamIdentifier=") || combined.includes("Authority=")) {
-      return combined;
-    }
-    throw error;
+  // codesign -dvv prints its report to stderr and still exits 0, so reading
+  // stdout alone yields an empty string for every bundle, signed or not.
+  const result = spawnSync("codesign", ["-dvv", targetPath], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) {
+    throw result.error;
   }
+  const combined = [result.stdout, result.stderr].filter(Boolean).join("\n");
+  if (combined.includes("TeamIdentifier=") || combined.includes("Authority=")) {
+    return combined;
+  }
+  if (result.status !== 0) {
+    throw new Error(`codesign -dvv ${targetPath} exited with ${result.status}: ${combined.trim()}`);
+  }
+  return combined;
 }
 
 function defaultRunVerify(appPath) {
