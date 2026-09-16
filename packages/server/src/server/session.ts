@@ -8,7 +8,7 @@ import type { CreationSnapshot, AgentCreateRequest } from "@getpaseo/protocol/me
 import type { MessageReceipts } from "./message-receipts/index.js";
 import equal from "fast-deep-equal";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
-import type { ForgeAccount } from "@getpaseo/protocol/messages";
+import type { ForgeAccount, ForgeAccountScope } from "@getpaseo/protocol/messages";
 import { discoverForgeAccounts } from "./forge-account-discovery.js";
 import { readGhAuthStatus } from "../services/github-service.js";
 import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
@@ -2904,6 +2904,7 @@ export class Session {
         return this.handleWorkspaceForgeAccountSetRequest(
           msg.workspaceId,
           msg.forgeConfigDir,
+          msg.scope,
           msg.requestId,
         );
       case "forge.accounts.list.request":
@@ -3863,18 +3864,28 @@ export class Session {
   private async handleWorkspaceForgeAccountSetRequest(
     workspaceId: string,
     forgeConfigDir: string,
+    requestedScope: ForgeAccountScope | undefined,
     requestId: string,
   ): Promise<void> {
-    const logContext = { workspaceId, requestId };
+    const scope: ForgeAccountScope = requestedScope ?? "workspace";
+    const logContext = { workspaceId, requestId, scope };
     this.sessionLogger.info(logContext, "session: workspace.forge_account.set.request");
     const emitResponse = (
       accepted: boolean,
       storedConfigDir: string | null,
       error: string | null,
+      storedScope: ForgeAccountScope = scope,
     ) => {
       this.emit({
         type: "workspace.forge_account.set.response",
-        payload: { requestId, workspaceId, accepted, forgeConfigDir: storedConfigDir, error },
+        payload: {
+          requestId,
+          workspaceId,
+          accepted,
+          forgeConfigDir: storedConfigDir,
+          scope: storedScope,
+          error,
+        },
       });
     };
 
@@ -3889,6 +3900,41 @@ export class Session {
 
     try {
       const updatedAt = new Date().toISOString();
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      if (!workspace) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+
+      if (scope === "project") {
+        const project = await this.projectRegistry.update(workspace.projectId, (existing) => ({
+          ...existing,
+          forgeConfigDir: normalized,
+          updatedAt,
+        }));
+        if (!project) {
+          emitResponse(false, null, "Project not found");
+          return;
+        }
+        // A workspace override would mask the project choice the user just
+        // made, which reads as the setting having done nothing. Choosing for
+        // the project is choosing for its workspaces.
+        const affected = (await this.workspaceRegistry.list())
+          .filter((record) => record.projectId === workspace.projectId)
+          .filter((record) => record.forgeConfigDir !== null)
+          .map((record) => record.workspaceId);
+        for (const affectedId of affected) {
+          await this.workspaceRegistry.update(affectedId, (existing) => ({
+            ...existing,
+            forgeConfigDir: null,
+            updatedAt,
+          }));
+        }
+        emitResponse(true, normalized, null);
+        await this.emitWorkspaceUpdatesForWorkspaceIds([...new Set([workspaceId, ...affected])]);
+        return;
+      }
+
       const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
         ...existing,
         forgeConfigDir: normalized,
@@ -5720,6 +5766,7 @@ export class Session {
         : workspace.projectId,
       projectCustomName: resolvedProjectRecord?.customName ?? null,
       projectCustomIconRevision: resolvedProjectRecord?.customIconRevision ?? null,
+      projectForgeConfigDir: projectForgeConfigDirOf(resolvedProjectRecord),
       projectRootPath: resolvedProjectRecord?.rootPath ?? workspace.cwd,
       workspaceDirectory: workspace.cwd,
       worktreeSlug,
@@ -5814,6 +5861,7 @@ export class Session {
         : result.workspace.projectId,
       projectCustomName: projectRecord?.customName ?? null,
       projectCustomIconRevision: projectRecord?.customIconRevision ?? null,
+      projectForgeConfigDir: projectForgeConfigDirOf(projectRecord),
       projectRootPath: projectRecord?.rootPath ?? result.repoRoot,
       workspaceDirectory: result.workspace.cwd,
       worktreeSlug: basename(result.worktree.worktreePath),
@@ -8723,4 +8771,11 @@ function legacyWantsEvent(
     default:
       return true;
   }
+}
+
+/** The account a project lends its workspaces; null means it lends none. */
+function projectForgeConfigDirOf(
+  project: { forgeConfigDir: string | null } | null | undefined,
+): string | null {
+  return project?.forgeConfigDir ?? null;
 }

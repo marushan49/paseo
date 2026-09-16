@@ -962,6 +962,14 @@ export const en = {
         failedOpen: "Failed to open workspace",
       },
       forgeAccount: {
+        scopeProject: "Whole project",
+        scopeWorkspace: "Only this workspace",
+        scopeProjectHint:
+          "Every workspace in this project uses this account unless it sets its own.",
+        scopeWorkspaceHint: "Applies to this workspace only, overriding the project's account.",
+        inherited: "{{host}} · inherited from the project",
+        savedProject: "Every workspace in this project now acts as the account in {{path}}",
+        clearedProject: "This project uses the default account again",
         title: "GitHub account",
         defaultOption: "Machine default",
         defaultDetail: "Whatever gh picks on this host",

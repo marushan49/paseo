@@ -1045,10 +1045,17 @@ export const WorkspacePullRequestsCurateRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const ForgeAccountScopeSchema = z.enum(["workspace", "project"]);
+
 export const WorkspaceForgeAccountSetRequestSchema = z.object({
   type: z.literal("workspace.forge_account.set.request"),
   workspaceId: z.string(),
   forgeConfigDir: z.string(),
+  // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+  // "project" stores the account on the workspace's project so every worktree
+  // cut from that repository inherits it, which is how someone actually thinks
+  // about a work checkout. Omitted means "workspace", the old behaviour.
+  scope: ForgeAccountScopeSchema.optional(),
   requestId: z.string(),
 });
 
@@ -2138,6 +2145,10 @@ export const WorkspaceForgeAccountSetResponsePayloadSchema = z.object({
   // The stored value after normalization, which is what later gh calls will
   // use. Null means the workspace fell back to the machine's default account.
   forgeConfigDir: z.string().nullable(),
+  // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+  // Where the value was stored, which is not always what was asked for: an
+  // agent with no project to speak of gets its workspace written instead.
+  scope: ForgeAccountScopeSchema.optional(),
   error: z.string().nullable(),
 });
 
@@ -4122,6 +4133,11 @@ export const WorkspaceDescriptorPayloadSchema = z
     // work and a private GitHub account can live on one machine. Null means the
     // machine's default account.
     forgeConfigDir: z.string().nullable().optional(),
+    // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+    // The account this workspace's project sets, which applies whenever
+    // forgeConfigDir is null. Sent so the picker can show what a workspace
+    // inherits instead of claiming it uses the machine default.
+    projectForgeConfigDir: z.string().nullable().optional(),
     // COMPAT(workspacePullRequestCuration): added in v0.8.1, remove optional after 2027-06-30.
     // Which change requests this workspace was told to keep in its set and
     // which to drop, so the set survives an app restart.
@@ -7286,6 +7302,7 @@ export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSc
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
 export type WorkspaceForgeAccountSetRequest = z.infer<typeof WorkspaceForgeAccountSetRequestSchema>;
 export type ForgeAccount = z.infer<typeof ForgeAccountSchema>;
+export type ForgeAccountScope = z.infer<typeof ForgeAccountScopeSchema>;
 export type ForgeAccountListRequest = z.infer<typeof ForgeAccountListRequestSchema>;
 export type ForgeAccountListResponse = z.infer<typeof ForgeAccountListResponseSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;

@@ -985,6 +985,14 @@ export const es: TranslationResources = {
         failedOpen: "No se pudo abrir el espacio de trabajo",
       },
       forgeAccount: {
+        scopeProject: "Todo el proyecto",
+        scopeWorkspace: "Solo este espacio",
+        scopeProjectHint:
+          "Todos los espacios de este proyecto usan esta cuenta salvo que definan la suya.",
+        scopeWorkspaceHint: "Se aplica solo a este espacio y anula la cuenta del proyecto.",
+        inherited: "{{host}} · heredada del proyecto",
+        savedProject: "Todos los espacios de este proyecto actúan ahora como la cuenta en {{path}}",
+        clearedProject: "Este proyecto vuelve a usar la cuenta predeterminada",
         title: "Cuenta de GitHub",
         defaultOption: "Predeterminado de la máquina",
         defaultDetail: "Lo que elija gh en este host",

@@ -7,7 +7,11 @@ import {
   type TimelineSubscription,
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
-import type { CreationSnapshot, ForgeAccount } from "@getpaseo/protocol/messages";
+import type {
+  CreationSnapshot,
+  ForgeAccount,
+  ForgeAccountScope,
+} from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
@@ -3017,6 +3021,7 @@ export class DaemonClient {
   async setWorkspaceForgeAccount(
     workspaceId: string,
     forgeConfigDir: string,
+    scope: ForgeAccountScope = "workspace",
     requestId?: string,
   ): Promise<{ forgeConfigDir: string | null }> {
     const payload = await this.sendCorrelatedSessionRequest({
@@ -3025,6 +3030,7 @@ export class DaemonClient {
         type: "workspace.forge_account.set.request",
         workspaceId,
         forgeConfigDir,
+        scope,
       },
       responseType: "workspace.forge_account.set.response",
     });

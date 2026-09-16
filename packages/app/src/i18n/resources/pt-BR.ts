@@ -975,6 +975,14 @@ export const ptBR: TranslationResources = {
         failedOpen: "Falha ao abrir workspace",
       },
       forgeAccount: {
+        scopeProject: "Projeto inteiro",
+        scopeWorkspace: "Apenas este espaço",
+        scopeProjectHint:
+          "Todos os espaços deste projeto usam esta conta, a menos que definam a sua.",
+        scopeWorkspaceHint: "Vale só para este espaço e substitui a conta do projeto.",
+        inherited: "{{host}} · herdada do projeto",
+        savedProject: "Todos os espaços deste projeto agora usam a conta em {{path}}",
+        clearedProject: "Este projeto voltou a usar a conta padrão",
         title: "Conta do GitHub",
         defaultOption: "Padrão da máquina",
         defaultDetail: "O que o gh escolher neste host",

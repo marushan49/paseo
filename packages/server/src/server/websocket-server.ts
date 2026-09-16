@@ -318,6 +318,7 @@ function createNoopProjectRegistry(): ProjectRegistry {
       projectKey: input.projectKey ?? null,
       customName: null,
       customIconRevision: null,
+      forgeConfigDir: null,
       createdAt: input.timestamp,
       updatedAt: input.timestamp,
       archivedAt: null,

@@ -106,7 +106,9 @@ function AttachPullRequestDialog({
       initialValue=""
       placeholder={t("workspace.git.pr.set.attachPlaceholder")}
       submitLabel={t("workspace.git.pr.set.attachConfirm")}
-      maxLength={8}
+      // A list, not one number: eight six-digit numbers with separators still
+      // fit, and the parser rejects anything that is not numbers anyway.
+      maxLength={200}
       onClose={onClose}
       onSubmit={onSubmit}
       validate={onValidate}

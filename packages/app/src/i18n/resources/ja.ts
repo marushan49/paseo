@@ -965,6 +965,16 @@ export const ja: TranslationResources = {
         failedOpen: "ワークスペースを開けませんでした",
       },
       forgeAccount: {
+        scopeProject: "プロジェクト全体",
+        scopeWorkspace: "このワークスペースのみ",
+        scopeProjectHint:
+          "このプロジェクトの各ワークスペースは、独自に設定しない限りこのアカウントを使います。",
+        scopeWorkspaceHint:
+          "このワークスペースだけに適用され、プロジェクトのアカウントより優先されます。",
+        inherited: "{{host}} · プロジェクトから継承",
+        savedProject:
+          "このプロジェクトのすべてのワークスペースが {{path}} のアカウントを使うようになりました",
+        clearedProject: "このプロジェクトは既定のアカウントに戻りました",
         title: "GitHub アカウント",
         defaultOption: "マシンの既定",
         defaultDetail: "このホストで gh が選ぶもの",

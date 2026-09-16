@@ -146,6 +146,7 @@ import {
   FileBackedWorkspaceRegistry,
   type WorkspaceArchiveContext,
 } from "./workspace-registry.js";
+import { resolveForgeConfigDir } from "./forge-account-resolution.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -877,10 +878,19 @@ export async function createPaseoDaemon(
     workspaceRegistry,
   });
   // list() is served from the registry's in-memory cache, so resolving the
-  // account per gh call costs a lookup, not a read.
+  // account per gh call costs a lookup, not a read. The project is consulted
+  // second: whether a repository is the work one is a fact about the repository,
+  // so its worktrees inherit rather than each pinning the account again.
+  const resolveForgeConfigDirForWorkspace = async (
+    workspace: { projectId: string; forgeConfigDir: string | null } | null | undefined,
+  ): Promise<string | null> => {
+    if (!workspace) return null;
+    const project = await projectRegistry.get(workspace.projectId);
+    return resolveForgeConfigDir({ workspace, project }).configDir;
+  };
   const resolveWorkspaceForgeConfigDirForCwd = async (cwd: string): Promise<string | null> => {
     const records = (await workspaceRegistry?.list()) ?? [];
-    return records.find((record) => record.cwd === cwd)?.forgeConfigDir ?? null;
+    return resolveForgeConfigDirForWorkspace(records.find((record) => record.cwd === cwd));
   };
   const github = createGitHubService({
     resolveForgeConfigDir: resolveWorkspaceForgeConfigDirForCwd,
@@ -952,7 +962,7 @@ export async function createPaseoDaemon(
     // the machine's default account.
     resolveWorkspaceForgeConfigDir: async ({ workspaceId, cwd }) =>
       workspaceId
-        ? ((await workspaceRegistry?.get(workspaceId))?.forgeConfigDir ?? null)
+        ? await resolveForgeConfigDirForWorkspace(await workspaceRegistry?.get(workspaceId))
         : await resolveWorkspaceForgeConfigDirForCwd(cwd),
     logger,
   });

@@ -945,6 +945,13 @@ export const zhCN: TranslationResources = {
         failedOpen: "打开 workspace 失败",
       },
       forgeAccount: {
+        scopeProject: "整个项目",
+        scopeWorkspace: "仅此工作区",
+        scopeProjectHint: "除非单独设置，本项目的每个工作区都使用该账户。",
+        scopeWorkspaceHint: "仅对该工作区生效，并覆盖项目的账户。",
+        inherited: "{{host}} · 继承自项目",
+        savedProject: "本项目的所有工作区现在都使用 {{path}} 中的账户",
+        clearedProject: "本项目已恢复使用默认账户",
         title: "GitHub 账户",
         defaultOption: "机器默认",
         defaultDetail: "由 gh 在此主机上选择",

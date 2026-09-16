@@ -953,6 +953,13 @@ export const ar: TranslationResources = {
         failedOpen: "فشل في فتح مساحة العمل",
       },
       forgeAccount: {
+        scopeProject: "المشروع كله",
+        scopeWorkspace: "مساحة العمل هذه فقط",
+        scopeProjectHint: "تستخدم كل مساحات العمل في هذا المشروع هذا الحساب ما لم تحدد حسابها.",
+        scopeWorkspaceHint: "ينطبق على مساحة العمل هذه فقط ويتجاوز حساب المشروع.",
+        inherited: "{{host}} · موروث من المشروع",
+        savedProject: "تستخدم كل مساحات العمل في هذا المشروع الآن الحساب في {{path}}",
+        clearedProject: "عاد هذا المشروع إلى الحساب الافتراضي",
         title: "حساب GitHub",
         defaultOption: "الإعداد الافتراضي للجهاز",
         defaultDetail: "ما يختاره gh على هذا المضيف",

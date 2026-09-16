@@ -960,6 +960,13 @@ export const ko: TranslationResources = {
         failedOpen: "워크스페이스를 열지 못했습니다",
       },
       forgeAccount: {
+        scopeProject: "프로젝트 전체",
+        scopeWorkspace: "이 작업 공간만",
+        scopeProjectHint: "이 프로젝트의 모든 작업 공간은 자체 설정이 없으면 이 계정을 사용합니다.",
+        scopeWorkspaceHint: "이 작업 공간에만 적용되며 프로젝트 계정을 덮어씁니다.",
+        inherited: "{{host}} · 프로젝트에서 상속",
+        savedProject: "이 프로젝트의 모든 작업 공간이 이제 {{path}}의 계정을 사용합니다",
+        clearedProject: "이 프로젝트가 다시 기본 계정을 사용합니다",
         title: "GitHub 계정",
         defaultOption: "머신 기본값",
         defaultDetail: "이 호스트에서 gh가 선택하는 계정",
