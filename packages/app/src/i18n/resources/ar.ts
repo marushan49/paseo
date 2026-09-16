@@ -303,6 +303,7 @@ export const ar: TranslationResources = {
       copyCode: "نسخ الرمز",
       copyText: "نسخ النص",
       copyTurn: "نسخ بدوره",
+      copyFailed: "فشل النسخ",
       copyMessage: "انسخ الرسالة",
       forkMenu: "تفريع الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",

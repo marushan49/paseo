@@ -105,6 +105,7 @@ import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
 import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useToast } from "@/contexts/toast-api-context";
 import {
   markdownCopyDataSet,
   markdownCopyOrderedListDataSet,
@@ -1037,27 +1038,36 @@ export const TurnCopyButton = memo(function TurnCopyButton({
   copiedAccessibilityLabel,
 }: TurnCopyButtonProps) {
   const { t } = useTranslation();
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleCopy = useCallback(async () => {
+  const markCopied = useCallback(() => {
+    setCopied(true);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimeoutRef.current = null;
+    }, 1500);
+  }, []);
+
+  // `onPress` drops a rejected promise on the floor, so a clipboard write the browser refuses
+  // left the button doing visibly nothing: no check mark, no error, no clue. A denied write is
+  // ordinary here — Electron rejects it whenever the document is not focused — so it has to be
+  // caught and said out loud.
+  const handleCopy = useCallback(() => {
     const content = getContent();
     if (!content) {
       return;
     }
 
-    await writeMarkdownToRichClipboard(content, getDefaultMarkdownClipboardEnvironment());
-    setCopied(true);
-
-    if (copyTimeoutRef.current) {
-      clearTimeout(copyTimeoutRef.current);
-    }
-
-    copyTimeoutRef.current = setTimeout(() => {
-      setCopied(false);
-      copyTimeoutRef.current = null;
-    }, 1500);
-  }, [getContent]);
+    void writeMarkdownToRichClipboard(content, getDefaultMarkdownClipboardEnvironment()).then(
+      markCopied,
+      () => toast.error(t("message.actions.copyFailed")),
+    );
+  }, [getContent, markCopied, t, toast]);
 
   useEffect(() => {
     return () => {

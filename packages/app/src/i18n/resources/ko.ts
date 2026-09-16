@@ -304,6 +304,7 @@ export const ko: TranslationResources = {
       copyCode: "코드 복사",
       copyText: "텍스트 복사",
       copyTurn: "턴 복사",
+      copyFailed: "복사하지 못했습니다",
       copyMessage: "메시지 복사",
       forkMenu: "여기에서 채팅 분기",
       forkInNewTab: "새 탭으로 분기",

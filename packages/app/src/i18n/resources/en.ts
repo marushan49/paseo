@@ -301,6 +301,7 @@ export const en = {
       copyCode: "Copy code",
       copyText: "Copy text",
       copyTurn: "Copy turn",
+      copyFailed: "Copy failed",
       copyMessage: "Copy message",
       forkMenu: "Fork chat from here",
       forkInNewTab: "Fork in a new tab",
