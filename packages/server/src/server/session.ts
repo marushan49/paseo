@@ -8,6 +8,9 @@ import type { CreationSnapshot, AgentCreateRequest } from "@getpaseo/protocol/me
 import type { MessageReceipts } from "./message-receipts/index.js";
 import equal from "fast-deep-equal";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
+import type { ForgeAccount } from "@getpaseo/protocol/messages";
+import { discoverForgeAccounts } from "./forge-account-discovery.js";
+import { readGhAuthStatus } from "../services/github-service.js";
 import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
 import { normalizeForgeConfigDir } from "./workspace-forge-account.js";
 import { v4 as uuidv4 } from "uuid";
@@ -2903,6 +2906,8 @@ export class Session {
           msg.forgeConfigDir,
           msg.requestId,
         );
+      case "forge.accounts.list.request":
+        return this.handleForgeAccountListRequest(msg.requestId);
       case "workspace.pull_requests.curate.request":
         return this.handleWorkspacePullRequestsCurateRequest(
           msg.workspaceId,
@@ -3830,6 +3835,28 @@ export class Session {
         null,
         getErrorMessageOr(error, "Failed to store the workspace's pull requests"),
       );
+    }
+  }
+
+  /**
+   * The logins this host can offer a workspace. Directories already pinned by a
+   * workspace are probed too, so one that lives outside `~/.config` still shows
+   * up as the current choice instead of silently vanishing from the picker.
+   */
+  private async handleForgeAccountListRequest(requestId: string): Promise<void> {
+    const emit = (accounts: ForgeAccount[], error: string | null) => {
+      this.emit({ type: "forge.accounts.list.response", payload: { requestId, accounts, error } });
+    };
+    try {
+      const workspaces = await this.workspaceRegistry.list();
+      const accounts = await discoverForgeAccounts({
+        readAuthStatus: readGhAuthStatus,
+        extraCandidates: workspaces.map((workspace) => workspace.forgeConfigDir),
+      });
+      emit(accounts, null);
+    } catch (error) {
+      this.sessionLogger.error({ err: error, requestId }, "session: forge.accounts.list error");
+      emit([], getErrorMessageOr(error, "Failed to list forge accounts"));
     }
   }
 

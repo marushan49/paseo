@@ -976,6 +976,9 @@ export const ptBR: TranslationResources = {
       },
       forgeAccount: {
         title: "Conta do GitHub",
+        defaultOption: "Padrão da máquina",
+        defaultDetail: "O que o gh escolher neste host",
+        empty: "Nenhum login do GitHub encontrado neste host",
         placeholder: "Caminho para um diretório de configuração do gh, por ex. ~/.config/gh-work",
         confirm: "Salvar",
         saved: "Este workspace agora atua como a conta em {{path}}",

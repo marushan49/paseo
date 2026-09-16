@@ -954,6 +954,9 @@ export const ar: TranslationResources = {
       },
       forgeAccount: {
         title: "حساب GitHub",
+        defaultOption: "الإعداد الافتراضي للجهاز",
+        defaultDetail: "ما يختاره gh على هذا المضيف",
+        empty: "لم يتم العثور على تسجيلات دخول GitHub على هذا المضيف",
         placeholder: "مسار دليل إعدادات gh، مثل ~/.config/gh-work",
         confirm: "حفظ",
         saved: "تعمل مساحة العمل هذه الآن بالحساب الموجود في {{path}}",

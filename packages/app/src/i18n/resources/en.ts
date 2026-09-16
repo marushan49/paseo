@@ -963,6 +963,9 @@ export const en = {
       },
       forgeAccount: {
         title: "GitHub account",
+        defaultOption: "Machine default",
+        defaultDetail: "Whatever gh picks on this host",
+        empty: "No GitHub logins found on this host",
         placeholder: "Path to a gh config directory, e.g. ~/.config/gh-work",
         confirm: "Save",
         saved: "This workspace now acts as the account in {{path}}",

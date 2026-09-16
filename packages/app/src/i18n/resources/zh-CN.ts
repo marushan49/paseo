@@ -946,6 +946,9 @@ export const zhCN: TranslationResources = {
       },
       forgeAccount: {
         title: "GitHub 账户",
+        defaultOption: "机器默认",
+        defaultDetail: "由 gh 在此主机上选择",
+        empty: "在此主机上找不到 GitHub 登录",
         placeholder: "gh 配置目录的路径，例如 ~/.config/gh-work",
         confirm: "保存",
         saved: "此工作区现在以 {{path}} 中的账户运行",

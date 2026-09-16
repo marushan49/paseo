@@ -986,6 +986,9 @@ export const es: TranslationResources = {
       },
       forgeAccount: {
         title: "Cuenta de GitHub",
+        defaultOption: "Predeterminado de la máquina",
+        defaultDetail: "Lo que elija gh en este host",
+        empty: "No se encontraron inicios de sesión de GitHub en este host",
         placeholder: "Ruta a un directorio de configuración de gh, p. ej. ~/.config/gh-work",
         confirm: "Guardar",
         saved: "Este espacio de trabajo ahora actúa como la cuenta en {{path}}",

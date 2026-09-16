@@ -7,7 +7,7 @@ import {
   type TimelineSubscription,
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
-import type { CreationSnapshot } from "@getpaseo/protocol/messages";
+import type { CreationSnapshot, ForgeAccount } from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
@@ -3001,6 +3001,19 @@ export class DaemonClient {
    * Point one workspace's gh at its own config directory, so its agents and Paseo's own gh
    * calls act as that account. An empty string clears it back to the machine's default.
    */
+  /** The GitHub logins this host can offer, for a picker that shows names, not paths. */
+  async listForgeAccounts(requestId?: string): Promise<ForgeAccount[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "forge.accounts.list.request" },
+      responseType: "forge.accounts.list.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return payload.accounts;
+  }
+
   async setWorkspaceForgeAccount(
     workspaceId: string,
     forgeConfigDir: string,

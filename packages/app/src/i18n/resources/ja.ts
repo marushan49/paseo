@@ -966,6 +966,9 @@ export const ja: TranslationResources = {
       },
       forgeAccount: {
         title: "GitHub アカウント",
+        defaultOption: "マシンの既定",
+        defaultDetail: "このホストで gh が選ぶもの",
+        empty: "このホストに GitHub のログインが見つかりません",
         placeholder: "gh 設定ディレクトリのパス（例: ~/.config/gh-work）",
         confirm: "保存",
         saved: "このワークスペースは {{path}} のアカウントとして動作します",

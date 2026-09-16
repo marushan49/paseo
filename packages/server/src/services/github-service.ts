@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { z } from "zod";
 import {
   parseGhPullRequestList,
@@ -3010,6 +3011,25 @@ async function runGhCommand(
   options: GitHubCommandRunnerOptions,
 ): Promise<GitHubCommandResult> {
   return githubCliRunner.run(args, options);
+}
+
+/**
+ * What `gh auth status` says under one config directory, as plain text. It is the
+ * only source that knows whether a directory holds a login that still works, and
+ * gh has printed it to stdout and to stderr in different releases, so both are
+ * returned. Never throws: an unauthenticated directory is an answer, not a fault.
+ */
+export async function readGhAuthStatus(configDir: string): Promise<string | null> {
+  try {
+    const result = await githubCliRunner.run(["auth", "status"], {
+      cwd: homedir(),
+      envOverlay: { GH_CONFIG_DIR: configDir },
+    });
+    return `${result.stdout}\n${result.stderr}`.trim();
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    return typeof stderr === "string" && stderr.length > 0 ? stderr : null;
+  }
 }
 
 // Anchored to github.com so a pasted URL from an unrelated tracker (a GitLab

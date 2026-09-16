@@ -961,6 +961,9 @@ export const ko: TranslationResources = {
       },
       forgeAccount: {
         title: "GitHub 계정",
+        defaultOption: "머신 기본값",
+        defaultDetail: "이 호스트에서 gh가 선택하는 계정",
+        empty: "이 호스트에서 GitHub 로그인을 찾을 수 없습니다",
         placeholder: "gh 설정 디렉터리 경로, 예: ~/.config/gh-work",
         confirm: "저장",
         saved: "이 워크스페이스는 이제 {{path}} 의 계정으로 동작합니다",

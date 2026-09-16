@@ -970,6 +970,9 @@ export const ru: TranslationResources = {
       },
       forgeAccount: {
         title: "Учётная запись GitHub",
+        defaultOption: "По умолчанию для машины",
+        defaultDetail: "То, что выберет gh на этом хосте",
+        empty: "На этом хосте не найдено входов в GitHub",
         placeholder: "Путь к каталогу конфигурации gh, например ~/.config/gh-work",
         confirm: "Сохранить",
         saved: "Это рабочее пространство теперь работает под учётной записью из {{path}}",

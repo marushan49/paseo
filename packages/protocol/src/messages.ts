@@ -1052,6 +1052,13 @@ export const WorkspaceForgeAccountSetRequestSchema = z.object({
   requestId: z.string(),
 });
 
+// COMPAT(forgeAccountList): added in v0.8.1. A client that does not ask still
+// works; it just cannot offer the picker.
+export const ForgeAccountListRequestSchema = z.object({
+  type: z.literal("forge.accounts.list.request"),
+  requestId: z.string(),
+});
+
 export const WorkspaceLabelColorSchema = z.enum(WORKSPACE_LABEL_COLORS);
 export const WorkspaceLabelDefinitionSchema = z.object({
   name: z.string(),
@@ -2137,6 +2144,24 @@ export const WorkspaceForgeAccountSetResponsePayloadSchema = z.object({
 export const WorkspaceForgeAccountSetResponseSchema = z.object({
   type: z.literal("workspace.forge_account.set.response"),
   payload: WorkspaceForgeAccountSetResponsePayloadSchema,
+});
+
+/** One login this host can hand to `gh`, named the way its owner thinks of it. */
+export const ForgeAccountSchema = z.object({
+  configDir: z.string(),
+  username: z.string(),
+  host: z.string(),
+});
+
+export const ForgeAccountListResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  accounts: z.array(ForgeAccountSchema),
+  error: z.string().nullable(),
+});
+
+export const ForgeAccountListResponseSchema = z.object({
+  type: z.literal("forge.accounts.list.response"),
+  payload: ForgeAccountListResponsePayloadSchema,
 });
 
 export const WorkspaceRecoveryStateSchema = z.discriminatedUnion("kind", [
@@ -3245,6 +3270,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceForgeAccountSetRequestSchema,
+  ForgeAccountListRequestSchema,
   WorkspacePullRequestsCurateRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
@@ -6896,6 +6922,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceForgeAccountSetResponseSchema,
+  ForgeAccountListResponseSchema,
   WorkspacePullRequestsCurateResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,
@@ -7258,6 +7285,9 @@ export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
 export type WorkspaceForgeAccountSetRequest = z.infer<typeof WorkspaceForgeAccountSetRequestSchema>;
+export type ForgeAccount = z.infer<typeof ForgeAccountSchema>;
+export type ForgeAccountListRequest = z.infer<typeof ForgeAccountListRequestSchema>;
+export type ForgeAccountListResponse = z.infer<typeof ForgeAccountListResponseSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;
 export type SetAgentModeRequestMessage = z.infer<typeof SetAgentModeRequestMessageSchema>;
