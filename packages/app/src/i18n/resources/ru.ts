@@ -973,6 +973,7 @@ export const ru: TranslationResources = {
           openOn: "Открыть на {{brand}}",
         },
         set: {
+          toggleEmptyAccessibility: "Прикрепить пулреквест к этому рабочему пространству",
           toggleOneAccessibility: "Показать пулреквест #{{number}}",
           manageTitle: "Пулреквесты",
           addAction: "Добавить",

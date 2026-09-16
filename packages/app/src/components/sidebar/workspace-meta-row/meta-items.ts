@@ -71,7 +71,11 @@ export function selectMetaRowItems(input: {
     checksDisplay,
   } = input;
   const relatedPullRequests = input.relatedPullRequests ?? [];
-  const asSet = shouldPresentAsSet(relatedPullRequests);
+  const asSet = shouldPresentAsSet({
+    pullRequests: relatedPullRequests,
+    onBranch: currentBranch !== null,
+    hasOwnChangeRequest: prHint !== null,
+  });
   const items: MetaRowItem[] = [];
 
   if (currentBranch && visible.branch) {
@@ -102,7 +106,10 @@ export function selectMetaRowItems(input: {
   // meant the checks setting could sit on a value while nothing was drawn, which is a control that
   // lies about its own state. Showing checks without the change request beside them is the
   // stranger combination, but it is the one you asked for and it is what you get.
-  if (checksDisplay !== "none" && !(asSet && visible.changeRequest)) {
+  if (
+    checksDisplay !== "none" &&
+    !(asSet && visible.changeRequest && relatedPullRequests.length > 0)
+  ) {
     const summary = selectCheckSummary(prHint);
     if (summary) {
       items.push({ kind: "checks", summary, label: checksDisplay === "iconAndText" });

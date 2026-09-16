@@ -71,11 +71,7 @@ export function ChangeRequestSetItem({
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
-      accessibilityLabel={
-        soleNumber === null
-          ? t("workspace.git.pr.set.toggleAccessibility", { count: summary.total })
-          : t("workspace.git.pr.set.toggleOneAccessibility", { number: soleNumber })
-      }
+      accessibilityLabel={toggleAccessibilityLabel(t, summary.total, soleNumber)}
       hitSlop={4}
       onPressIn={handlePressIn}
       onPress={handlePress}
@@ -84,11 +80,13 @@ export function ChangeRequestSetItem({
     >
       <Chevron size={12} uniProps={mutedMapping} />
       <ThemedGitPullRequest size={12} uniProps={mutedMapping} />
-      <Text style={styles.countText} numberOfLines={1}>
-        {soleNumber === null
-          ? t("workspace.git.pr.set.count", { count: summary.total })
-          : soleNumber}
-      </Text>
+      {summary.total === 0 ? null : (
+        <Text style={styles.countText} numberOfLines={1}>
+          {soleNumber === null
+            ? t("workspace.git.pr.set.count", { count: summary.total })
+            : soleNumber}
+        </Text>
+      )}
       {summary.health === "unknown" ? null : (
         <>
           <Text style={styles.separator}>·</Text>
@@ -101,6 +99,24 @@ export function ChangeRequestSetItem({
       )}
     </Pressable>
   );
+}
+
+/**
+ * What the control announces: the one number it names, how many it stands for, or — with none
+ * yet — that this is where they get attached. Extracted so the item stays one expression.
+ */
+function toggleAccessibilityLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  total: number,
+  soleNumber: number | null,
+): string {
+  if (soleNumber !== null) {
+    return t("workspace.git.pr.set.toggleOneAccessibility", { number: soleNumber });
+  }
+  if (total === 0) {
+    return t("workspace.git.pr.set.toggleEmptyAccessibility");
+  }
+  return t("workspace.git.pr.set.toggleAccessibility", { count: total });
 }
 
 const HEALTH_LABEL_KEYS = {

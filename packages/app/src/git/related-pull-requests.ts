@@ -59,12 +59,24 @@ export function relatedPullRequestsHealthCount(summary: RelatedPullRequestsSumma
 }
 
 /**
- * One change request is still a set of one: it is the row you expand to add the second. The
- * collapsed line keeps naming that single number rather than counting to one, so nothing is
- * lost by making it the same control.
+ * Whether a workspace gets the set control at all. One change request is still a set of one,
+ * and an empty set is still the place the first one gets attached, so a branch with nothing on
+ * it qualifies too. The collapsed line keeps naming a single number rather than counting to
+ * one, so nothing is lost by making it the same control.
+ *
+ * `hasOwnChangeRequest` is the escape: a workspace whose forge state knows a change request the
+ * set has not resolved yet keeps drawing that one. An empty control in its place would hide a
+ * change request behind a button that reports none.
  */
-export function shouldPresentAsSet(pullRequests: readonly RelatedPullRequest[]): boolean {
-  return pullRequests.length > 0;
+export function shouldPresentAsSet(input: {
+  pullRequests: readonly RelatedPullRequest[];
+  onBranch: boolean;
+  hasOwnChangeRequest: boolean;
+}): boolean {
+  if (input.pullRequests.length > 0) {
+    return true;
+  }
+  return input.onBranch && !input.hasOwnChangeRequest;
 }
 
 export function selectRelatedPullRequests(

@@ -99,13 +99,33 @@ describe("relatedPullRequestsHealthCount", () => {
 });
 
 describe("shouldPresentAsSet", () => {
+  const onBranch = { onBranch: true, hasOwnChangeRequest: false };
+
   test("one change request is the row you expand to add the second", () => {
-    expect(shouldPresentAsSet([pr(1)])).toBe(true);
-    expect(shouldPresentAsSet([pr(1), pr(2)])).toBe(true);
+    expect(shouldPresentAsSet({ ...onBranch, pullRequests: [pr(1)] })).toBe(true);
+    expect(shouldPresentAsSet({ ...onBranch, pullRequests: [pr(1), pr(2)] })).toBe(true);
   });
 
-  test("a workspace with no change request has no set to show", () => {
-    expect(shouldPresentAsSet([])).toBe(false);
+  test("a branch with none yet is where the first one gets attached", () => {
+    expect(shouldPresentAsSet({ ...onBranch, pullRequests: [] })).toBe(true);
+  });
+
+  test("a workspace off any branch is not on a forge", () => {
+    expect(
+      shouldPresentAsSet({ pullRequests: [], onBranch: false, hasOwnChangeRequest: false }),
+    ).toBe(false);
+  });
+
+  test("an unresolved set never replaces a change request the row already knows", () => {
+    expect(
+      shouldPresentAsSet({ pullRequests: [], onBranch: true, hasOwnChangeRequest: true }),
+    ).toBe(false);
+  });
+
+  test("a resolved set outranks that fallback", () => {
+    expect(
+      shouldPresentAsSet({ pullRequests: [pr(1)], onBranch: true, hasOwnChangeRequest: true }),
+    ).toBe(true);
   });
 });
 

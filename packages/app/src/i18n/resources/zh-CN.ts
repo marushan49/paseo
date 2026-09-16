@@ -949,6 +949,7 @@ export const zhCN: TranslationResources = {
           openOn: "在 {{brand}} 上打开",
         },
         set: {
+          toggleEmptyAccessibility: "将拉取请求附加到此工作区",
           toggleOneAccessibility: "显示拉取请求 #{{number}}",
           manageTitle: "拉取请求",
           addAction: "添加",

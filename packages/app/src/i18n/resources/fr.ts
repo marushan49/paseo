@@ -988,6 +988,7 @@ export const fr: TranslationResources = {
           openOn: "Ouvrir sur {{brand}}",
         },
         set: {
+          toggleEmptyAccessibility: "Associer une pull request à cet espace de travail",
           toggleOneAccessibility: "Afficher la pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Ajouter",

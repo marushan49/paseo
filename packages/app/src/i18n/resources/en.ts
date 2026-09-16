@@ -966,6 +966,7 @@ export const en = {
           openOn: "Open on {{brand}}",
         },
         set: {
+          toggleEmptyAccessibility: "Attach a pull request to this workspace",
           toggleOneAccessibility: "Show pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Add",

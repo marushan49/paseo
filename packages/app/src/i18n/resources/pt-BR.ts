@@ -979,6 +979,7 @@ export const ptBR: TranslationResources = {
           openOn: "Abrir no {{brand}}",
         },
         set: {
+          toggleEmptyAccessibility: "Anexar um pull request a este workspace",
           toggleOneAccessibility: "Mostrar o pull request #{{number}}",
           manageTitle: "Pull requests",
           addAction: "Adicionar",

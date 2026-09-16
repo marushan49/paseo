@@ -964,6 +964,7 @@ export const ko: TranslationResources = {
           openOn: "{{brand}}에서 열기",
         },
         set: {
+          toggleEmptyAccessibility: "이 워크스페이스에 풀 리퀘스트 추가",
           toggleOneAccessibility: "풀 리퀘스트 #{{number}} 표시",
           manageTitle: "풀 리퀘스트",
           addAction: "추가",

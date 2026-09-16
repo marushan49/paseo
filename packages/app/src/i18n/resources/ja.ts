@@ -969,6 +969,7 @@ export const ja: TranslationResources = {
           openOn: "{{brand}}で開く",
         },
         set: {
+          toggleEmptyAccessibility: "このワークスペースにプルリクエストを追加",
           toggleOneAccessibility: "プルリクエスト #{{number}} を表示",
           manageTitle: "プルリクエスト",
           addAction: "追加",
