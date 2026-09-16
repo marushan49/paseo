@@ -1,5 +1,6 @@
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import { describeScheduleCwd } from "@/schedules/schedule-project-targets";
+import { formatTimeAgo } from "@/utils/time";
 
 // Derived from existing fields only — no new protocol state. "active"/"paused"
 // mirror the stored status; the rest are computed truths the daemon does not
@@ -106,4 +107,22 @@ export function resolveSchedule(input: ResolveScheduleInput): ResolvedSchedule {
     bucket: scheduleBucket(state),
     target: resolveTarget(input),
   };
+}
+
+// The badge answers whether the schedule still fires; this answers whether the
+// last firing did anything. Without it a schedule whose every run fails reads as
+// healthy, because "Last run 3h ago" is true either way.
+export function formatScheduleLastRun(schedule: ScheduleSummary): string {
+  const startedAt = schedule.lastRun?.startedAt ?? schedule.lastRunAt;
+  if (!startedAt) {
+    return "Never run";
+  }
+  const when = formatTimeAgo(new Date(startedAt));
+  if (schedule.lastRun?.status === "failed") {
+    return `Last run failed ${when}`;
+  }
+  if (schedule.lastRun?.status === "running") {
+    return `Running since ${when}`;
+  }
+  return `Last run ${when}`;
 }

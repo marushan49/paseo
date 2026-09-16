@@ -16,6 +16,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 import type { ScheduleDerivedState } from "@/schedules/schedule-derivation";
+import { formatScheduleLastRun } from "@/schedules/schedule-derivation";
 import {
   formatCadence,
   formatNextRun,
@@ -105,7 +106,7 @@ function buildMeta(
   const parts = [
     formatCadence(schedule.cadence),
     `Created ${formatTimeAgo(new Date(schedule.createdAt))}`,
-    schedule.lastRunAt ? `Last run ${formatTimeAgo(new Date(schedule.lastRunAt))}` : "Never run",
+    formatScheduleLastRun(schedule),
   ];
   if (state === "active") {
     const next = formatNextRun(schedule.nextRunAt);
@@ -169,6 +170,7 @@ export function ScheduleRow({
   const productName = scheduleProductName(schedule);
   const badge = stateBadge(state);
   const meta = buildMeta(schedule, state, serverName, singleHost ?? false);
+  const lastRunError = schedule.lastRun?.status === "failed" ? schedule.lastRun.error : null;
   const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
@@ -209,6 +211,15 @@ export function ScheduleRow({
             <Text style={settingsStyles.rowHint} numberOfLines={1}>
               {meta}
             </Text>
+            {lastRunError ? (
+              <Text
+                style={styles.lastRunError}
+                numberOfLines={1}
+                testID={`schedule-row-error-${schedule.id}`}
+              >
+                {lastRunError}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -409,6 +420,11 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[1],
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  },
+  lastRunError: {
+    marginTop: theme.spacing[1],
+    color: theme.colors.statusDanger,
+    fontSize: theme.fontSize.sm,
   },
   trailing: {
     flexDirection: "row",

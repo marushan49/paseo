@@ -73,8 +73,27 @@ export const StoredScheduleSchema = z.object({
 });
 export type StoredSchedule = z.infer<typeof StoredScheduleSchema>;
 
+// The outcome of the most recent run. The full history stays out of the summary,
+// but a list that cannot say whether the last run worked is a list that reports
+// a broken schedule as healthy.
+export const ScheduleLastRunSchema = z.object({
+  id: z.string(),
+  scheduledFor: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  status: z.enum(["running", "succeeded", "failed"]),
+  agentId: z.guid().nullable(),
+  workspaceId: z.string().nullable().optional(),
+  error: z.string().nullable(),
+});
+export type ScheduleLastRun = z.infer<typeof ScheduleLastRunSchema>;
+
 export const ScheduleSummarySchema = StoredScheduleSchema.omit({
   runs: true,
+}).extend({
+  // COMPAT(scheduleLastRun): added in v0.8.1, remove after 2027-03-31 when older
+  // daemons are unsupported. Absent means the daemon predates run outcomes.
+  lastRun: ScheduleLastRunSchema.nullable().optional(),
 });
 export type ScheduleSummary = z.infer<typeof ScheduleSummarySchema>;
 
