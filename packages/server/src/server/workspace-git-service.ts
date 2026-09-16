@@ -376,6 +376,12 @@ interface WorkspaceGitServiceDependencies {
 interface WorkspaceGitServiceOptions {
   logger: pino.Logger;
   paseoHome: string;
+  /**
+   * Branches of the other workspaces in the same project, so a row can report
+   * the session's change requests and not just the one its own branch opened.
+   * Injected to keep this service free of a workspace-registry dependency.
+   */
+  resolveSessionBranches?: (cwd: string) => Promise<readonly string[]> | readonly string[];
   worktreesRoot?: string;
   fileObserver?: FileObserver;
   deps?: Partial<WorkspaceGitServiceDependencies>;
@@ -531,6 +537,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly logger: pino.Logger;
   private readonly paseoHome: string;
   private readonly worktreesRoot: string | undefined;
+  private readonly sessionBranchesResolver: WorkspaceGitServiceOptions["resolveSessionBranches"];
   private readonly fileObserver: FileObserver;
   private readonly deps: WorkspaceGitServiceDependencies;
   private readonly forgeResolver: ForgeResolver;
@@ -582,6 +589,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.logger = options.logger.child({ module: "workspace-git-service" });
     this.paseoHome = options.paseoHome;
     this.worktreesRoot = options.worktreesRoot;
+    this.sessionBranchesResolver = options.resolveSessionBranches;
     this.fileObserver = options.fileObserver ?? createFileObserver();
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
@@ -597,6 +605,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
    * omit the method, and a failure here must not cost the status the poll already earned —
    * the row falls back to its single change request.
    */
+  private async resolveSessionBranches(cwd: string): Promise<string[]> {
+    if (!this.sessionBranchesResolver) {
+      return [];
+    }
+    try {
+      return [...(await this.sessionBranchesResolver(cwd))];
+    } catch (error) {
+      this.logger.warn({ err: error, cwd }, "Failed to resolve the session's branches");
+      return [];
+    }
+  }
+
   private async resolveRelatedPullRequests(input: {
     service: {
       getRelatedPullRequests?: (options: {
@@ -612,17 +632,27 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     headSha?: string;
   }): Promise<RelatedPullRequest[] | undefined> {
     const number = input.status?.number;
-    if (number === undefined || !input.service.getRelatedPullRequests) {
+    if (!input.service.getRelatedPullRequests) {
+      return undefined;
+    }
+    // A workspace whose own branch has no change request still belongs to a
+    // session that has several, so the set is worth resolving without one.
+    const siblingHeadRefs = await this.resolveSessionBranches(input.cwd);
+    if (number === undefined && siblingHeadRefs.length === 0) {
       return undefined;
     }
     try {
       const facts = await input.service.getRelatedPullRequests({
         cwd: input.cwd,
-        number,
+        number: number ?? 0,
         headRef: input.headRef,
         ...(input.headSha ? { headSha: input.headSha } : {}),
+        ...(siblingHeadRefs.length > 0 ? { siblingHeadRefs } : {}),
       });
-      const merged = mergeRelatedPullRequests({ currentNumber: number, branch: facts });
+      const merged = mergeRelatedPullRequests({
+        ...(number === undefined ? {} : { currentNumber: number }),
+        branch: facts,
+      });
       return merged.length > 0 ? merged : undefined;
     } catch (error) {
       this.logger.warn(

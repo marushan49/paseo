@@ -485,6 +485,13 @@ export interface ForgeService {
       headRef: string;
       /** Part of the cache key: a new head means the set may have changed. */
       headSha?: string;
+      /**
+       * Heads of the other workspaces in the same project. One worktree per
+       * ticket means the session's change requests sit on branches this
+       * workspace never checks out, so asking only for `headRef` finds one of
+       * them and reports the session as a single change request.
+       */
+      siblingHeadRefs?: readonly string[];
     } & ForgeReadOptions,
   ): Promise<RelatedPullRequestFacts[]>;
   getPullRequestTimeline(options: GetPullRequestTimelineOptions): Promise<PullRequestTimeline>;

@@ -2225,7 +2225,12 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
         // Keyed on the head as well as the number: the set only changes when the change
         // request does, so a poll that finds the same head reuses this answer instead of
         // spending two more forge calls.
-        args: { number: input.number, headRef: input.headRef, headSha: input.headSha },
+        args: {
+          number: input.number,
+          headRef: input.headRef,
+          headSha: input.headSha,
+          siblingHeadRefs: [...(input.siblingHeadRefs ?? [])].sort(),
+        },
         readOptions: input,
         load: async () => {
           const stackNumbers = await loadGitHubStackNumbers({
@@ -2253,6 +2258,32 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
           const byHead = parseGhPullRequestList(
             await runGhJson(listArgs, { cwd: input.cwd }, z.unknown(), "[]"),
           );
+
+          // One worktree per ticket: the session's other change requests sit on
+          // branches this workspace never checks out, so ask for each of them too.
+          // Capped because the call count scales with the number of workspaces.
+          const siblingRefs = [...new Set(input.siblingHeadRefs ?? [])]
+            .filter((ref) => ref && ref !== input.headRef)
+            .slice(0, RELATED_PULL_REQUEST_SIBLING_HEAD_LIMIT);
+          for (const ref of siblingRefs) {
+            const siblingArgs = [
+              "pr",
+              "list",
+              "--state",
+              "all",
+              "--limit",
+              "5",
+              "--head",
+              ref,
+              "--json",
+              RELATED_PULL_REQUEST_JSON_FIELDS.join(","),
+            ];
+            byHead.push(
+              ...parseGhPullRequestList(
+                await runGhJson(siblingArgs, { cwd: input.cwd }, z.unknown(), "[]"),
+              ),
+            );
+          }
 
           const missing = searchNumbers.filter(
             (number) => !byHead.some((facts) => facts.number === number),
@@ -2944,6 +2975,12 @@ const githubCliRunner = createForgeCliRunner({
  * closed duplicate. Small on purpose: the list is a sidebar row, not a report.
  */
 const RELATED_PULL_REQUEST_HEAD_SLACK = 5;
+/**
+ * Each sibling head costs one `gh pr list` call on every set refresh, so a
+ * project with many workspaces would turn one poll into dozens. Twenty covers
+ * a session's worth of tickets; beyond that the user curates.
+ */
+const RELATED_PULL_REQUEST_SIBLING_HEAD_LIMIT = 20;
 
 /**
  * GitHub's own stack membership for a change request. The endpoint is public preview and
