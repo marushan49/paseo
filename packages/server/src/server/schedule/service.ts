@@ -18,6 +18,7 @@ import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
+import { ViewedAgentRegistry } from "./viewed-agents.js";
 import type {
   CreateScheduleInput,
   ScheduleExecutionResult,
@@ -267,6 +268,13 @@ export class ScheduleService {
     "canStartAutomatedLoop"
   > | null;
   private readonly runningScheduleIds = new Set<string>();
+  private readonly viewedAgents = new ViewedAgentRegistry();
+  // Workspaces a finished run wanted to archive while someone still had the run
+  // open, keyed by workspace id. Emptied as soon as nobody is looking.
+  private readonly deferredArchives = new Map<
+    string,
+    { workspaceId: string; agentId: string; scheduleId: string; runId: string }
+  >();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: ScheduleServiceOptions) {
@@ -568,6 +576,7 @@ export class ScheduleService {
   }
 
   async tick(): Promise<void> {
+    await this.flushDeferredArchives();
     const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
     if (policyDecision && !policyDecision.allowed) {
       return;
@@ -858,6 +867,73 @@ export class ScheduleService {
     requireSchedule(updatedSchedule, params.scheduleId);
   }
 
+  /** A client reports which agent timelines it currently shows. */
+  markAgentsViewed(ownerId: string, agentIds: Iterable<string>): void {
+    this.viewedAgents.setViewed(ownerId, agentIds);
+  }
+
+  /** A client stopped showing its timelines; whatever it held open may go now. */
+  releaseViewedAgents(ownerId: string): void {
+    this.viewedAgents.clearOwner(ownerId);
+    void this.flushDeferredArchives();
+  }
+
+  // "Archive on finish" says the agent is done, not that the person reading what
+  // it wrote is done. Clearing a workspace someone has open takes the report off
+  // their screen mid-sentence, so it waits until they close it.
+  private async archiveRunWorkspace(entry: {
+    workspaceId: string;
+    agentId: string | null;
+    scheduleId: string;
+    runId: string;
+  }): Promise<void> {
+    const { agentId } = entry;
+    if (agentId && this.viewedAgents.isViewed(agentId)) {
+      this.deferredArchives.set(entry.workspaceId, { ...entry, agentId });
+      return;
+    }
+    try {
+      await this.archiveWorkspace(entry.workspaceId);
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error,
+          agentId: entry.agentId,
+          workspaceId: entry.workspaceId,
+          scheduleId: entry.scheduleId,
+          runId: entry.runId,
+        },
+        "Failed to archive scheduled workspace after run",
+      );
+    }
+  }
+
+  private async flushDeferredArchives(): Promise<void> {
+    const released = [];
+    for (const entry of this.deferredArchives.values()) {
+      if (!this.viewedAgents.isViewed(entry.agentId)) {
+        released.push(entry);
+      }
+    }
+    for (const entry of released) {
+      this.deferredArchives.delete(entry.workspaceId);
+      try {
+        await this.archiveWorkspace(entry.workspaceId);
+      } catch (error) {
+        this.logger.warn(
+          {
+            err: error,
+            agentId: entry.agentId,
+            workspaceId: entry.workspaceId,
+            scheduleId: entry.scheduleId,
+            runId: entry.runId,
+          },
+          "Failed to archive scheduled workspace after run",
+        );
+      }
+    }
+  }
+
   private async executeSchedule(
     schedule: StoredSchedule,
     runId: string,
@@ -976,20 +1052,12 @@ export class ScheduleService {
         workspace &&
         shouldArchiveScheduleRunWorkspace({ agentId, archiveOnFinish: config.archiveOnFinish })
       ) {
-        try {
-          await this.archiveWorkspace(workspace.workspaceId);
-        } catch (error) {
-          this.logger.warn(
-            {
-              err: error,
-              agentId,
-              workspaceId: workspace.workspaceId,
-              scheduleId: schedule.id,
-              runId,
-            },
-            "Failed to archive scheduled workspace after run",
-          );
-        }
+        await this.archiveRunWorkspace({
+          workspaceId: workspace.workspaceId,
+          agentId,
+          scheduleId: schedule.id,
+          runId,
+        });
       }
     }
   }

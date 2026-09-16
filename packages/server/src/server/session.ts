@@ -721,6 +721,7 @@ export class Session {
   private readonly rewindInitiators = new Map<string, object | undefined>();
 
   private agentManager: AgentManager;
+  private readonly scheduleService: ScheduleService;
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -893,6 +894,7 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.agentManager = agentManager;
+    this.scheduleService = scheduleService;
     this.agentStorage = agentStorage;
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
@@ -1267,9 +1269,13 @@ export class Session {
   private subscribeAgentTimelines(agentIds: string[]): OwnedSubscription {
     const owner = this.delivery.begin("timelines", undefined, (id) => {
       this.timelineSubscriptions.delete(id);
+      // The client subscribes to the timelines it renders, so releasing them is
+      // the moment nobody is reading these agents any more.
+      this.scheduleService.releaseViewedAgents(id);
       this.refreshObservationProducers();
     });
     this.timelineSubscriptions.set(owner.id, { owner, agentIds: new Set(agentIds) });
+    this.scheduleService.markAgentsViewed(owner.id, agentIds);
     this.refreshObservationProducers();
     return owner;
   }
