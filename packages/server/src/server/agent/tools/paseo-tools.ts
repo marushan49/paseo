@@ -710,6 +710,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return options.ensureWorkspaceForCreate(resolvedCwd);
   }
 
+  /**
+   * Which agent a tool should act on. Without an id it is the caller itself:
+   * an agent changing its own model or title knows who it is, and making it
+   * look its own id up first is a step that can only go wrong.
+   */
+  function resolveAgentIdForSelf(requestedAgentId?: string): string {
+    const explicitAgentId = requestedAgentId?.trim();
+    if (explicitAgentId) {
+      return explicitAgentId;
+    }
+    if (callerAgentId) {
+      return callerAgentId;
+    }
+    throw new Error("agentId is required outside an agent-scoped session");
+  }
+
   function resolveWorkspaceIdForRename(requestedWorkspaceId?: string): string {
     const explicitWorkspaceId = requestedWorkspaceId?.trim();
     if (explicitWorkspaceId) {
@@ -2163,10 +2179,17 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "update_agent",
     {
       title: "Update agent",
-      description: "Update an agent name, labels, and/or runtime settings.",
+      description:
+        "Update an agent's title, labels, and/or runtime settings (mode, model, thinking, features). " +
+        "Omit agentId to update yourself.",
       inputSchema: {
-        agentId: z.string(),
-        name: z.string().optional(),
+        agentId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Agent to update. Omit to update yourself."),
+        name: z.string().optional().describe("New user-visible agent title."),
         labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
         settings: UpdateAgentSettingsInputSchema.optional().describe(
           "Runtime settings to apply to the agent.",
@@ -2176,7 +2199,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         success: z.boolean(),
       },
     },
-    async ({ agentId, name, labels, settings }) => {
+    async ({ agentId: requestedAgentId, name, labels, settings }) => {
+      const agentId = resolveAgentIdForSelf(requestedAgentId);
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }
@@ -3250,9 +3274,15 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Set agent session mode",
       description:
-        "Switch the agent's session mode (plan, bypassPermissions, read-only, auto, etc.).",
+        "Switch the agent's session mode (plan, bypassPermissions, read-only, auto, etc.). " +
+        "Omit agentId to switch your own mode.",
       inputSchema: {
-        agentId: z.string(),
+        agentId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Agent whose mode to switch. Omit for yourself."),
         modeId: z.string(),
       },
       outputSchema: {
@@ -3260,8 +3290,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         newMode: z.string(),
       },
     },
-    async ({ agentId, modeId }) => {
-      const result = await setAgentModeCommand({ agentManager }, { agentId, modeId });
+    async ({ agentId: requestedAgentId, modeId }) => {
+      const result = await setAgentModeCommand(
+        { agentManager },
+        { agentId: resolveAgentIdForSelf(requestedAgentId), modeId },
+      );
       return {
         content: [],
         structuredContent: ensureValidJson({ success: true, newMode: result.modeId }),

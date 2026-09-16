@@ -3860,6 +3860,44 @@ describe("update_agent MCP tool", () => {
     expect(response.structuredContent).toEqual({ success: true });
   });
 
+  it("updates the caller itself when no agentId is given", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      logger,
+      callerAgentId: "agent-1",
+    });
+    const tool = registeredTool(server, "update_agent");
+    const input = { name: "Renamed by itself", settings: { model: "gpt-5.4" } };
+
+    const parsed = await tool.inputSchema.safeParseAsync(input);
+    expect(parsed.success).toBe(true);
+    await tool.handler(input);
+
+    expect(spies.agentManager.setAgentModel).toHaveBeenCalledWith("agent-1", "gpt-5.4");
+    expect(spies.agentManager.updateAgentMetadata).toHaveBeenCalledWith("agent-1", {
+      title: "Renamed by itself",
+      labels: undefined,
+    });
+  });
+
+  it("refuses to guess an agent outside an agent-scoped session", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      logger,
+    });
+    const tool = registeredTool(server, "update_agent");
+
+    await expect(tool.handler({ name: "Nobody in particular" })).rejects.toThrow(
+      "agentId is required",
+    );
+  });
+
   it("reports success for a no-op update with neither metadata nor settings", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const server = await createAgentMcpServer({
