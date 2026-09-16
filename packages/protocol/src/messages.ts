@@ -1033,6 +1033,18 @@ export const WorkspacePinSetRequestSchema = z.object({
 // server_info.features.workspaceForgeAccount.
 // An empty string clears the pin and returns the workspace to the machine's
 // default account, so the RPC needs no separate "unset" verb.
+export const PullRequestCurationSchema = z.object({
+  added: z.array(z.number().int().positive()),
+  removed: z.array(z.number().int().positive()),
+});
+
+export const WorkspacePullRequestsCurateRequestSchema = z.object({
+  type: z.literal("workspace.pull_requests.curate.request"),
+  workspaceId: z.string(),
+  curation: PullRequestCurationSchema,
+  requestId: z.string(),
+});
+
 export const WorkspaceForgeAccountSetRequestSchema = z.object({
   type: z.literal("workspace.forge_account.set.request"),
   workspaceId: z.string(),
@@ -2095,6 +2107,21 @@ export const WorkspacePinSetResponsePayloadSchema = z.object({
 export const WorkspacePinSetResponseSchema = z.object({
   type: z.literal("workspace.pin.set.response"),
   payload: WorkspacePinSetResponsePayloadSchema,
+});
+
+export const WorkspacePullRequestsCurateResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  workspaceId: z.string(),
+  accepted: z.boolean(),
+  // The stored decisions after normalization, which is what the daemon will
+  // merge into every later set for this workspace.
+  curation: PullRequestCurationSchema.nullable(),
+  error: z.string().nullable(),
+});
+
+export const WorkspacePullRequestsCurateResponseSchema = z.object({
+  type: z.literal("workspace.pull_requests.curate.response"),
+  payload: WorkspacePullRequestsCurateResponsePayloadSchema,
 });
 
 export const WorkspaceForgeAccountSetResponsePayloadSchema = z.object({
@@ -3218,6 +3245,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
   WorkspaceForgeAccountSetRequestSchema,
+  WorkspacePullRequestsCurateRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
   WorkspaceLabelUpdateRequestSchema,
@@ -4068,6 +4096,10 @@ export const WorkspaceDescriptorPayloadSchema = z
     // work and a private GitHub account can live on one machine. Null means the
     // machine's default account.
     forgeConfigDir: z.string().nullable().optional(),
+    // COMPAT(workspacePullRequestCuration): added in v0.8.1, remove optional after 2027-06-30.
+    // Which change requests this workspace was told to keep in its set and
+    // which to drop, so the set survives an app restart.
+    pullRequestCuration: PullRequestCurationSchema.nullable().optional(),
     archivingAt: z.string().nullable().optional().default(null),
     status: WorkspaceStateBucketSchema,
     // Best-effort workspace status entry timestamp. Old daemons omit the
@@ -6864,6 +6896,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
   WorkspaceForgeAccountSetResponseSchema,
+  WorkspacePullRequestsCurateResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,
   WaitForFinishResponseMessageSchema,
@@ -7067,6 +7100,13 @@ export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
 >;
 export type WorkspacePinSetResponse = z.infer<typeof WorkspacePinSetResponseSchema>;
+export type WorkspacePullRequestsCurateRequest = z.infer<
+  typeof WorkspacePullRequestsCurateRequestSchema
+>;
+export type WorkspacePullRequestsCurateResponse = z.infer<
+  typeof WorkspacePullRequestsCurateResponseSchema
+>;
+export type PullRequestCuration = z.infer<typeof PullRequestCurationSchema>;
 export type WorkspaceForgeAccountSetResponse = z.infer<
   typeof WorkspaceForgeAccountSetResponseSchema
 >;

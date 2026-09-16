@@ -2896,6 +2896,12 @@ export class Session {
           msg.forgeConfigDir,
           msg.requestId,
         );
+      case "workspace.pull_requests.curate.request":
+        return this.handleWorkspacePullRequestsCurateRequest(
+          msg.workspaceId,
+          { added: [...msg.curation.added], removed: [...msg.curation.removed] },
+          msg.requestId,
+        );
       default:
         return undefined;
     }
@@ -3771,6 +3777,58 @@ export class Session {
         },
       });
       emitResponse(false, null, getErrorMessageOr(error, "Failed to pin workspace"));
+    }
+  }
+
+  private async handleWorkspacePullRequestsCurateRequest(
+    workspaceId: string,
+    curation: { added: number[]; removed: number[] },
+    requestId: string,
+  ): Promise<void> {
+    const logContext = { workspaceId, requestId };
+    this.sessionLogger.info(logContext, "session: workspace.pull_requests.curate.request");
+    const emitResponse = (
+      accepted: boolean,
+      stored: { added: number[]; removed: number[] } | null,
+      error: string | null,
+    ) => {
+      this.emit({
+        type: "workspace.pull_requests.curate.response",
+        payload: { requestId, workspaceId, accepted, curation: stored, error },
+      });
+    };
+
+    // A number can only be one of the two, and the newer decision wins: attaching something
+    // that was dropped is the way to take the dropping back.
+    const removed = [...new Set(curation.removed)].sort((left, right) => left - right);
+    const added = [...new Set(curation.added)]
+      .filter((number) => !removed.includes(number))
+      .sort((left, right) => left - right);
+    const normalized = { added, removed };
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
+        ...existing,
+        pullRequestCuration: normalized,
+        updatedAt,
+      }));
+      if (!updated) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+      emitResponse(true, normalized, null);
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: workspace.pull_requests.curate.request error",
+      );
+      emitResponse(
+        false,
+        null,
+        getErrorMessageOr(error, "Failed to store the workspace's pull requests"),
+      );
     }
   }
 
@@ -5643,6 +5701,7 @@ export class Session {
       title: workspace.title,
       pinnedAt: workspace.pinnedAt,
       forgeConfigDir: workspace.forgeConfigDir,
+      pullRequestCuration: workspace.pullRequestCuration,
       ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
       archivingAt: null,
       status: "done",
@@ -5739,6 +5798,7 @@ export class Session {
       title: result.workspace.title,
       pinnedAt: result.workspace.pinnedAt,
       forgeConfigDir: result.workspace.forgeConfigDir,
+      pullRequestCuration: result.workspace.pullRequestCuration,
       ...(result.workspace.labels && result.workspace.labels.length > 0
         ? { labels: result.workspace.labels }
         : {}),

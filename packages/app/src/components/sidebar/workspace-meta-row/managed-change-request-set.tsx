@@ -1,13 +1,23 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
+import {
+  pullRequestCurationStore,
+  usePullRequestCuration,
+} from "@/git/pull-request-curation-store";
 import type { RelatedPullRequest } from "@/git/related-pull-requests";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useWorkspace } from "@/stores/session-store-hooks";
 import { ChangeRequestSetList } from "./change-request-set";
 
 /**
- * The expanded set with its two ways of growing wired up: the attach prompt and the chat scan.
- * Both need a host to ask, so they live in this thin shell rather than in the meta row — a row
- * whose workspace has no server keeps rendering the plain list and nothing breaks.
+ * The expanded set with its two ways of growing wired up, and with what the user decides about
+ * it kept where it survives a restart.
+ *
+ * Attaching and scanning both need a host to ask, so they live in this thin shell rather than in
+ * the meta row — a row whose workspace has no server keeps rendering the plain list and nothing
+ * breaks. The decisions go to the daemon, which stores them on the workspace record and hands
+ * them back in its snapshot; the store here is the write-through cache in between.
  */
 export function ManagedChangeRequestSetList({
   serverId,
@@ -28,15 +38,51 @@ export function ManagedChangeRequestSetList({
     workspaceKey,
   });
   const { scanChat, scanning } = useScanWorkspaceChat({ serverId, workspaceId, workspaceKey });
+  const client = useHostRuntimeClient(serverId);
+  const workspace = useWorkspace(serverId, workspaceId);
+  const persisted = workspace?.pullRequestCuration;
+  const { curation } = usePullRequestCuration(workspaceKey);
+
+  // What the daemon stored wins on arrival, which is what makes a set assembled yesterday be
+  // there today. Identical decisions change nothing, so the echo of our own write stops here.
+  useEffect(() => {
+    pullRequestCurationStore.hydrate(workspaceKey, persisted);
+  }, [workspaceKey, persisted]);
+
+  const persistCuration = useCallback(() => {
+    if (!client) return;
+    void client
+      .curateWorkspacePullRequests(workspaceId, pullRequestCurationStore.getCuration(workspaceKey))
+      .catch(() => {
+        // The set still reads correctly from the cache; the daemon rejects loudly enough in its
+        // own log, and nothing here is worth interrupting the sidebar for.
+      });
+  }, [client, workspaceId, workspaceKey]);
+
+  const handleRemove = useCallback(
+    (number: number) => {
+      onRemovePullRequest(number);
+      persistCuration();
+    },
+    [onRemovePullRequest, persistCuration],
+  );
+
   const handleScanChat = useCallback(() => {
-    void scanChat();
-  }, [scanChat]);
+    void scanChat().then(persistCuration, persistCuration);
+  }, [scanChat, persistCuration]);
+
+  // The attach dialog writes into the store on its own, so the decisions are followed rather
+  // than intercepted: whatever lands there is what gets stored.
+  const added = curation.added.join(",");
+  useEffect(() => {
+    if (added.length > 0) persistCuration();
+  }, [added, persistCuration]);
 
   return (
     <>
       <ChangeRequestSetList
         pullRequests={pullRequests}
-        onRemovePullRequest={onRemovePullRequest}
+        onRemovePullRequest={handleRemove}
         onAttachPullRequest={openAttachDialog}
         onScanChat={handleScanChat}
         scanning={scanning}

@@ -111,6 +111,18 @@ const PersistedWorkspaceRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // COMPAT(workspacePullRequestCuration): added in v0.8.1, remove optional parsing after
+  // 2027-06-30. Which change requests were attached to this workspace's set by hand and which
+  // were dropped from it. Decisions rather than a list, so a set that the daemon resolves
+  // differently tomorrow still honours what someone said about it today.
+  pullRequestCuration: z
+    .object({
+      added: z.array(z.number().int().positive()),
+      removed: z.array(z.number().int().positive()),
+    })
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;

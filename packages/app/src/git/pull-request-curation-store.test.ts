@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { pullRequestCurationStore, usePullRequestCuration } from "./pull-request-curation-store";
 import type { RelatedPullRequest } from "./related-pull-requests";
@@ -73,5 +73,27 @@ describe("pullRequestCurationStore", () => {
     // Same snapshot: no curation leaked across keys.
     expect(result.current.curation).toEqual({ added: [], removed: [] });
     pullRequestCurationStore.clear("srv:ws-h");
+  });
+});
+
+describe("hydrate", () => {
+  test("adopts what the daemon stored, so a set survives a restart", () => {
+    const key = `hydrate-${Math.random()}`;
+    pullRequestCurationStore.hydrate(key, { added: [7, 7, 9], removed: [3] });
+    expect(pullRequestCurationStore.getCuration(key)).toEqual({ added: [7, 9], removed: [3] });
+  });
+
+  test("the echo of our own write does not churn the store", () => {
+    const key = `hydrate-echo-${Math.random()}`;
+    pullRequestCurationStore.hydrate(key, { added: [5], removed: [] });
+    const version = pullRequestCurationStore.getVersion(key);
+    pullRequestCurationStore.hydrate(key, { added: [5], removed: [] });
+    expect(pullRequestCurationStore.getVersion(key)).toBe(version);
+  });
+
+  test("nothing stored means nothing decided", () => {
+    const key = `hydrate-empty-${Math.random()}`;
+    pullRequestCurationStore.hydrate(key, null);
+    expect(pullRequestCurationStore.getCuration(key)).toEqual({ added: [], removed: [] });
   });
 });

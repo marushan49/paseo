@@ -118,6 +118,8 @@ export interface WorkspaceDescriptor {
   pinnedAt?: string | null;
   /** Config directory of this workspace's forge account, null for the machine default. */
   forgeConfigDir?: string | null;
+  /** Change requests attached to, or dropped from, this workspace's set. */
+  pullRequestCuration?: { added: number[]; removed: number[] } | null;
   labels?: string[];
   status: WorkspaceDescriptorPayload["status"];
   statusEnteredAt: Date | null;
@@ -156,6 +158,12 @@ export function normalizeWorkspaceDescriptor(
     title: payload.title ?? null,
     pinnedAt: payload.pinnedAt ?? null,
     forgeConfigDir: payload.forgeConfigDir ?? null,
+    pullRequestCuration: payload.pullRequestCuration
+      ? {
+          added: [...payload.pullRequestCuration.added],
+          removed: [...payload.pullRequestCuration.removed],
+        }
+      : null,
     // COMPAT(workspaceLabels): old daemons omit assignments.
     labels: payload.labels ?? [],
     status: payload.status,

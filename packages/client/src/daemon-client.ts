@@ -2974,6 +2974,30 @@ export class DaemonClient {
   }
 
   /**
+   * Store which change requests this workspace keeps in its set and which it drops. Decisions
+   * rather than a list, so a set the daemon resolves differently tomorrow still honours them.
+   */
+  async curateWorkspacePullRequests(
+    workspaceId: string,
+    curation: { added: readonly number[]; removed: readonly number[] },
+    requestId?: string,
+  ): Promise<{ curation: { added: number[]; removed: number[] } | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "workspace.pull_requests.curate.request",
+        workspaceId,
+        curation: { added: [...curation.added], removed: [...curation.removed] },
+      },
+      responseType: "workspace.pull_requests.curate.response",
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "curateWorkspacePullRequests rejected");
+    }
+    return { curation: payload.curation };
+  }
+
+  /**
    * Point one workspace's gh at its own config directory, so its agents and Paseo's own gh
    * calls act as that account. An empty string clears it back to the machine's default.
    */

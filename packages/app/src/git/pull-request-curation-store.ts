@@ -11,13 +11,14 @@ interface WorkspaceCurationRecord {
 }
 
 /**
- * INTERIM store: curation decisions plus the facts the app resolved for
- * hand-added numbers, keyed by sidebar workspace key. Ephemeral by design —
- * it survives navigation but not an app restart. The daemon persists these
- * same decisions per agent once `agent.pull_requests.curate` lands (see
- * docs/refactors/session-pull-requests-plan.md); at that point this store
- * shrinks to a write-through cache and the daemon echo becomes the source
- * of truth. Never invent a second durable home for curation here.
+ * Curation decisions plus the facts the app resolved for hand-added numbers, keyed by sidebar
+ * workspace key.
+ *
+ * The daemon owns these decisions now and stores them on the workspace record, so this is the
+ * write-through cache the plan called for: `hydrate` seeds it from the daemon's snapshot, the
+ * panel sends every change on through `workspace.pull_requests.curate`, and the facts for a
+ * hand-added number stay here because the daemon re-resolves them for itself. Never invent a
+ * second durable home for curation here.
  */
 class EphemeralPullRequestCurationStore {
   private records = new Map<string, WorkspaceCurationRecord>();
@@ -80,6 +81,24 @@ class EphemeralPullRequestCurationStore {
       added: record.curation.added.filter((candidate) => candidate !== number),
       removed: [...record.curation.removed, number],
     });
+    this.touch(workspaceKey);
+  }
+
+  /**
+   * Adopt what the daemon has stored for this workspace. Called with the snapshot's decisions,
+   * so a set someone assembled yesterday is there again after a restart. Same decisions in
+   * means no version bump, so this does not loop against the daemon echo that follows a write.
+   */
+  hydrate(workspaceKey: string, curation: PullRequestCuration | null | undefined): void {
+    const next = normalizePullRequestCuration(curation);
+    const current = this.getCuration(workspaceKey);
+    if (
+      current.added.join(",") === next.added.join(",") &&
+      current.removed.join(",") === next.removed.join(",")
+    ) {
+      return;
+    }
+    this.recordFor(workspaceKey).curation = next;
     this.touch(workspaceKey);
   }
 
