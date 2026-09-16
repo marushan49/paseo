@@ -973,6 +973,10 @@ export const ru: TranslationResources = {
           openOn: "Открыть на {{brand}}",
         },
         set: {
+          manageTitle: "Пулреквесты",
+          addAction: "Добавить",
+          scanAction: "Сканировать чат",
+          emptyList: "Пулреквестов пока нет",
           count: "{{count}} PR",
           failing: "{{count}} с ошибкой",
           running: "выполняется",

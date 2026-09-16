@@ -23,6 +23,7 @@ import {
   usePullRequestCuration,
 } from "@/git/pull-request-curation-store";
 import { ChangeRequestSetItem, ChangeRequestSetList } from "./change-request-set";
+import { ManagedChangeRequestSetList } from "./managed-change-request-set";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
 import { selectMetaRowItems, type MetaRowItem } from "./meta-items";
@@ -69,6 +70,8 @@ const dangerMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
  */
 export function WorkspaceMetaRow({
   workspaceKey = null,
+  serverId = null,
+  workspaceId = null,
   currentBranch,
   projectName,
   hostBadge,
@@ -82,6 +85,12 @@ export function WorkspaceMetaRow({
    * shows exactly what the daemon derived, with nothing removable.
    */
   workspaceKey?: string | null;
+  /**
+   * The host and workspace the set belongs to. Both present means the expanded set can grow:
+   * attaching and scanning need a daemon to ask. Absent in previews.
+   */
+  serverId?: string | null;
+  workspaceId?: string | null;
   currentBranch: string | null;
   projectName: string | null;
   hostBadge: HostBadgeModel | null;
@@ -144,9 +153,12 @@ export function WorkspaceMetaRow({
         ))}
       </View>
       {expandedSet?.kind === "changeRequestSet" ? (
-        <ChangeRequestSetList
+        <ExpandedChangeRequestSet
+          workspaceKey={workspaceKey}
+          serverId={serverId}
+          workspaceId={workspaceId}
           pullRequests={expandedSet.pullRequests}
-          onRemovePullRequest={workspaceKey ? handleRemovePullRequest : undefined}
+          onRemovePullRequest={handleRemovePullRequest}
         />
       ) : null}
     </View>
@@ -154,6 +166,42 @@ export function WorkspaceMetaRow({
 }
 
 const EMPTY_PULL_REQUESTS: readonly RelatedPullRequest[] = [];
+
+/**
+ * The set below the line. A workspace with a host behind it gets the managed panel, which can
+ * also grow the set; a preview gets the same list with nothing to press.
+ */
+function ExpandedChangeRequestSet({
+  workspaceKey,
+  serverId,
+  workspaceId,
+  pullRequests,
+  onRemovePullRequest,
+}: {
+  workspaceKey: string | null;
+  serverId: string | null;
+  workspaceId: string | null;
+  pullRequests: readonly RelatedPullRequest[];
+  onRemovePullRequest: (number: number) => void;
+}) {
+  if (workspaceKey && serverId && workspaceId) {
+    return (
+      <ManagedChangeRequestSetList
+        serverId={serverId}
+        workspaceId={workspaceId}
+        workspaceKey={workspaceKey}
+        pullRequests={pullRequests}
+        onRemovePullRequest={onRemovePullRequest}
+      />
+    );
+  }
+  return (
+    <ChangeRequestSetList
+      pullRequests={pullRequests}
+      onRemovePullRequest={workspaceKey ? onRemovePullRequest : undefined}
+    />
+  );
+}
 
 function MetaItemNode({
   item,

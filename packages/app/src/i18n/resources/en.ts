@@ -966,6 +966,10 @@ export const en = {
           openOn: "Open on {{brand}}",
         },
         set: {
+          manageTitle: "Pull requests",
+          addAction: "Add",
+          scanAction: "Scan chat",
+          emptyList: "No pull requests yet",
           count: "{{count}} PRs",
           failing: "{{count}} failed",
           running: "running",

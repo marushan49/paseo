@@ -969,6 +969,10 @@ export const ja: TranslationResources = {
           openOn: "{{brand}}で開く",
         },
         set: {
+          manageTitle: "プルリクエスト",
+          addAction: "追加",
+          scanAction: "チャットを検索",
+          emptyList: "プルリクエストはまだありません",
           count: "{{count}} 件のPR",
           failing: "{{count}} 件失敗",
           running: "実行中",

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  relatedPullRequestsHealthCount,
   selectRelatedPullRequests,
   shouldPresentAsSet,
   summarizeRelatedPullRequests,
@@ -24,7 +25,12 @@ describe("summarizeRelatedPullRequests", () => {
       pr(3, { checksStatus: "success" }),
     ]);
 
-    expect(summary).toEqual({ total: 3, openCount: 3, health: "failing" });
+    expect(summary).toEqual({
+      total: 3,
+      openCount: 3,
+      health: "failing",
+      checkCounts: { failing: 1, running: 0, passing: 2 },
+    });
   });
 
   test("a merged layer's old failure stops holding the row back", () => {
@@ -59,11 +65,36 @@ describe("summarizeRelatedPullRequests", () => {
       total: 0,
       openCount: 0,
       health: "unknown",
+      checkCounts: { failing: 0, running: 0, passing: 0 },
     });
   });
 
   test("change requests without checks do not read as green", () => {
     expect(summarizeRelatedPullRequests([pr(1, { checksStatus: "none" })]).health).toBe("unknown");
+  });
+
+  test("a merged failure is not counted as a red open change request", () => {
+    const summary = summarizeRelatedPullRequests([
+      pr(1, { checksStatus: "failure", state: "merged" }),
+      pr(2, { checksStatus: "failure" }),
+      pr(3, { checksStatus: "failure" }),
+    ]);
+    expect(summary.checkCounts).toEqual({ failing: 2, running: 0, passing: 0 });
+  });
+});
+
+describe("relatedPullRequestsHealthCount", () => {
+  test("the row's health word stands for that many change requests", () => {
+    const summary = summarizeRelatedPullRequests([
+      pr(1, { checksStatus: "failure" }),
+      pr(2, { checksStatus: "failure" }),
+      pr(3, { checksStatus: "success" }),
+    ]);
+    expect(relatedPullRequestsHealthCount(summary)).toBe(2);
+  });
+
+  test("a set with nothing to report counts nothing", () => {
+    expect(relatedPullRequestsHealthCount(summarizeRelatedPullRequests([]))).toBe(0);
   });
 });
 

@@ -957,6 +957,10 @@ export const ar: TranslationResources = {
           openOn: "فتح على {{brand}}",
         },
         set: {
+          manageTitle: "طلبات السحب",
+          addAction: "إضافة",
+          scanAction: "فحص المحادثة",
+          emptyList: "لا توجد طلبات سحب بعد",
           count: "{{count}} طلبات سحب",
           failing: "{{count}} فشل",
           running: "قيد التشغيل",

@@ -18,21 +18,44 @@ export interface RelatedPullRequestsSummary {
   total: number;
   openCount: number;
   health: RelatedPullRequestsHealth;
+  /**
+   * Open entries per check state. The collapsed row says how many are red, not that one is:
+   * "1 failed" and "6 failed" are different mornings, and the row is what decides which one
+   * gets opened first.
+   */
+  checkCounts: RelatedPullRequestCheckCounts;
+}
+
+export interface RelatedPullRequestCheckCounts {
+  failing: number;
+  running: number;
+  passing: number;
 }
 
 export function summarizeRelatedPullRequests(
   pullRequests: readonly RelatedPullRequest[],
 ): RelatedPullRequestsSummary {
   const open = pullRequests.filter((pr) => pr.state === "open");
+  const checkCounts: RelatedPullRequestCheckCounts = {
+    failing: open.filter((pr) => pr.checksStatus === "failure").length,
+    running: open.filter((pr) => pr.checksStatus === "pending").length,
+    passing: open.filter((pr) => pr.checksStatus === "success").length,
+  };
   let health: RelatedPullRequestsHealth = "unknown";
-  if (open.some((pr) => pr.checksStatus === "failure")) {
+  if (checkCounts.failing > 0) {
     health = "failing";
-  } else if (open.some((pr) => pr.checksStatus === "pending")) {
+  } else if (checkCounts.running > 0) {
     health = "running";
-  } else if (open.some((pr) => pr.checksStatus === "success")) {
+  } else if (checkCounts.passing > 0) {
     health = "passing";
   }
-  return { total: pullRequests.length, openCount: open.length, health };
+  return { total: pullRequests.length, openCount: open.length, health, checkCounts };
+}
+
+/** How many entries the collapsed row's health word stands for. */
+export function relatedPullRequestsHealthCount(summary: RelatedPullRequestsSummary): number {
+  if (summary.health === "unknown") return 0;
+  return summary.checkCounts[summary.health];
 }
 
 /**

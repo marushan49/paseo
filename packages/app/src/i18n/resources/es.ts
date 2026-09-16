@@ -989,6 +989,10 @@ export const es: TranslationResources = {
           openOn: "Abrir en {{brand}}",
         },
         set: {
+          manageTitle: "Pull requests",
+          addAction: "Añadir",
+          scanAction: "Escanear chat",
+          emptyList: "Aún no hay pull requests",
           count: "{{count}} PR",
           failing: "{{count}} con error",
           running: "en curso",

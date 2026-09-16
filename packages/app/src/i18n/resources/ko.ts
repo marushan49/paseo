@@ -964,6 +964,10 @@ export const ko: TranslationResources = {
           openOn: "{{brand}}에서 열기",
         },
         set: {
+          manageTitle: "풀 리퀘스트",
+          addAction: "추가",
+          scanAction: "채팅 검색",
+          emptyList: "아직 풀 리퀘스트가 없습니다",
           count: "PR {{count}}개",
           failing: "{{count}}개 실패",
           running: "실행 중",
