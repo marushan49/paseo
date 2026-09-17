@@ -59,6 +59,142 @@ export const PaseoMetadataGenerationEntrySchema = z
   .passthrough()
   .catch({});
 
+export const PaseoBrowserCredentialSchema = z
+  .object({
+    usernameEnv: z.string().trim().min(1),
+    passwordEnv: z.string().trim().min(1).optional(),
+    allowedOrigins: z.array(z.string().trim().min(1)).default([]),
+  })
+  .passthrough();
+
+export const PaseoBrowserConfigRawSchema = z
+  .object({
+    defaultProfile: z.string().trim().min(1).optional(),
+    credentials: z.record(z.string(), PaseoBrowserCredentialSchema).default({}),
+  })
+  .passthrough();
+
+export const PaseoBrowserConfigSchema = PaseoBrowserConfigRawSchema
+  // Lenient for unrelated consumers (worktree setup reads the whole config);
+  // the verify runner strict-parses raw sections itself and reports recipe errors loudly.
+  .catch({ credentials: {} });
+
+const PaseoRecipeFieldTargetSchema = z
+  .object({
+    role: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+  })
+  .strict();
+
+const PaseoRecipeTargetSchema = z
+  .object({
+    url: z.string().trim().min(1).optional(),
+    service: z.string().trim().min(1).optional(),
+    path: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+export const PaseoRecipeStepSchema = z.discriminatedUnion("action", [
+  PaseoRecipeTargetSchema.extend({
+    action: z.literal("navigate"),
+  }),
+  z
+    .object({
+      action: z.literal("ensure-authenticated"),
+      credential: z.string().trim().min(1),
+      profile: z.string().trim().min(1).optional(),
+      login: PaseoRecipeTargetSchema.extend({
+        username: PaseoRecipeFieldTargetSchema,
+        password: PaseoRecipeFieldTargetSchema,
+        submit: PaseoRecipeFieldTargetSchema,
+        successText: z.string().trim().min(1).optional(),
+      }).strict(),
+      check: PaseoRecipeTargetSchema.extend({
+        visible: PaseoRecipeFieldTargetSchema,
+      }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("click"),
+      role: z.string().trim().min(1),
+      name: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("fill"),
+      role: z.string().trim().min(1),
+      name: z.string().trim().min(1),
+      value: z.string().optional(),
+      credential: z.string().trim().min(1).optional(),
+      credentialField: z.enum(["username", "password"]).optional(),
+    })
+    .strict()
+    .refine(
+      (step) =>
+        (step.value !== undefined) !==
+        (step.credential !== undefined && step.credentialField !== undefined),
+      "fill needs exactly one of value or credential/credentialField",
+    ),
+  z
+    .object({
+      action: z.literal("wait-text"),
+      text: z.string().trim().min(1),
+      timeoutMs: z.number().int().positive().max(60_000).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("assert-visible"),
+      role: z.string().trim().min(1),
+      name: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("assert-text"),
+      text: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("assert-console-errors"),
+      max: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("assert-failed-requests"),
+      max: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("screenshot"),
+      name: z.string().trim().min(1),
+    })
+    .strict(),
+]);
+
+export const PaseoVerificationRecipeSchema = z
+  .object({
+    profile: z.string().trim().min(1).optional(),
+    params: z.array(z.string().trim().min(1)).default([]),
+    steps: z.array(PaseoRecipeStepSchema).min(1),
+  })
+  .strict();
+
+export const PaseoVerificationConfigRawSchema = z
+  .object({
+    recipes: z.record(z.string(), PaseoVerificationRecipeSchema).default({}),
+  })
+  .passthrough();
+
+export const PaseoVerificationConfigSchema = PaseoVerificationConfigRawSchema
+  // See PaseoBrowserConfigSchema: lenient here, strict in the verify runner.
+  .catch({ recipes: {} });
+
 export const PaseoMetadataGenerationSchema = z
   .object({
     title: PaseoMetadataGenerationEntrySchema.optional(),
@@ -76,6 +212,8 @@ export const PaseoConfigRawSchema = z
     worktree: PaseoWorktreeConfigRawSchema.optional(),
     scripts: z.record(z.string(), PaseoScriptEntryRawSchema).optional(),
     metadataGeneration: PaseoMetadataGenerationSchema.optional(),
+    browser: PaseoBrowserConfigRawSchema.optional(),
+    verification: PaseoVerificationConfigRawSchema.optional(),
   })
   .passthrough();
 
@@ -92,6 +230,8 @@ export const PaseoConfigSchema = PaseoConfigRawSchema.extend({
   worktree: WorktreeConfigSchema.optional(),
   scripts: z.record(z.string(), ScriptEntrySchema).optional().catch({}),
   metadataGeneration: PaseoMetadataGenerationSchema.optional(),
+  browser: PaseoBrowserConfigSchema.optional(),
+  verification: PaseoVerificationConfigSchema.optional(),
 })
   .passthrough()
   .catch({});
@@ -112,6 +252,11 @@ export const ProjectConfigRpcErrorSchema = z.discriminatedUnion("code", [
 ]);
 
 export type PaseoScriptEntryRaw = z.infer<typeof PaseoScriptEntryRawSchema>;
+export type PaseoBrowserCredential = z.infer<typeof PaseoBrowserCredentialSchema>;
+export type PaseoBrowserConfig = z.infer<typeof PaseoBrowserConfigSchema>;
+export type PaseoRecipeStep = z.infer<typeof PaseoRecipeStepSchema>;
+export type PaseoVerificationRecipe = z.infer<typeof PaseoVerificationRecipeSchema>;
+export type PaseoVerificationConfig = z.infer<typeof PaseoVerificationConfigSchema>;
 export type PaseoMetadataGenerationEntry = z.infer<typeof PaseoMetadataGenerationEntrySchema>;
 export type PaseoMetadataGeneration = z.infer<typeof PaseoMetadataGenerationSchema>;
 export type PaseoServicePortAllocation = z.infer<typeof PaseoServicePortAllocationSchema>;

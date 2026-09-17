@@ -63,6 +63,12 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  VerifyRecipeListRequestSchema,
+  VerifyRecipeListResponseSchema,
+  VerifyRecipeRunRequestSchema,
+  VerifyRecipeRunResponseSchema,
+} from "./verify/rpc-schemas.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -3438,6 +3444,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListRequestSchema,
   WorkspaceScriptStartRequestSchema,
   WorkspaceScriptStopRequestSchema,
+  VerifyRecipeListRequestSchema,
+  VerifyRecipeRunRequestSchema,
   SubscribeTerminalRequestSchema,
   UnsubscribeTerminalRequestSchema,
   TerminalInputSchema,
@@ -3693,6 +3701,7 @@ export const ServerInfoStatusPayloadSchema = z
         pluginThemes: z.boolean().optional(),
         pluginSettings: z.boolean().optional(),
         pluginTimelineItems: z.boolean().optional(),
+        verifyRecipes: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
@@ -6890,6 +6899,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListResponseMessageSchema,
   WorkspaceScriptStartResponseMessageSchema,
   WorkspaceScriptStopResponseMessageSchema,
+  VerifyRecipeListResponseSchema,
+  VerifyRecipeRunResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
@@ -7102,6 +7113,15 @@ export type StartWorkspaceScriptResponseMessage = z.infer<
 export type WorkspaceScriptListRequest = z.infer<typeof WorkspaceScriptListRequestSchema>;
 export type WorkspaceScriptStartRequest = z.infer<typeof WorkspaceScriptStartRequestSchema>;
 export type WorkspaceScriptStopRequest = z.infer<typeof WorkspaceScriptStopRequestSchema>;
+export type {
+  VerifyCheckResult,
+  VerifyRecipeSummary,
+  VerifyRunResult,
+} from "./verify/rpc-schemas.js";
+export type VerifyRecipeListRequest = z.infer<typeof VerifyRecipeListRequestSchema>;
+export type VerifyRecipeRunRequest = z.infer<typeof VerifyRecipeRunRequestSchema>;
+export type VerifyRecipeListResponseMessage = z.infer<typeof VerifyRecipeListResponseSchema>;
+export type VerifyRecipeRunResponseMessage = z.infer<typeof VerifyRecipeRunResponseSchema>;
 export type WorkspaceScriptListResponseMessage = z.infer<
   typeof WorkspaceScriptListResponseMessageSchema
 >;

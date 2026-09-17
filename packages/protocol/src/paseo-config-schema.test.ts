@@ -213,4 +213,92 @@ describe("paseo config schema", () => {
       },
     });
   });
+
+  it("parses browser credentials and verification recipes", () => {
+    const config = {
+      browser: {
+        defaultProfile: "aip-dev",
+        credentials: {
+          "aip-admin": {
+            usernameEnv: "AIP_ADMIN_EMAIL",
+            passwordEnv: "AIP_ADMIN_PASSWORD",
+            allowedOrigins: ["http://127.0.0.1:4001"],
+          },
+        },
+      },
+      verification: {
+        recipes: {
+          "verify-case-report": {
+            profile: "aip-dev",
+            params: ["caseId"],
+            steps: [
+              { action: "navigate", service: "frontend", path: "/en/case/{{caseId}}" },
+              {
+                action: "ensure-authenticated",
+                credential: "aip-admin",
+                login: {
+                  service: "frontend",
+                  path: "/login",
+                  username: { role: "textbox", name: "Email" },
+                  password: { role: "textbox", name: "Password" },
+                  submit: { role: "button", name: "Sign in" },
+                },
+                check: {
+                  service: "frontend",
+                  path: "/en/case/{{caseId}}",
+                  visible: { role: "heading", name: "Current Report" },
+                },
+              },
+              { action: "assert-visible", role: "heading", name: "Current Report" },
+              { action: "assert-console-errors", max: 0 },
+              { action: "assert-failed-requests", max: 0 },
+              { action: "screenshot", name: "report" },
+            ],
+          },
+        },
+      },
+    };
+
+    const parsed = PaseoConfigSchema.parse(config);
+    expect(parsed.browser?.defaultProfile).toBe("aip-dev");
+    expect(parsed.browser?.credentials["aip-admin"]?.usernameEnv).toBe("AIP_ADMIN_EMAIL");
+    expect(parsed.verification?.recipes["verify-case-report"]?.params).toEqual(["caseId"]);
+    expect(parsed.verification?.recipes["verify-case-report"]?.steps).toHaveLength(6);
+  });
+
+  it("defaults credentials and recipes to empty objects", () => {
+    const parsed = PaseoConfigSchema.parse({ browser: {}, verification: {} });
+    expect(parsed.browser).toEqual({ credentials: {} });
+    expect(parsed.verification).toEqual({ recipes: {} });
+  });
+
+  it("rejects fill steps with neither value nor credential source", () => {
+    expect(() =>
+      PaseoConfigRawSchema.parse({
+        verification: {
+          recipes: {
+            broken: {
+              steps: [{ action: "fill", role: "textbox", name: "Email" }],
+            },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects empty recipes", () => {
+    expect(() =>
+      PaseoConfigRawSchema.parse({
+        verification: {
+          recipes: {
+            empty: { steps: [] },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("keeps configs without browser or verification sections parseable", () => {
+    expect(PaseoConfigSchema.parse({})).toEqual({});
+  });
 });

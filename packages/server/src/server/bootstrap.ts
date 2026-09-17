@@ -155,6 +155,8 @@ import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
+import { EvidenceStore } from "./verify/evidence-store.js";
+import { DaemonPlaywrightHost } from "./verify/playwright-host.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 import { resolveWorkspaceIdForPath } from "./resolve-workspace-id-for-path.js";
 import {
@@ -614,6 +616,13 @@ export async function createPaseoDaemon(
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
+  const verifyEvidence = new EvidenceStore({ paseoHome: config.paseoHome });
+  const verifyHost = new DaemonPlaywrightHost({ paseoHome: config.paseoHome, logger });
+  const unregisterVerifyHost = browserToolsBroker.registerClient(
+    verifyHost.asHostClient((response) => {
+      browserToolsBroker.receiveResponse(response);
+    }),
+  );
   const pluginRuntime = new PluginService(logger, daemonConfigStore, daemonVersion, {
     managedSources: new ManagedPluginSources(config.paseoHome),
     settingsDirectory: path.join(config.paseoHome, "plugin-settings"),
@@ -1757,6 +1766,8 @@ export async function createPaseoDaemon(
               },
               serviceProxyPublicBaseUrl,
               browserToolsBroker,
+              verifyHost,
+              verifyEvidence,
               hubRelationships,
               workspaceSetupRuntime,
               pluginRuntime,
@@ -1836,6 +1847,8 @@ export async function createPaseoDaemon(
     await agentStorage.flush().catch(() => undefined);
     await agentProviderRuntime.shutdown();
     terminalManager.killAll();
+    unregisterVerifyHost();
+    await verifyHost.close();
     await speechService.stop();
     await scheduleService.stop().catch(() => undefined);
     await relayRuntime?.stop().catch(() => undefined);

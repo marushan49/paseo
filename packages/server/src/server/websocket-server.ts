@@ -98,6 +98,8 @@ import {
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
+import type { EvidenceStore } from "./verify/evidence-store.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
@@ -374,6 +376,13 @@ function resolveCapabilityReason(params: {
   return state.message;
 }
 
+function resolveVerifyDependencies(
+  host: DaemonPlaywrightHost | null | undefined,
+  evidence: EvidenceStore | null | undefined,
+): { host: DaemonPlaywrightHost | null; evidence: EvidenceStore | null } {
+  return { host: host ?? null, evidence: evidence ?? null };
+}
+
 function buildServerCapabilities(params: {
   readiness: SpeechReadinessSnapshot | null;
 }): ServerCapabilities | undefined {
@@ -584,6 +593,8 @@ export class VoiceAssistantWebSocketServer {
   private readonly providerUsageService: ProviderUsageService;
   private unsubscribeTerminalActivity: (() => void) | null = null;
   private readonly browserToolsBroker: BrowserToolsBroker | null;
+  private readonly verifyHost: DaemonPlaywrightHost | null;
+  private readonly verifyEvidence: EvidenceStore | null;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private connectionLifecycle: "starting" | "accepting" | "stopping" = "accepting";
   private readonly advertiseDaemonStatusRpc: boolean;
@@ -652,6 +663,8 @@ export class VoiceAssistantWebSocketServer {
     daemonRuntimeConfig?: DaemonRuntimeConfig,
     serviceProxyPublicBaseUrl?: string | null,
     browserToolsBroker?: BrowserToolsBroker | null,
+    verifyHost?: DaemonPlaywrightHost | null,
+    verifyEvidence?: EvidenceStore | null,
     hubRelationships?: HubRelationshipManagement | null,
     workspaceSetupRuntime: WorkspaceSetupRuntime = new WorkspaceSetupRuntime(),
     pluginRuntime?: SessionOptions["pluginRuntime"],
@@ -671,6 +684,9 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.browserToolsBroker = browserToolsBroker ?? null;
+    const verify = resolveVerifyDependencies(verifyHost, verifyEvidence);
+    this.verifyHost = verify.host;
+    this.verifyEvidence = verify.evidence;
     this.hubRelationships = hubRelationships ?? null;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
@@ -1439,6 +1455,8 @@ export class VoiceAssistantWebSocketServer {
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       browserToolsBroker: this.browserToolsBroker,
+      verifyHost: this.verifyHost,
+      verifyEvidence: this.verifyEvidence,
       clientId: options.clientId,
       appVersion: options.appVersion,
       clientCapabilities: options.clientCapabilities,
@@ -1736,6 +1754,7 @@ export class VoiceAssistantWebSocketServer {
         pluginThemes: true,
         pluginSettings: true,
         pluginTimelineItems: true,
+        verifyRecipes: true,
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.

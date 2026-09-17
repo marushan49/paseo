@@ -1,4 +1,8 @@
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
+import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
+import type { EvidenceStore } from "./verify/evidence-store.js";
+import { VerifySession } from "./verify/verify-session.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import { relative } from "node:path";
@@ -31,6 +35,8 @@ import {
   type WorkspaceScriptListRequest,
   type WorkspaceScriptStartRequest,
   type WorkspaceScriptStopRequest,
+  type VerifyRecipeListRequest,
+  type VerifyRecipeRunRequest,
   type CloseItemsRequest,
   type DirectorySuggestionsRequest,
   type ProjectPlacementPayload,
@@ -443,6 +449,8 @@ type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
   browserToolsBroker?: BrowserToolsBroker | null;
+  verifyHost?: DaemonPlaywrightHost | null;
+  verifyEvidence?: EvidenceStore | null;
   clientId: string;
   permissions: readonly DaemonPermission[];
   appVersion?: string | null;
@@ -700,6 +708,7 @@ export class Session {
       ),
   );
   private readonly browserToolsBroker: SessionOptions["browserToolsBroker"];
+  private readonly verifySession: VerifySession | null;
   private readonly clientId: string;
   private readonly authorization: SessionAuthorization;
   private appVersion: string | null;
@@ -1175,6 +1184,7 @@ export class Session {
       isProviderVisibleToClient: (provider) => this.isProviderVisibleToClient(provider),
       buildWorkspaceDescriptor: (input) => this.buildWorkspaceDescriptor(input),
     });
+    this.verifySession = this.createVerifySession(options);
 
     this.voiceSessions = new VoiceSessions(
       {
@@ -2315,7 +2325,7 @@ export class Session {
       this.dispatchPluginDirectoryMessage(msg) ??
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
-      this.dispatchScheduleMessage(msg) ??
+      this.dispatchAutomationMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -3033,6 +3043,70 @@ export class Session {
       default:
         return this.terminalController.dispatch(msg, this.delivery);
     }
+  }
+
+  private createVerifySession(options: SessionOptions): VerifySession | null {
+    if (!options.verifyHost || !options.verifyEvidence) {
+      return null;
+    }
+    const host = options.verifyHost;
+    const evidence = options.verifyEvidence;
+    return new VerifySession({
+      workspaceRegistry: this.workspaceRegistry,
+      workspaceScripts: this.workspaceScripts,
+      host,
+      evidence,
+      isBrowserToolsEnabled: () =>
+        new DaemonConfigBrowserToolsPolicy(this.daemonConfigStore).isEnabled(),
+      emit: (message) => this.emit(message),
+    });
+  }
+
+  private dispatchVerifyMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "verify.recipe.list.request":
+        return this.handleVerifyRecipeListRequest(msg);
+      case "verify.recipe.run.request":
+        return this.handleVerifyRecipeRunRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchAutomationMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return this.dispatchVerifyMessage(msg) ?? this.dispatchScheduleMessage(msg);
+  }
+
+  private async handleVerifyRecipeListRequest(request: VerifyRecipeListRequest): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.recipe.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          recipes: [],
+          error: "Verification recipes are unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleListRequest(request);
+  }
+
+  private async handleVerifyRecipeRunRequest(request: VerifyRecipeRunRequest): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.recipe.run.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          result: null,
+          error: "Verification recipes are unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleRunRequest(request);
   }
 
   private dispatchScheduleMessage(msg: SessionInboundMessage): Promise<void> | undefined {
