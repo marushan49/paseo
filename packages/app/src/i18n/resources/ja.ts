@@ -656,6 +656,7 @@ export const ja: TranslationResources = {
         toggle: "サイドパネルを切り替え",
         changes: "変更",
         files: "ファイル",
+        evidence: "証拠",
       },
       toasts: {
         copyFailed: "コピーに失敗しました",
@@ -1915,6 +1916,14 @@ export const ja: TranslationResources = {
       emptyTitle: "プルリクエストはまだありません",
       emptyDescription:
         "このチェックアウトのプルリクエストを作成すると、ここに詳細が表示されます。",
+    },
+    evidence: {
+      label: "証拠",
+      subtitle: "検証の記録",
+      emptyTitle: "証拠はまだありません",
+      emptyDescription: "検証レシピを実行するとスクリーンショットとログが保存されます。",
+      loadFailed: "証拠を読み込めませんでした。",
+      showInChat: "チャットで表示",
     },
     diff: {
       changesLabel: "変更",

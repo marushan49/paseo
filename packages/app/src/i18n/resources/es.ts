@@ -656,6 +656,7 @@ export const es: TranslationResources = {
         toggle: "Alternar panel lateral",
         changes: "Cambios",
         files: "Archivos",
+        evidence: "Evidencia",
       },
       toasts: {
         copyFailed: "Copia fallida",
@@ -1940,6 +1941,14 @@ export const es: TranslationResources = {
       subtitle: "Detalles de la solicitud de extracción",
       emptyTitle: "Aún no hay ninguna solicitud de extracción",
       emptyDescription: "Crea una solicitud para este checkout y consulta aquí sus detalles.",
+    },
+    evidence: {
+      label: "Evidencia",
+      subtitle: "Capturas de verificación",
+      emptyTitle: "Aún no hay evidencia",
+      emptyDescription: "Ejecuta una receta de verificación para capturar pantallas y registros.",
+      loadFailed: "No se pudo cargar la evidencia.",
+      showInChat: "Mostrar en el chat",
     },
     diff: {
       changesLabel: "Cambios",

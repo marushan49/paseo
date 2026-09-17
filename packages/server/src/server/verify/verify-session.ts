@@ -67,6 +67,7 @@ function toEvidenceRunSummary(manifest: EvidenceRunManifest): EvidenceRunSummary
     ...(manifest.status ? { status: manifest.status } : {}),
     ...(manifest.agentId ? { agentId: manifest.agentId } : {}),
     artifactCount: manifest.artifacts.length,
+    artifacts: manifest.artifacts.map(toEvidenceArtifactSummary),
   };
 }
 

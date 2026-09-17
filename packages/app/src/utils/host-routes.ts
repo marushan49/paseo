@@ -124,7 +124,8 @@ export type WorkspaceOpenIntent =
   | { kind: "terminal"; terminalId: string }
   | { kind: "file"; path: string }
   | { kind: "draft"; draftId: string }
-  | { kind: "setup"; workspaceId: string };
+  | { kind: "setup"; workspaceId: string }
+  | { kind: "evidence" };
 
 export function parseWorkspaceOpenIntent(
   value: string | null | undefined,
@@ -132,6 +133,10 @@ export function parseWorkspaceOpenIntent(
   const normalized = trimNonEmpty(value);
   if (!normalized) {
     return null;
+  }
+
+  if (normalized === "evidence") {
+    return { kind: "evidence" };
   }
 
   const separator = normalized.indexOf(":");

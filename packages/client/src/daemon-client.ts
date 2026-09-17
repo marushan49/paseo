@@ -2649,6 +2649,39 @@ export class DaemonClient {
     });
   }
 
+  async listEvidenceRuns(
+    workspaceId: string,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "verify.evidence.run.list.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "verify.evidence.run.list.request", workspaceId },
+      responseType: "verify.evidence.run.list.response",
+    });
+  }
+
+  async getEvidenceArtifact(
+    workspaceId: string,
+    runId: string,
+    name: string,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "verify.evidence.artifact.get.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "verify.evidence.artifact.get.request",
+        workspaceId,
+        runId,
+        name,
+      },
+      responseType: "verify.evidence.artifact.get.response",
+    });
+  }
+
   async archiveWorkspace(
     workspaceId: string,
     requestId?: string,

@@ -97,6 +97,7 @@ export const EvidenceRunSummarySchema = z.object({
   status: z.enum(["pass", "fail", "error"]).optional(),
   agentId: z.string().optional(),
   artifactCount: z.number().int().nonnegative(),
+  artifacts: z.array(EvidenceArtifactSummarySchema).optional(),
 });
 
 export const VerifyEvidenceRunListRequestSchema = z.object({

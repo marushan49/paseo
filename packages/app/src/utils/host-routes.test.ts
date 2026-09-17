@@ -115,6 +115,7 @@ describe("workspace route parsing", () => {
       kind: "setup",
       workspaceId: "/tmp/repo",
     });
+    expect(parseWorkspaceOpenIntent("evidence")).toEqual({ kind: "evidence" });
   });
 
   it("uses the plain workspace route when workspace context is provided", () => {

@@ -650,6 +650,7 @@ export const zhCN: TranslationResources = {
         toggle: "切换侧边面板",
         changes: "变更",
         files: "文件",
+        evidence: "证据",
       },
       toasts: {
         copyFailed: "复制失败",
@@ -1871,6 +1872,14 @@ export const zhCN: TranslationResources = {
       subtitle: "拉取请求详情",
       emptyTitle: "尚无拉取请求",
       emptyDescription: "为此检出创建拉取请求后，可在此处查看其详情。",
+    },
+    evidence: {
+      label: "证据",
+      subtitle: "验证记录",
+      emptyTitle: "暂无证据",
+      emptyDescription: "运行验证配方以保存截图和日志。",
+      loadFailed: "无法加载证据。",
+      showInChat: "在聊天中查看",
     },
     diff: {
       changesLabel: "更改",

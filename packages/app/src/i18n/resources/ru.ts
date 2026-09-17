@@ -656,6 +656,7 @@ export const ru: TranslationResources = {
         toggle: "Переключить боковую панель",
         changes: "Изменения",
         files: "Файлы",
+        evidence: "Доказательства",
       },
       toasts: {
         copyFailed: "Не удалось скопировать",
@@ -1927,6 +1928,14 @@ export const ru: TranslationResources = {
       subtitle: "Сведения о PR",
       emptyTitle: "PR пока нет",
       emptyDescription: "Создайте PR для этой рабочей копии, чтобы увидеть здесь сведения о нём.",
+    },
+    evidence: {
+      label: "Доказательства",
+      subtitle: "Материалы проверки",
+      emptyTitle: "Пока нет материалов",
+      emptyDescription: "Запустите рецепт проверки, чтобы сохранить снимки экрана и журналы.",
+      loadFailed: "Не удалось загрузить материалы.",
+      showInChat: "Показать в чате",
     },
     diff: {
       changesLabel: "Изменения",

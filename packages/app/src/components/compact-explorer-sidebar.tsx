@@ -24,6 +24,7 @@ import {
 } from "@/constants/layout";
 import { ChangesSurface } from "@/git/diff-pane";
 import { changesStateSchema, defaultChangesState, type ChangesState } from "@/panels/changes/state";
+import { EvidenceContent } from "@/panels/evidence/evidence-content";
 import { FileExplorerPane } from "./file-explorer-pane";
 import { useKeyboardShiftStyle } from "@/hooks/use-keyboard-shift-style";
 import { shouldUseCompactExplorerKeyboardPadding } from "@/hooks/keyboard-shift-policy";
@@ -353,6 +354,7 @@ function ExplorerSidebarContent({
   const prTabLabel = formatPrTabLabel(prPane.prNumber);
   const availableTabs = useMemo<ExplorerTab[]>(() => {
     const tabs: ExplorerTab[] = isGit ? ["changes", "files"] : ["files"];
+    tabs.push("evidence");
     if (isGit && showPrTab) tabs.push("pr");
     return tabs;
   }, [isGit, showPrTab]);
@@ -383,6 +385,13 @@ function ExplorerSidebarContent({
             label={t("workspace.tabs.explorerSidebar.files")}
             onTabPress={onTabPress}
             testID="explorer-tab-files"
+          />
+          <ExplorerTabButton
+            tab="evidence"
+            active={resolvedTab === "evidence"}
+            label={t("workspace.tabs.explorerSidebar.evidence")}
+            onTabPress={onTabPress}
+            testID="explorer-tab-evidence"
           />
           {isGit && showPrTab && (
             <ExplorerTabButton
@@ -438,6 +447,11 @@ function ExplorerSidebarContent({
               workspaceRoot={workspaceRoot}
               onOpenFile={onOpenFile}
             />
+          </RetainedPanel>
+        ) : null}
+        {mountedTabIds.has("evidence") && workspaceId ? (
+          <RetainedPanel active={resolvedTab === "evidence"}>
+            <EvidenceContent serverId={serverId} workspaceId={workspaceId} />
           </RetainedPanel>
         ) : null}
         {mountedTabIds.has("pr") ? (
