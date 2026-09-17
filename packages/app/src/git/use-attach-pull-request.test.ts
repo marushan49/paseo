@@ -179,3 +179,39 @@ describe("submitAttachPullRequests", () => {
     ).rejects.toThrow("missing 9999");
   });
 });
+
+// Eight numbers used to cost sixteen round trips taken strictly one after
+// another, and the dialog sat on "Saving..." for the sum of all of them. The
+// two queries per number stay: `gh pr list --search` is open-only, so the
+// second one is how a merged pull request is found at all.
+describe("submitAttachPullRequests round trips", () => {
+  it("resolves the numbers at the same time rather than in sequence", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const client: ForgeSearchClient = {
+      searchForge: async (options: { query: string }) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        const number = Number.parseInt(options.query, 10);
+        return {
+          items: Number.isNaN(number) ? [] : [searchItem(number)],
+          authState: "authenticated",
+          error: null,
+          requestId: "test",
+        };
+      },
+    };
+    const attached = await submitAttachPullRequests({
+      client,
+      cwd: "/repo",
+      workspaceKey: "ws-parallel",
+      rawValue: "21,22,23,24",
+      formatInvalid: () => "invalid",
+      formatNotFound: (numbers) => `missing ${numbers.join(", ")}`,
+    });
+    expect(attached.map((entry) => entry.number)).toEqual([21, 22, 23, 24]);
+    expect(peak).toBeGreaterThan(1);
+  });
+});

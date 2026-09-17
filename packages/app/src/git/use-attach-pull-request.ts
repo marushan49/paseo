@@ -131,24 +131,37 @@ export async function submitAttachPullRequests(input: {
   if (numbers === null) {
     throw new Error(input.formatInvalid());
   }
+  // Independent round trips, so they go together: eight numbers used to take
+  // the sum of sixteen lookups while the dialog said "Saving...".
+  const settled = await Promise.all(
+    numbers.map(async (number) => {
+      try {
+        return {
+          number,
+          facts: await resolvePullRequestForAttach({
+            client: input.client,
+            cwd: input.cwd,
+            number,
+          }),
+        };
+      } catch (error) {
+        if (error instanceof AttachPullRequestNotFoundError) {
+          return { number, facts: null };
+        }
+        throw error;
+      }
+    }),
+  );
   const attached: RelatedPullRequest[] = [];
   const missing: number[] = [];
-  for (const number of numbers) {
-    try {
-      const facts = await resolvePullRequestForAttach({
-        client: input.client,
-        cwd: input.cwd,
-        number,
-      });
-      pullRequestCurationStore.attach(input.workspaceKey, facts);
-      attached.push(facts);
-    } catch (error) {
-      if (error instanceof AttachPullRequestNotFoundError) {
-        missing.push(number);
-        continue;
-      }
-      throw error;
+  // Written in the order they were typed, not the order the forge answered.
+  for (const entry of settled) {
+    if (entry.facts === null) {
+      missing.push(entry.number);
+      continue;
     }
+    pullRequestCurationStore.attach(input.workspaceKey, entry.facts);
+    attached.push(entry.facts);
   }
   if (missing.length > 0) {
     throw new Error(input.formatNotFound(missing));
