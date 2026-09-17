@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  VerifyEvidenceArtifactGetRequestSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
+  VerifyEvidenceRunListRequestSchema,
+  VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListRequestSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunRequestSchema,
@@ -77,5 +81,69 @@ describe("verify rpc schemas", () => {
       },
     });
     expect(response.payload.error).toBe("boom");
+  });
+
+  it("parses evidence run list request and response", () => {
+    expect(
+      VerifyEvidenceRunListRequestSchema.parse({
+        type: "verify.evidence.run.list.request",
+        workspaceId: "wks_1",
+        requestId: "req_9",
+      }).type,
+    ).toBe("verify.evidence.run.list.request");
+
+    const response = VerifyEvidenceRunListResponseSchema.parse({
+      type: "verify.evidence.run.list.response",
+      payload: {
+        requestId: "req_9",
+        workspaceId: "wks_1",
+        runs: [
+          {
+            runId: "evr_01",
+            workspaceId: "wks_1",
+            recipe: "verify-case-report",
+            seq: 2,
+            startedAt: "2026-09-17T10:00:00.000Z",
+            finishedAt: "2026-09-17T10:01:00.000Z",
+            status: "pass",
+            artifactCount: 3,
+          },
+        ],
+        error: null,
+      },
+    });
+    expect(response.payload.runs).toHaveLength(1);
+    expect(response.payload.runs[0]?.artifactCount).toBe(3);
+  });
+
+  it("parses evidence artifact get request and response", () => {
+    expect(
+      VerifyEvidenceArtifactGetRequestSchema.parse({
+        type: "verify.evidence.artifact.get.request",
+        workspaceId: "wks_1",
+        runId: "evr_01",
+        name: "screenshot-report",
+        requestId: "req_10",
+      }).name,
+    ).toBe("screenshot-report");
+
+    const response = VerifyEvidenceArtifactGetResponseSchema.parse({
+      type: "verify.evidence.artifact.get.response",
+      payload: {
+        requestId: "req_10",
+        workspaceId: "wks_1",
+        artifact: {
+          name: "screenshot-report",
+          kind: "screenshot",
+          contentType: "image/png",
+          bytes: 1234,
+          sha256: "deadbeef",
+          capturedAt: "2026-09-17T10:00:30.000Z",
+        },
+        dataBase64: "iVBORw0KGgo=",
+        error: null,
+      },
+    });
+    expect(response.payload.artifact?.capturedAt).toBe("2026-09-17T10:00:30.000Z");
   });
 });

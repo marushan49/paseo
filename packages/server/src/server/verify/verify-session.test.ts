@@ -262,3 +262,125 @@ describe.skipIf(!isDaemonBrowserAvailable())("VerifySession with a browser", () 
     }
   }, 60_000);
 });
+
+describe("VerifySession evidence reads", () => {
+  function makeSession(
+    paseoHome: string,
+    messages: SessionOutboundMessage[],
+    knownWorkspace: boolean,
+  ): VerifySession {
+    return new VerifySession({
+      workspaceRegistry: {
+        get: async () => (knownWorkspace ? workspaceRecord(makeDir("paseo-verify-ws-")) : null),
+      },
+      workspaceScripts: { list: async () => [] },
+      host: stubHost(),
+      evidence: new EvidenceStore({ paseoHome }),
+      isBrowserToolsEnabled: () => true,
+      emit: (message) => messages.push(message),
+    });
+  }
+
+  it("lists evidence runs newest first with artifact counts", async () => {
+    const paseoHome = makeDir("paseo-verify-evidence-test-");
+    const store = new EvidenceStore({ paseoHome });
+    const first = await store.createRun({ workspaceId: "wks_1", recipe: "verify-report" });
+    await store.writeArtifact({
+      runId: first.runId,
+      name: "screenshot-report",
+      kind: "screenshot",
+      contentType: "image/png",
+      data: new Uint8Array([137, 80, 78, 71]),
+      capturedAt: "2026-09-17T10:00:30.000Z",
+    });
+    await store.createRun({ workspaceId: "wks_1", recipe: "verify-login" });
+
+    const messages: SessionOutboundMessage[] = [];
+    const session = makeSession(paseoHome, messages, true);
+    await session.handleEvidenceRunListRequest({
+      type: "verify.evidence.run.list.request",
+      workspaceId: "wks_1",
+      requestId: "req_ev_1",
+    });
+
+    expect(messages).toHaveLength(1);
+    const response = messages[0];
+    expect(response.type).toBe("verify.evidence.run.list.response");
+    if (response.type === "verify.evidence.run.list.response") {
+      expect(response.payload.error).toBeNull();
+      expect(response.payload.runs.map((run) => run.recipe)).toEqual([
+        "verify-login",
+        "verify-report",
+      ]);
+      expect(response.payload.runs[1]?.artifactCount).toBe(1);
+    }
+  });
+
+  it("reports an error for unknown workspaces when listing runs", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = makeSession(makeDir("paseo-verify-evidence-test-"), messages, false);
+    await session.handleEvidenceRunListRequest({
+      type: "verify.evidence.run.list.request",
+      workspaceId: "wks_missing",
+      requestId: "req_ev_2",
+    });
+    const response = messages[0];
+    expect(response.type).toBe("verify.evidence.run.list.response");
+    if (response.type === "verify.evidence.run.list.response") {
+      expect(response.payload.runs).toEqual([]);
+      expect(response.payload.error).toMatch(/Unknown workspace/);
+    }
+  });
+
+  it("returns artifact metadata with bytes on get", async () => {
+    const paseoHome = makeDir("paseo-verify-evidence-test-");
+    const store = new EvidenceStore({ paseoHome });
+    const { runId } = await store.createRun({ workspaceId: "wks_1", recipe: "verify-report" });
+    await store.writeArtifact({
+      runId,
+      name: "screenshot-report",
+      kind: "screenshot",
+      contentType: "image/png",
+      data: new Uint8Array([137, 80, 78, 71]),
+      capturedAt: "2026-09-17T10:00:30.000Z",
+    });
+
+    const messages: SessionOutboundMessage[] = [];
+    const session = makeSession(paseoHome, messages, true);
+    await session.handleEvidenceArtifactGetRequest({
+      type: "verify.evidence.artifact.get.request",
+      workspaceId: "wks_1",
+      runId,
+      name: "screenshot-report",
+      requestId: "req_ev_3",
+    });
+
+    const response = messages[0];
+    expect(response.type).toBe("verify.evidence.artifact.get.response");
+    if (response.type === "verify.evidence.artifact.get.response") {
+      expect(response.payload.error).toBeNull();
+      expect(response.payload.artifact?.capturedAt).toBe("2026-09-17T10:00:30.000Z");
+      expect(response.payload.dataBase64).toBe(Buffer.from([137, 80, 78, 71]).toString("base64"));
+    }
+  });
+
+  it("reports missing artifacts without bytes", async () => {
+    const paseoHome = makeDir("paseo-verify-evidence-test-");
+    const messages: SessionOutboundMessage[] = [];
+    const session = makeSession(paseoHome, messages, true);
+    await session.handleEvidenceArtifactGetRequest({
+      type: "verify.evidence.artifact.get.request",
+      workspaceId: "wks_1",
+      runId: "evr_missing",
+      name: "screenshot-report",
+      requestId: "req_ev_4",
+    });
+    const response = messages[0];
+    expect(response.type).toBe("verify.evidence.artifact.get.response");
+    if (response.type === "verify.evidence.artifact.get.response") {
+      expect(response.payload.artifact).toBeNull();
+      expect(response.payload.dataBase64).toBeNull();
+      expect(response.payload.error).toBeTypeOf("string");
+    }
+  });
+});

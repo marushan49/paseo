@@ -93,6 +93,7 @@ export interface ExecuteLocalInput {
   command: BrowserAutomationCommand;
   profile?: string;
   requestId?: string;
+  agentId?: string;
 }
 
 export class DaemonPlaywrightHost {
@@ -144,6 +145,7 @@ export class DaemonPlaywrightHost {
         command: input.command,
         profile: input.profile ?? DEFAULT_VERIFY_PROFILE,
         requestId,
+        ...(input.agentId ? { agentId: input.agentId } : {}),
       });
       this.logger.info({
         verifyBrowser: {
@@ -209,6 +211,7 @@ export class DaemonPlaywrightHost {
       workspaceId: request.workspaceId,
       command: request.command,
       requestId: request.requestId,
+      ...(request.agentId ? { agentId: request.agentId } : {}),
     });
   }
 
@@ -217,6 +220,7 @@ export class DaemonPlaywrightHost {
     command: BrowserAutomationCommand;
     profile: string;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { command, requestId, workspaceId } = input;
     switch (command.command) {
@@ -240,7 +244,12 @@ export class DaemonPlaywrightHost {
         if ("payload" in tab) {
           return tab.payload;
         }
-        const result = await this.runTabCommand({ tab, command, requestId });
+        const result = await this.runTabCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
         const dialogs = takeDialogs(tab);
         return { ...result, ...(dialogs.length > 0 ? { dialogs } : {}) };
       }
@@ -251,6 +260,7 @@ export class DaemonPlaywrightHost {
     tab: DaemonBrowserTab;
     command: BrowserAutomationCommand;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     switch (command.command) {
@@ -271,7 +281,12 @@ export class DaemonPlaywrightHost {
       case "scroll":
         return this.runKeyCommand({ tab, command, requestId });
       default:
-        return this.runOutputCommand({ tab, command, requestId });
+        return this.runOutputCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
     }
   }
 
@@ -431,6 +446,7 @@ export class DaemonPlaywrightHost {
       }
     >;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     switch (command.command) {
@@ -439,7 +455,12 @@ export class DaemonPlaywrightHost {
       case "resize":
         return this.runResizeCommand({ tab, command, requestId });
       case "screenshot":
-        return this.runScreenshotCommand({ tab, command, requestId });
+        return this.runScreenshotCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
       case "logs":
         return this.runLogsCommand({ tab, command, requestId });
       case "evaluate":
@@ -486,9 +507,13 @@ export class DaemonPlaywrightHost {
     tab: DaemonBrowserTab;
     command: Extract<BrowserAutomationCommand, { command: "screenshot" }>;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     const data = await this.captureScreenshot(tab, command.args.fullPage);
+    // Capture time, not write time: with a capture retry the two differ,
+    // and the timeline anchor must point at the moment the pixels existed.
+    const capturedAt = new Date().toISOString();
     const viewport = tab.page.viewportSize() ?? DEFAULT_VERIFY_VIEWPORT;
     const workspaceId = tab.workspaceId;
     let runId = command.args.runId;
@@ -505,6 +530,7 @@ export class DaemonPlaywrightHost {
       const manifest = await this.evidence().createRun({
         workspaceId,
         recipe: "browser-screenshot",
+        ...(input.agentId ? { agentId: input.agentId } : {}),
       });
       runId = manifest.runId;
     }
@@ -515,6 +541,7 @@ export class DaemonPlaywrightHost {
       kind: "screenshot",
       contentType: "image/png",
       data,
+      capturedAt,
     });
     return ok(requestId, {
       command: "screenshot",

@@ -63,6 +63,10 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  VerifyEvidenceArtifactGetRequestSchema,
+  VerifyEvidenceRunListRequestSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
+  VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListRequestSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunRequestSchema,
@@ -3444,6 +3448,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListRequestSchema,
   WorkspaceScriptStartRequestSchema,
   WorkspaceScriptStopRequestSchema,
+  VerifyEvidenceArtifactGetRequestSchema,
+  VerifyEvidenceRunListRequestSchema,
   VerifyRecipeListRequestSchema,
   VerifyRecipeRunRequestSchema,
   SubscribeTerminalRequestSchema,
@@ -6899,8 +6905,12 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListResponseMessageSchema,
   WorkspaceScriptStartResponseMessageSchema,
   WorkspaceScriptStopResponseMessageSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
+  VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunResponseSchema,
+  VerifyEvidenceRunListResponseSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
@@ -7120,8 +7130,18 @@ export type {
 } from "./verify/rpc-schemas.js";
 export type VerifyRecipeListRequest = z.infer<typeof VerifyRecipeListRequestSchema>;
 export type VerifyRecipeRunRequest = z.infer<typeof VerifyRecipeRunRequestSchema>;
+export type VerifyEvidenceRunListRequest = z.infer<typeof VerifyEvidenceRunListRequestSchema>;
+export type VerifyEvidenceArtifactGetRequest = z.infer<
+  typeof VerifyEvidenceArtifactGetRequestSchema
+>;
 export type VerifyRecipeListResponseMessage = z.infer<typeof VerifyRecipeListResponseSchema>;
 export type VerifyRecipeRunResponseMessage = z.infer<typeof VerifyRecipeRunResponseSchema>;
+export type VerifyEvidenceRunListResponseMessage = z.infer<
+  typeof VerifyEvidenceRunListResponseSchema
+>;
+export type VerifyEvidenceArtifactGetResponseMessage = z.infer<
+  typeof VerifyEvidenceArtifactGetResponseSchema
+>;
 export type WorkspaceScriptListResponseMessage = z.infer<
   typeof WorkspaceScriptListResponseMessageSchema
 >;
