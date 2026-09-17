@@ -2500,6 +2500,14 @@ export const fr: TranslationResources = {
           accessibilityLabel: "Injecter les outilsPaseo",
         },
         resourcePolicy: {
+          schedules: {
+            title: "Exécuter les planifications",
+            onHint: "Les planifications se déclenchent à leur cadence sur cet hôte.",
+            offHint:
+              "Les planifications ne se déclencheront pas. Rien ne s'exécute à l'heure prévue.",
+            economyException:
+              "Maintenu par exception à economy, qui arrête sinon toute boucle automatique.",
+          },
           title: "Utilisation des ressources",
           loading: "Chargement de la politique de ressources...",
           options: {

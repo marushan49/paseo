@@ -2439,6 +2439,12 @@ export const ar: TranslationResources = {
           accessibilityLabel: "حقن أدوات Paseo",
         },
         resourcePolicy: {
+          schedules: {
+            title: "تشغيل الجداول",
+            onHint: "تعمل الجداول وفق وتيرتها على هذا المضيف.",
+            offHint: "لن تعمل الجداول. لا شيء يعمل في وقته المحدد.",
+            economyException: "مُفعَّل كاستثناء من economy الذي يوقف عادةً كل حلقة تلقائية.",
+          },
           title: "استخدام الموارد",
           loading: "جارٍ تحميل سياسة الموارد...",
           options: {

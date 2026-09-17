@@ -897,6 +897,47 @@ function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
   );
 }
 
+function ScheduleAutomationRow({
+  policyForbidsLoops,
+  allowScheduledAutomation,
+  disabled,
+  onChange,
+}: {
+  policyForbidsLoops: boolean;
+  allowScheduledAutomation: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const hint = allowScheduledAutomation
+    ? t("settings.host.orchestration.resourcePolicy.schedules.onHint")
+    : t("settings.host.orchestration.resourcePolicy.schedules.offHint");
+  return (
+    <View style={styles.schedulesRow}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.host.orchestration.resourcePolicy.schedules.title")}
+        </Text>
+        <Text style={allowScheduledAutomation ? settingsStyles.rowHint : styles.schedulesWarning}>
+          {hint}
+        </Text>
+        {policyForbidsLoops && allowScheduledAutomation ? (
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.orchestration.resourcePolicy.schedules.economyException")}
+          </Text>
+        ) : null}
+      </View>
+      <Switch
+        value={allowScheduledAutomation}
+        onValueChange={onChange}
+        disabled={disabled}
+        accessibilityLabel={t("settings.host.orchestration.resourcePolicy.schedules.title")}
+        testID="host-page-schedule-automation-switch"
+      />
+    </View>
+  );
+}
+
 function ResourcePolicyCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -913,6 +954,28 @@ function ResourcePolicyCard({ serverId }: { serverId: string }) {
         disabled: isLoading || isSaving || config === null,
       })),
     [config, isLoading, isSaving, t],
+  );
+
+  // economy forbids automated loops, which used to take every schedule down
+  // with it silently. The switch below is the way out, so the card has to say
+  // what the policy currently does to schedules.
+  const policyForbidsLoops = selectedPolicy === "economy";
+  const allowScheduledAutomation = config?.allowScheduledAutomation ?? !policyForbidsLoops;
+
+  const handleSchedulesChange = useCallback(
+    (next: boolean) => {
+      setIsSaving(true);
+      void patchConfig({ allowScheduledAutomation: next })
+        .catch((error) => {
+          console.error("[HostPage] Failed to update scheduled automation", error);
+          Alert.alert(
+            t("common.errors.unableToSave"),
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => setIsSaving(false));
+    },
+    [patchConfig, t],
   );
 
   const handleValueChange = useCallback(
@@ -954,6 +1017,12 @@ function ResourcePolicyCard({ serverId }: { serverId: string }) {
           onValueChange={handleValueChange}
           size="sm"
           testID="host-page-resource-policy-control"
+        />
+        <ScheduleAutomationRow
+          policyForbidsLoops={policyForbidsLoops}
+          allowScheduledAutomation={allowScheduledAutomation}
+          disabled={isLoading || isSaving || config === null}
+          onChange={handleSchedulesChange}
         />
       </View>
     </View>
@@ -1830,6 +1899,18 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: theme.spacing[2],
+  },
+  schedulesRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[3],
+    paddingTop: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  schedulesWarning: {
+    color: theme.colors.statusDanger,
+    fontSize: theme.fontSize.sm,
   },
   resourcePolicyContent: {
     alignItems: "flex-start",

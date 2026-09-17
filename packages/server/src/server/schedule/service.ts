@@ -30,6 +30,7 @@ import type {
 } from "@getpaseo/protocol/schedule/types";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 import type { ResourcePolicyRuntime } from "../resource-policy.js";
+import { resolveScheduleAutomationBlock } from "./automation-gate.js";
 
 const SCHEDULE_TICK_INTERVAL_MS = 1000;
 
@@ -243,6 +244,8 @@ export interface ScheduleServiceOptions {
   now?: () => Date;
   runner?: (schedule: StoredSchedule, runId: string) => Promise<ScheduleExecutionResult>;
   resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "canStartAutomatedLoop">;
+  /** Read live, so flipping the switch takes effect without a daemon restart. */
+  readAllowScheduledAutomation?: () => boolean | undefined;
 }
 
 export class ScheduleService {
@@ -263,6 +266,7 @@ export class ScheduleService {
     schedule: StoredSchedule,
     runId: string,
   ) => Promise<ScheduleExecutionResult>;
+  private readonly readAllowScheduledAutomation: () => boolean | undefined;
   private readonly resourcePolicyRuntime: Pick<
     ResourcePolicyRuntime,
     "canStartAutomatedLoop"
@@ -289,12 +293,13 @@ export class ScheduleService {
     this.now = options.now ?? (() => new Date());
     this.runner = options.runner ?? ((schedule, runId) => this.executeSchedule(schedule, runId));
     this.resourcePolicyRuntime = options.resourcePolicyRuntime ?? null;
+    this.readAllowScheduledAutomation = options.readAllowScheduledAutomation ?? (() => undefined);
   }
 
   async start(): Promise<void> {
-    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
-    if (policyDecision && !policyDecision.allowed) {
-      this.logger.info({ policy: policyDecision.policy }, policyDecision.reason);
+    const blocked = this.automationBlockedReason();
+    if (blocked !== null) {
+      this.logSkippedTick(blocked);
       return;
     }
     await this.recoverInterruptedRuns();
@@ -312,11 +317,11 @@ export class ScheduleService {
   }
 
   async syncResourcePolicy(): Promise<void> {
-    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
-    if (policyDecision && !policyDecision.allowed) {
+    if (this.automationBlockedReason() !== null) {
       await this.stop();
       return;
     }
+    this.lastSkippedTickReason = null;
     await this.start();
   }
 
@@ -595,11 +600,10 @@ export class ScheduleService {
   }
 
   automationBlockedReason(): string | null {
-    const decision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
-    if (!decision || decision.allowed) {
-      return null;
-    }
-    return decision.reason ?? "Automated schedules are disabled by the resource policy.";
+    return resolveScheduleAutomationBlock({
+      runtime: this.resourcePolicyRuntime ?? undefined,
+      allowScheduledAutomation: this.readAllowScheduledAutomation(),
+    });
   }
 
   async tick(): Promise<void> {

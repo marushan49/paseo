@@ -2413,6 +2413,12 @@ export const zhCN: TranslationResources = {
           accessibilityLabel: "注入 Paseo tools",
         },
         resourcePolicy: {
+          schedules: {
+            title: "运行计划任务",
+            onHint: "计划任务将在此主机上按设定周期触发。",
+            offHint: "计划任务不会触发，设定时间不会运行任何内容。",
+            economyException: "作为 economy 的例外保持开启，否则所有自动循环都会停止。",
+          },
           title: "资源使用",
           loading: "正在加载资源策略...",
           options: {

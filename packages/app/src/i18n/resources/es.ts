@@ -2495,6 +2495,13 @@ export const es: TranslationResources = {
           accessibilityLabel: "Inyectar herramientasPaseo",
         },
         resourcePolicy: {
+          schedules: {
+            title: "Ejecutar programaciones",
+            onHint: "Las programaciones se disparan según su cadencia en este host.",
+            offHint: "Las programaciones no se dispararán. Nada se ejecuta a su hora.",
+            economyException:
+              "Activado como excepción a economy, que de lo contrario detiene todo bucle automático.",
+          },
           title: "Uso de recursos",
           loading: "Cargando la política de recursos...",
           options: {

@@ -2477,6 +2477,13 @@ export const ptBR: TranslationResources = {
           accessibilityLabel: "Injetar ferramentas do Paseo",
         },
         resourcePolicy: {
+          schedules: {
+            title: "Executar agendamentos",
+            onHint: "Os agendamentos disparam na cadência definida neste host.",
+            offHint: "Os agendamentos não vão disparar. Nada roda no horário definido.",
+            economyException:
+              "Mantido como exceção ao economy, que do contrário para todo laço automático.",
+          },
           title: "Uso de recursos",
           loading: "Carregando a política de recursos...",
           options: {

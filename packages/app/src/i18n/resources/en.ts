@@ -2564,6 +2564,13 @@ export const en = {
           accessibilityLabel: "Inject Paseo tools",
         },
         resourcePolicy: {
+          schedules: {
+            title: "Run schedules",
+            onHint: "Schedules fire on their cadence on this host.",
+            offHint: "Schedules will not fire. Nothing runs at its set time.",
+            economyException:
+              "Kept on as an exception to economy, which otherwise stops every automated loop.",
+          },
           title: "Resource usage",
           loading: "Loading resource policy...",
           options: {

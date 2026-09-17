@@ -267,6 +267,10 @@ export const PersistedConfigSchema = z
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
         resourcePolicy: ResourcePolicySchema.default("balanced"),
+        // COMPAT(allowScheduledAutomation): added in v0.8.1, remove optional after
+        // 2027-06-30. Has the final word on schedules in both directions;
+        // undefined follows resourcePolicy. See schedule/automation-gate.ts.
+        allowScheduledAutomation: z.boolean().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z

@@ -251,6 +251,8 @@ export const MutableDaemonConfigSchema = z
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
     resourcePolicy: ResourcePolicySchema.default("balanced"),
+    // COMPAT(allowScheduledAutomation): added in v0.8.1, remove optional after 2027-06-30.
+    allowScheduledAutomation: z.boolean().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
@@ -273,6 +275,7 @@ export const MutableDaemonConfigPatchSchema = z
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
     resourcePolicy: ResourcePolicySchema.optional(),
+    allowScheduledAutomation: z.boolean().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),

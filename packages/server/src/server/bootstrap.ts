@@ -1372,6 +1372,7 @@ export async function createPaseoDaemon(
     createPaseoWorktreeWorkspace: createSchedulePaseoWorktreeExternal,
     archiveWorkspace: archiveScheduleWorkspaceExternal,
     resourcePolicyRuntime,
+    readAllowScheduledAutomation: () => daemonConfigStore.get().allowScheduledAutomation,
   });
   await scheduleService.start();
   daemonConfigStore.onFieldChange("resourcePolicy", (value) => {
@@ -1379,6 +1380,9 @@ export async function createPaseoDaemon(
       agentManager.setResourcePolicy(value);
       void scheduleService.syncResourcePolicy();
     }
+  });
+  daemonConfigStore.onFieldChange("allowScheduledAutomation", () => {
+    void scheduleService.syncResourcePolicy();
   });
   agentManager.setAgentArchivedCallback(async (agentId) => {
     try {

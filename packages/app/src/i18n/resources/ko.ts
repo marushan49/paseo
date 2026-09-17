@@ -2450,6 +2450,12 @@ export const ko: TranslationResources = {
           accessibilityLabel: "Paseo 도구 주입",
         },
         resourcePolicy: {
+          schedules: {
+            title: "일정 실행",
+            onHint: "이 호스트에서 일정이 설정 주기대로 실행됩니다.",
+            offHint: "일정이 실행되지 않습니다. 지정 시각에 아무것도 돌지 않습니다.",
+            economyException: "economy의 예외로 켜 둠. 원래는 모든 자동 루프가 중지됩니다.",
+          },
           title: "리소스 사용량",
           loading: "리소스 정책을 불러오는 중...",
           options: {

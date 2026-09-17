@@ -2465,6 +2465,12 @@ export const ja: TranslationResources = {
           accessibilityLabel: "Paseoツールを有効にする",
         },
         resourcePolicy: {
+          schedules: {
+            title: "スケジュールを実行",
+            onHint: "このホストでスケジュールは設定間隔どおりに実行されます。",
+            offHint: "スケジュールは実行されません。設定時刻に何も動きません。",
+            economyException: "economy の例外として有効化。通常は自動ループすべてが停止します。",
+          },
           title: "リソース使用量",
           loading: "リソースポリシーを読み込み中...",
           options: {
