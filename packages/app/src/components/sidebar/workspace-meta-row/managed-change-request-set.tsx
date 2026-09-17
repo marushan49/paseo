@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAttachPullRequestDialog } from "@/git/use-attach-pull-request-dialog";
 import { attachScannedPullRequests, useScanWorkspaceChat } from "@/git/use-scan-workspace-chat";
 import { ScanChatDialog, type ScanChatFinding } from "@/git/scan-chat-dialog";
@@ -6,6 +6,7 @@ import {
   pullRequestCurationStore,
   usePullRequestCuration,
 } from "@/git/pull-request-curation-store";
+import { applyPullRequestCuration } from "@/git/pull-request-curation";
 import type { RelatedPullRequest } from "@/git/related-pull-requests";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -51,7 +52,15 @@ export function ManagedChangeRequestSetList({
   const client = useHostRuntimeClient(serverId);
   const workspace = useWorkspace(serverId, workspaceId);
   const persisted = workspace?.pullRequestCuration;
-  const { curation } = usePullRequestCuration(workspaceKey);
+  const { curation, facts } = usePullRequestCuration(workspaceKey);
+
+  // What attach and scan resolved lives in the store; without this the row
+  // renders the daemon's own list alone and every attachment vanishes on the
+  // way to the screen.
+  const shownPullRequests = useMemo(
+    () => applyPullRequestCuration(pullRequests, facts, curation),
+    [pullRequests, facts, curation],
+  );
 
   // What the daemon stored wins on arrival, which is what makes a set assembled yesterday be
   // there today. Identical decisions change nothing, so the echo of our own write stops here.
@@ -101,7 +110,7 @@ export function ManagedChangeRequestSetList({
   return (
     <>
       <ChangeRequestSetList
-        pullRequests={pullRequests}
+        pullRequests={shownPullRequests}
         onRemovePullRequest={handleRemove}
         onAttachPullRequest={openAttachDialog}
         onScanChat={handleScanChat}
