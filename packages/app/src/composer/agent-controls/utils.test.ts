@@ -187,3 +187,63 @@ describe("resolveAgentModelSelection", () => {
     expect(selection.displayThinking).toBe("Low");
   });
 });
+
+describe("thinking option display", () => {
+  const opusFive = {
+    provider: "claude",
+    id: "claude-opus-5",
+    label: "Opus 5",
+    isDefault: true,
+    defaultThinkingOptionId: "high",
+    thinkingOptions: [
+      { id: "off", label: "Off" },
+      { id: "low", label: "Low" },
+      { id: "medium", label: "Medium" },
+      { id: "high", label: "High" },
+      { id: "xhigh", label: "Xhigh" },
+      { id: "max", label: "Max" },
+    ],
+  };
+
+  it("shows the option the agent is on", () => {
+    const selection = resolveAgentModelSelection({
+      models: [opusFive],
+      runtimeModelId: "claude-opus-5",
+      configuredModelId: "claude-opus-5",
+      explicitThinkingOptionId: "xhigh",
+    });
+    expect(selection.selectedThinkingId).toBe("xhigh");
+  });
+
+  // Switching to a model with a shorter list used to relabel the agent as "off",
+  // the first entry, and every pick then looked like it changed nothing.
+  it("keeps an option the model does not list instead of claiming the first one", () => {
+    const selection = resolveAgentModelSelection({
+      models: [
+        {
+          ...opusFive,
+          thinkingOptions: [
+            { id: "off", label: "Off" },
+            { id: "low", label: "Low" },
+            { id: "high", label: "High" },
+          ],
+        },
+      ],
+      runtimeModelId: "claude-opus-5",
+      configuredModelId: "claude-opus-5",
+      explicitThinkingOptionId: "ultracode",
+    });
+    expect(selection.selectedThinkingId).toBe("ultracode");
+    expect(selection.displayThinking).toBe("Ultracode");
+  });
+
+  it("falls back to the first option only when the agent has none", () => {
+    const selection = resolveAgentModelSelection({
+      models: [{ ...opusFive, defaultThinkingOptionId: undefined }],
+      runtimeModelId: "claude-opus-5",
+      configuredModelId: "claude-opus-5",
+      explicitThinkingOptionId: null,
+    });
+    expect(selection.selectedThinkingId).toBe("off");
+  });
+});
