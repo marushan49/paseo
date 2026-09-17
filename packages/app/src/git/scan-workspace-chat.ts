@@ -122,15 +122,31 @@ export async function scanTranscriptForPullRequests(input: {
   };
 }
 
+/**
+ * The timeline serves envelopes: provider, timestamps and sequence numbers
+ * around an `item` that holds the message. Reading `type` off the envelope
+ * matches nothing at all, and does so silently, so both shapes are accepted.
+ */
 function messageText(entry: unknown): string | null {
-  if (typeof entry !== "object" || entry === null) {
+  const item = timelineItem(entry);
+  if (item === null) {
     return null;
   }
-  const item = entry as { type?: unknown; text?: unknown };
   if (item.type !== "user_message" && item.type !== "assistant_message") {
     return null;
   }
   return typeof item.text === "string" ? item.text : null;
+}
+
+function timelineItem(entry: unknown): { type?: unknown; text?: unknown } | null {
+  if (typeof entry !== "object" || entry === null) {
+    return null;
+  }
+  const envelope = entry as { item?: unknown; type?: unknown; text?: unknown };
+  if (typeof envelope.item === "object" && envelope.item !== null) {
+    return envelope.item as { type?: unknown; text?: unknown };
+  }
+  return envelope;
 }
 
 function sameRepo(repo: ScanRepository, owner?: string, name?: string): boolean {

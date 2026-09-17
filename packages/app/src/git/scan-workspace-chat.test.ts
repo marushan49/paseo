@@ -6,7 +6,16 @@ import {
 } from "@/git/scan-workspace-chat";
 import type { RelatedPullRequest } from "@/git/related-pull-requests";
 
-const message = (type: "user_message" | "assistant_message", text: string) => ({ type, text });
+// The timeline hands back envelopes, not the items themselves: the message sits
+// in `item`, with provider and sequence numbers around it. A filter written
+// against the bare item silently matches nothing.
+const message = (type: "user_message" | "assistant_message", text: string) => ({
+  provider: "claude",
+  timestamp: "2026-09-17T10:00:00.000Z",
+  seqStart: 1,
+  seqEnd: 1,
+  item: { type, text },
+});
 
 function facts(number: number): RelatedPullRequest {
   return {
@@ -22,13 +31,15 @@ describe("collectPullRequestCandidates", () => {
   it("reads what was said, not what tools printed", () => {
     const candidates = collectPullRequestCandidates({
       entries: [
-        message("assistant_method" as never, "ignored"),
         message("user_message", "look at #1335"),
         {
-          type: "tool_call",
-          // The shape does not matter: anything that is not a message is skipped,
-          // which is where the noise lived — gh output, diffs, quoted logs.
-          result: { output: "merged #888 and #1288 earlier today" },
+          provider: "claude",
+          item: {
+            type: "tool_call",
+            // Anything that is not a message is skipped, which is where the
+            // noise lived: gh output, diffs, quoted logs.
+            result: { output: "merged #888 and #1288 earlier today" },
+          },
         },
       ] as never,
       repo: null,
