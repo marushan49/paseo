@@ -575,12 +575,41 @@ export class ScheduleService {
     return this.inspect(id);
   }
 
-  async tick(): Promise<void> {
-    await this.flushDeferredArchives();
-    const policyDecision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
-    if (policyDecision && !policyDecision.allowed) {
+  /**
+   * Why this host will not start any schedule right now, or null.
+   *
+   * The tick below returns before it reads a single schedule when the resource
+   * policy forbids automated loops. Nothing about the stored record changes, so
+   * a list that does not carry this reads "active, next run soon" for a schedule
+   * that will never run again until the setting changes.
+   */
+  /** Once per reason, not once per tick: the tick runs on a timer. */
+  private lastSkippedTickReason: string | null = null;
+
+  private logSkippedTick(reason: string): void {
+    if (this.lastSkippedTickReason === reason) {
       return;
     }
+    this.lastSkippedTickReason = reason;
+    this.logger.warn({ reason }, "Skipping schedule tick: automation is disabled");
+  }
+
+  automationBlockedReason(): string | null {
+    const decision = this.resourcePolicyRuntime?.canStartAutomatedLoop("schedules");
+    if (!decision || decision.allowed) {
+      return null;
+    }
+    return decision.reason ?? "Automated schedules are disabled by the resource policy.";
+  }
+
+  async tick(): Promise<void> {
+    await this.flushDeferredArchives();
+    const blocked = this.automationBlockedReason();
+    if (blocked !== null) {
+      this.logSkippedTick(blocked);
+      return;
+    }
+    this.lastSkippedTickReason = null;
     const now = this.now();
     const schedules = await this.store.list();
     for (const schedule of schedules) {

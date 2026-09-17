@@ -10,7 +10,12 @@ function makeSession(schedule: { [K in keyof ScheduleService]?: unknown }) {
   const emitted: SessionOutboundMessage[] = [];
   const session = new ScheduleSession({
     host: { emit: (message) => emitted.push(message) },
-    scheduleService: createStub<ScheduleService>(schedule),
+    scheduleService: createStub<ScheduleService>({
+      // Every summary the session emits asks the host whether automation is
+      // blocked, so the stub answers it unless a test says otherwise.
+      automationBlockedReason: () => null,
+      ...schedule,
+    }),
     logger: pino({ level: "silent" }),
   });
   return { session, emitted };

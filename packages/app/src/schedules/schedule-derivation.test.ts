@@ -187,3 +187,35 @@ describe("formatScheduleLastRun", () => {
     expect(label).not.toContain("failed");
   });
 });
+
+// A resource policy that forbids automated loops stops the daemon's tick before
+// it looks at any schedule. Nothing about the stored record changes, so without
+// this the row keeps promising a next run that will never come.
+describe("resolveSchedule with automation blocked", () => {
+  const blocked = "Automated schedules is disabled by the economy resource policy.";
+
+  it("reports blocked instead of active", () => {
+    const resolved = resolve(makeSchedule({ automationBlockedReason: blocked }));
+    expect(resolved.state).toBe("blocked");
+    expect(resolved.bucket).toBe("runnable");
+  });
+
+  it("does not hide a paused, expired or finished schedule behind the block", () => {
+    expect(
+      resolve(makeSchedule({ status: "paused", automationBlockedReason: blocked })).state,
+    ).toBe("paused");
+    expect(
+      resolve(makeSchedule({ status: "completed", automationBlockedReason: blocked })).state,
+    ).toBe("finished");
+    expect(
+      resolve(
+        makeSchedule({ expiresAt: "2026-07-01T00:00:00.000Z", automationBlockedReason: blocked }),
+      ).state,
+    ).toBe("expired");
+  });
+
+  it("stays active when nothing blocks it", () => {
+    expect(resolve(makeSchedule({ automationBlockedReason: null })).state).toBe("active");
+    expect(resolve(makeSchedule({})).state).toBe("active");
+  });
+});

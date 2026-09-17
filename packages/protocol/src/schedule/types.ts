@@ -94,6 +94,12 @@ export const ScheduleSummarySchema = StoredScheduleSchema.omit({
   // COMPAT(scheduleLastRun): added in v0.8.1, remove after 2027-03-31 when older
   // daemons are unsupported. Absent means the daemon predates run outcomes.
   lastRun: ScheduleLastRunSchema.nullable().optional(),
+  // COMPAT(scheduleAutomationBlocked): added in v0.8.1, remove after 2027-06-30.
+  // Why this host will not start the schedule even though the record says active:
+  // the resource policy can forbid automated loops, and the daemon then returns
+  // from its tick before reading any schedule. Host-wide in truth, carried per
+  // schedule because that is where someone looks for it. Null means nothing blocks it.
+  automationBlockedReason: z.string().nullable().optional(),
 });
 export type ScheduleSummary = z.infer<typeof ScheduleSummarySchema>;
 

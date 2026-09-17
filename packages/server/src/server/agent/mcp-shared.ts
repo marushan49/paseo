@@ -254,9 +254,12 @@ export function parseDurationString(input: string): number {
   return totalMs;
 }
 
-export function toScheduleSummary(schedule: z.infer<typeof StoredScheduleSchema>) {
+export function toScheduleSummary(
+  schedule: z.infer<typeof StoredScheduleSchema>,
+  automationBlockedReason: string | null = null,
+) {
   const { runs, ...summary } = schedule;
-  return { ...summary, lastRun: latestScheduleRun(runs) };
+  return { ...summary, lastRun: latestScheduleRun(runs), automationBlockedReason };
 }
 
 // Runs are append-only, so the newest is the last one. Its output is left out:

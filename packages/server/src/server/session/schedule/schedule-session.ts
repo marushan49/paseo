@@ -30,7 +30,7 @@ export class ScheduleSession {
     SessionOutboundMessage,
     { type: "schedule/list/response" }
   >["payload"]["schedules"][number] {
-    return toScheduleSummary(schedule);
+    return toScheduleSummary(schedule, this.scheduleService.automationBlockedReason());
   }
 
   private emitScheduleRpcError(
