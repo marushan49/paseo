@@ -133,6 +133,25 @@ const PersistedWorkspaceRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // COMPAT(curatedPullRequestFacts): added in v0.8.1, remove optional parsing after
+  // 2027-06-30. What the numbers above stand for. Decisions alone cannot be drawn: a
+  // stored `added: [1401]` with nothing to render it from is why a set assembled
+  // yesterday came back as "No pull requests yet".
+  pullRequestFacts: z
+    .array(
+      z.object({
+        number: z.number().int().positive(),
+        url: z.string(),
+        title: z.string().optional(),
+        state: z.enum(["open", "merged", "closed"]),
+        isDraft: z.boolean().optional(),
+        headRefName: z.string().optional(),
+        baseRefName: z.string().optional(),
+      }),
+    )
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;

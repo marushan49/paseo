@@ -68,10 +68,16 @@ export function ManagedChangeRequestSetList({
     pullRequestCurationStore.hydrate(workspaceKey, persisted);
   }, [workspaceKey, persisted]);
 
+  // The facts go with the decision. The daemon cannot draw a bare number, so a
+  // set sent without them comes back empty on the next client that asks.
   const persistCuration = useCallback(() => {
     if (!client) return;
     void client
-      .curateWorkspacePullRequests(workspaceId, pullRequestCurationStore.getCuration(workspaceKey))
+      .curateWorkspacePullRequests(
+        workspaceId,
+        pullRequestCurationStore.getCuration(workspaceKey),
+        pullRequestCurationStore.getFacts(workspaceKey),
+      )
       .catch(() => {
         // The set still reads correctly from the cache; the daemon rejects loudly enough in its
         // own log, and nothing here is worth interrupting the sidebar for.

@@ -16,6 +16,12 @@ import type { ForgeAccount, ForgeAccountScope } from "@getpaseo/protocol/message
 import { discoverForgeAccounts } from "./forge-account-discovery.js";
 import { readGhAuthStatus } from "../services/github-service.js";
 import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
+import {
+  mergeCuratedPullRequestFacts,
+  resolveWorkspacePullRequestSet,
+  selectCuratedPullRequestFacts,
+  type CuratedPullRequestFacts,
+} from "./workspace-pull-request-set.js";
 import { normalizeForgeConfigDir } from "./workspace-forge-account.js";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
@@ -2923,6 +2929,7 @@ export class Session {
         return this.handleWorkspacePullRequestsCurateRequest(
           msg.workspaceId,
           { added: [...msg.curation.added], removed: [...msg.curation.removed] },
+          msg.facts,
           msg.requestId,
         );
       default:
@@ -3870,6 +3877,7 @@ export class Session {
   private async handleWorkspacePullRequestsCurateRequest(
     workspaceId: string,
     curation: { added: number[]; removed: number[] },
+    facts: readonly CuratedPullRequestFacts[] | undefined,
     requestId: string,
   ): Promise<void> {
     const logContext = { workspaceId, requestId };
@@ -3889,9 +3897,18 @@ export class Session {
 
     try {
       const updatedAt = new Date().toISOString();
+      // The facts travel with the decision. A number the daemon cannot draw is
+      // a decision nobody can see, which is what made an attached pull request
+      // vanish on the way back from the record.
+      const storedFacts = selectCuratedPullRequestFacts(normalized, facts);
       const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
         ...existing,
         pullRequestCuration: normalized,
+        pullRequestFacts: mergeCuratedPullRequestFacts(
+          existing.pullRequestFacts,
+          storedFacts,
+          normalized,
+        ),
         updatedAt,
       }));
       if (!updated) {
@@ -5884,15 +5901,23 @@ export class Session {
     };
   }
 
+  /**
+   * The set a row draws, which is the derived one with the workspace's own
+   * decisions applied. Applying them here rather than in each client is what
+   * makes a set assembled on one machine show up on the next.
+   */
   private buildWorkspaceGitHubRuntimePayload(
     snapshot: WorkspaceGitRuntimeSnapshot,
+    workspace: PersistedWorkspaceRecord,
   ): NonNullable<WorkspaceDescriptorPayload["githubRuntime"]> {
+    const relatedPullRequests = resolveWorkspacePullRequestSet(
+      snapshot.forge.relatedPullRequests,
+      workspace,
+    );
     return {
       featuresEnabled: snapshot.forge.featuresEnabled,
       pullRequest: snapshot.forge.pullRequest,
-      ...(snapshot.forge.relatedPullRequests
-        ? { relatedPullRequests: snapshot.forge.relatedPullRequests }
-        : {}),
+      ...(relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
       error: snapshot.forge.error,
     };
   }
@@ -5915,7 +5940,7 @@ export class Session {
       name: resolveWorkspaceName({ title: workspace.title, derivedDisplayName: displayName }),
       diffStat: snapshot.git.diffStat ?? null,
       gitRuntime: this.buildWorkspaceGitRuntimePayload(snapshot) ?? undefined,
-      githubRuntime: this.buildWorkspaceGitHubRuntimePayload(snapshot),
+      githubRuntime: this.buildWorkspaceGitHubRuntimePayload(snapshot, workspace),
       // Reuse the forge already resolved on the snapshot (probe-aware; GitHub-only
       // resolves to "github") so the sidebar/hover-card brand mark matches the
       // status projection without a second resolve.

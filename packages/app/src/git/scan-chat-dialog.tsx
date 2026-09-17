@@ -94,7 +94,7 @@ export function ScanChatDialog({
         ) : null}
         <View style={styles.actions}>
           <Button variant="ghost" onPress={onClose} testID="scan-chat-cancel">
-            {t("common.cancel")}
+            {t("common.actions.cancel")}
           </Button>
           <Button onPress={handleAttach} disabled={selected.length === 0} testID="scan-chat-attach">
             {t("workspace.git.pr.set.scanChatAttach", { count: selected.length })}

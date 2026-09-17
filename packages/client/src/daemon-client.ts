@@ -508,6 +508,13 @@ type WriteProjectConfigPayload = Extract<
   { type: "write_project_config_response" }
 >["payload"];
 
+type CuratedPullRequestFacts = Extract<
+  SessionInboundMessage,
+  { type: "workspace.pull_requests.curate.request" }
+>["facts"] extends readonly (infer T)[] | undefined
+  ? T
+  : never;
+
 type ListCommandsPayload = ListCommandsResponse["payload"];
 type ListCommandsDraftConfig = Pick<
   AgentSessionConfig,
@@ -3013,6 +3020,10 @@ export class DaemonClient {
   async curateWorkspacePullRequests(
     workspaceId: string,
     curation: { added: readonly number[]; removed: readonly number[] },
+    // COMPAT(curatedPullRequestFacts): added in v0.8.1. What the numbers stand
+    // for, so the daemon can hand the set back to any client instead of only to
+    // the one that resolved it.
+    facts?: readonly CuratedPullRequestFacts[],
     requestId?: string,
   ): Promise<{ curation: { added: number[]; removed: number[] } | null }> {
     const payload = await this.sendCorrelatedSessionRequest({
@@ -3021,6 +3032,19 @@ export class DaemonClient {
         type: "workspace.pull_requests.curate.request",
         workspaceId,
         curation: { added: [...curation.added], removed: [...curation.removed] },
+        ...(facts && facts.length > 0
+          ? {
+              facts: facts.map((entry) => ({
+                number: entry.number,
+                url: entry.url,
+                state: entry.state,
+                ...(entry.title === undefined ? {} : { title: entry.title }),
+                ...(entry.isDraft === undefined ? {} : { isDraft: entry.isDraft }),
+                ...(entry.headRefName === undefined ? {} : { headRefName: entry.headRefName }),
+                ...(entry.baseRefName === undefined ? {} : { baseRefName: entry.baseRefName }),
+              })),
+            }
+          : {}),
       },
       responseType: "workspace.pull_requests.curate.response",
     });

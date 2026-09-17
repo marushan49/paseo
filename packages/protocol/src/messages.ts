@@ -1047,10 +1047,27 @@ export const PullRequestCurationSchema = z.object({
   removed: z.array(z.number().int().positive()),
 });
 
+// COMPAT(curatedPullRequestFacts): added in v0.8.1, remove optional after
+// 2027-06-30. What the client resolved for the numbers it added. The daemon
+// stores decisions, and a number alone cannot be drawn: without the title, url
+// and state, a set someone assembled comes back empty after a restart. The
+// client already looked these up to show them, so it hands them over rather
+// than making the daemon repeat the lookup.
+export const CuratedPullRequestFactsSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.string(),
+  title: z.string().optional(),
+  state: z.enum(["open", "merged", "closed"]),
+  isDraft: z.boolean().optional(),
+  headRefName: z.string().optional(),
+  baseRefName: z.string().optional(),
+});
+
 export const WorkspacePullRequestsCurateRequestSchema = z.object({
   type: z.literal("workspace.pull_requests.curate.request"),
   workspaceId: z.string(),
   curation: PullRequestCurationSchema,
+  facts: z.array(CuratedPullRequestFactsSchema).optional(),
   requestId: z.string(),
 });
 
