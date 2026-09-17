@@ -17,6 +17,7 @@ import { discoverForgeAccounts } from "./forge-account-discovery.js";
 import { readGhAuthStatus } from "../services/github-service.js";
 import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
 import {
+  buildCuratedOnlyGitHubRuntime,
   mergeCuratedPullRequestFacts,
   resolveWorkspacePullRequestSet,
   selectCuratedPullRequestFacts,
@@ -5875,6 +5876,10 @@ export class Session {
       activityAt: null,
       diffStat,
       scripts: this.buildWorkspaceScriptPayloadSnapshot(workspace, resolvedProjectRecord),
+      // A workspace sitting on a plain directory gets no derived set, but what
+      // someone attached to it by hand is still its set. Leaving this out is
+      // what made an attached pull request invisible on exactly those rows.
+      ...buildCuratedOnlyGitHubRuntime(workspace),
       ...(resolvedProjectRecord
         ? {
             project: await this.buildProjectPlacementForWorkspace(workspace, resolvedProjectRecord),

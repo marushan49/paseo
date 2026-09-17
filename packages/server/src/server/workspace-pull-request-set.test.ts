@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCuratedOnlyGitHubRuntime,
   resolveWorkspacePullRequestSet,
   selectCuratedPullRequestFacts,
   type WorkspaceSetPullRequest,
@@ -91,5 +92,25 @@ describe("selectCuratedPullRequestFacts", () => {
   it("stores nothing rather than an empty list", () => {
     expect(selectCuratedPullRequestFacts({ added: [], removed: [] }, [])).toBeNull();
     expect(selectCuratedPullRequestFacts({ added: [1401], removed: [] }, undefined)).toBeNull();
+  });
+});
+
+describe("buildCuratedOnlyGitHubRuntime", () => {
+  // A workspace on a plain directory has no derived set, and the describe path
+  // for it reported no github runtime at all. An attachment there was stored,
+  // sent and then dropped on the last step before the row.
+  it("gives a directory workspace a runtime for what was attached to it", () => {
+    const { githubRuntime } = buildCuratedOnlyGitHubRuntime({
+      pullRequestCuration: { added: [1401], removed: [] },
+      pullRequestFacts: [facts],
+    });
+    expect(githubRuntime?.relatedPullRequests).toEqual([{ ...facts, origin: "manual" }]);
+    expect(githubRuntime?.pullRequest).toBeNull();
+  });
+
+  it("stays silent when nothing was attached", () => {
+    expect(
+      buildCuratedOnlyGitHubRuntime({ pullRequestCuration: null, pullRequestFacts: null }),
+    ).toEqual({});
   });
 });

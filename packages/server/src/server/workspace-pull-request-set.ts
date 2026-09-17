@@ -85,6 +85,40 @@ export function mergeCuratedPullRequestFacts(
   return merged.length > 0 ? merged : null;
 }
 
+/**
+ * The github runtime a workspace has purely because someone attached something
+ * to it, for rows the forge never derived a set for. Returns nothing when there
+ * is nothing to show, so a workspace without attachments keeps reporting no
+ * runtime at all rather than an empty one.
+ *
+ * `featuresEnabled` is true because the set it carries is real and the row has
+ * to be allowed to draw it; the absent `pullRequest` still says there is no
+ * change request for a checked-out branch here.
+ */
+export function buildCuratedOnlyGitHubRuntime(
+  record: Pick<PersistedWorkspaceRecord, "pullRequestCuration" | "pullRequestFacts">,
+): { githubRuntime?: CuratedOnlyGitHubRuntime } {
+  const relatedPullRequests = resolveWorkspacePullRequestSet(undefined, record);
+  if (relatedPullRequests.length === 0) {
+    return {};
+  }
+  return {
+    githubRuntime: {
+      featuresEnabled: true,
+      pullRequest: null,
+      relatedPullRequests,
+      error: null,
+    },
+  };
+}
+
+interface CuratedOnlyGitHubRuntime {
+  featuresEnabled: boolean;
+  pullRequest: null;
+  relatedPullRequests: WorkspaceSetPullRequest[];
+  error: null;
+}
+
 /** A set entry stripped of how it got there, which is what the wire carries. */
 export type CuratedPullRequestFacts = Omit<WorkspaceSetPullRequest, "origin" | "stackIndex">;
 
