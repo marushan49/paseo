@@ -42,6 +42,8 @@ import {
   type WorkspaceScriptListRequest,
   type WorkspaceScriptStartRequest,
   type WorkspaceScriptStopRequest,
+  type VerifyEvidenceArtifactGetRequest,
+  type VerifyEvidenceRunListRequest,
   type VerifyRecipeListRequest,
   type VerifyRecipeRunRequest,
   type CloseItemsRequest,
@@ -3076,6 +3078,10 @@ export class Session {
         return this.handleVerifyRecipeListRequest(msg);
       case "verify.recipe.run.request":
         return this.handleVerifyRecipeRunRequest(msg);
+      case "verify.evidence.run.list.request":
+        return this.handleVerifyEvidenceRunListRequest(msg);
+      case "verify.evidence.artifact.get.request":
+        return this.handleVerifyEvidenceArtifactGetRequest(msg);
       default:
         return undefined;
     }
@@ -3115,6 +3121,43 @@ export class Session {
       return;
     }
     await this.verifySession.handleRunRequest(request);
+  }
+
+  private async handleVerifyEvidenceRunListRequest(
+    request: VerifyEvidenceRunListRequest,
+  ): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.evidence.run.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          runs: [],
+          error: "Verification evidence is unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleEvidenceRunListRequest(request);
+  }
+
+  private async handleVerifyEvidenceArtifactGetRequest(
+    request: VerifyEvidenceArtifactGetRequest,
+  ): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.evidence.artifact.get.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          artifact: null,
+          dataBase64: null,
+          error: "Verification evidence is unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleEvidenceArtifactGetRequest(request);
   }
 
   private dispatchScheduleMessage(msg: SessionInboundMessage): Promise<void> | undefined {

@@ -391,13 +391,14 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Capture browser screenshot",
       description:
-        "Capture a PNG screenshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs. Set fullPage to true to capture the full page.",
+        "Capture a PNG screenshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs. Set fullPage to true to capture the full page. The screenshot is stored as evidence and only a reference is returned — no image tokens. Set reveal to true only when you must visually inspect the page yourself.",
       inputSchema: {
         browserId: BrowserAutomationBrowserIdSchema,
         fullPage: z.boolean().default(false),
+        reveal: z.boolean().default(false),
       },
     },
-    async ({ browserId, fullPage }) => {
+    async ({ browserId, fullPage, reveal }) => {
       const context = resolveBrowserToolContext(options);
       const payload = await options.broker.execute({
         agentId: context.agentId,
@@ -409,6 +410,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
           args: {
             browserId,
             fullPage: fullPage ?? false,
+            reveal: reveal ?? false,
           },
         },
       });
@@ -823,7 +825,7 @@ function browserToolSuccessContent(
 function browserToolImageContent(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): PaseoToolResult["content"][number] | null {
-  if (result.command !== "screenshot") {
+  if (result.command !== "screenshot" || !result.dataBase64) {
     return null;
   }
 
@@ -926,7 +928,8 @@ function summarizeBrowserMediaSuccess(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): string | null {
   if (result.command === "screenshot") {
-    return `Captured browser screenshot (${result.width}x${result.height}).`;
+    const base = `Captured browser screenshot (${result.width}x${result.height}).`;
+    return result.evidenceRef ? `${base} Evidence: ${result.evidenceRef}` : base;
   }
   if (result.command === "upload") {
     const count = result.filePaths.length;

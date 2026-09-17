@@ -21,6 +21,7 @@ import type {
 import type { BrowserHostClient } from "../browser-tools/broker.js";
 import { browserToolsFailure, type BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { resolveBrowserExecutable } from "./browser-capability.js";
+import { EvidenceStore, formatEvidenceRef } from "./evidence-store.js";
 import {
   collectSnapshotNodes,
   formatSnapshotYaml,
@@ -92,6 +93,7 @@ export interface ExecuteLocalInput {
   command: BrowserAutomationCommand;
   profile?: string;
   requestId?: string;
+  agentId?: string;
 }
 
 export class DaemonPlaywrightHost {
@@ -102,6 +104,14 @@ export class DaemonPlaywrightHost {
   private executablePath: string | null = null;
   private useNoSandboxFallback = false;
   private requestSequence = 0;
+  private evidenceStore: EvidenceStore | null = null;
+
+  private evidence(): EvidenceStore {
+    if (!this.evidenceStore) {
+      this.evidenceStore = new EvidenceStore({ paseoHome: this.paseoHome });
+    }
+    return this.evidenceStore;
+  }
 
   public constructor(options: DaemonPlaywrightHostOptions) {
     this.paseoHome = options.paseoHome;
@@ -135,6 +145,7 @@ export class DaemonPlaywrightHost {
         command: input.command,
         profile: input.profile ?? DEFAULT_VERIFY_PROFILE,
         requestId,
+        ...(input.agentId ? { agentId: input.agentId } : {}),
       });
       this.logger.info({
         verifyBrowser: {
@@ -200,6 +211,7 @@ export class DaemonPlaywrightHost {
       workspaceId: request.workspaceId,
       command: request.command,
       requestId: request.requestId,
+      ...(request.agentId ? { agentId: request.agentId } : {}),
     });
   }
 
@@ -208,6 +220,7 @@ export class DaemonPlaywrightHost {
     command: BrowserAutomationCommand;
     profile: string;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { command, requestId, workspaceId } = input;
     switch (command.command) {
@@ -231,7 +244,12 @@ export class DaemonPlaywrightHost {
         if ("payload" in tab) {
           return tab.payload;
         }
-        const result = await this.runTabCommand({ tab, command, requestId });
+        const result = await this.runTabCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
         const dialogs = takeDialogs(tab);
         return { ...result, ...(dialogs.length > 0 ? { dialogs } : {}) };
       }
@@ -242,6 +260,7 @@ export class DaemonPlaywrightHost {
     tab: DaemonBrowserTab;
     command: BrowserAutomationCommand;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     switch (command.command) {
@@ -262,7 +281,12 @@ export class DaemonPlaywrightHost {
       case "scroll":
         return this.runKeyCommand({ tab, command, requestId });
       default:
-        return this.runOutputCommand({ tab, command, requestId });
+        return this.runOutputCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
     }
   }
 
@@ -422,6 +446,7 @@ export class DaemonPlaywrightHost {
       }
     >;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     switch (command.command) {
@@ -430,7 +455,12 @@ export class DaemonPlaywrightHost {
       case "resize":
         return this.runResizeCommand({ tab, command, requestId });
       case "screenshot":
-        return this.runScreenshotCommand({ tab, command, requestId });
+        return this.runScreenshotCommand({
+          tab,
+          command,
+          requestId,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        });
       case "logs":
         return this.runLogsCommand({ tab, command, requestId });
       case "evaluate":
@@ -477,18 +507,63 @@ export class DaemonPlaywrightHost {
     tab: DaemonBrowserTab;
     command: Extract<BrowserAutomationCommand, { command: "screenshot" }>;
     requestId: string;
+    agentId?: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
-    const data = await tab.page.screenshot({ fullPage: command.args.fullPage });
+    const data = await this.captureScreenshot(tab, command.args.fullPage);
+    // Capture time, not write time: with a capture retry the two differ,
+    // and the timeline anchor must point at the moment the pixels existed.
+    const capturedAt = new Date().toISOString();
     const viewport = tab.page.viewportSize() ?? DEFAULT_VERIFY_VIEWPORT;
+    const workspaceId = tab.workspaceId;
+    let runId = command.args.runId;
+    if (runId) {
+      const manifest = await this.evidence().getManifest({ workspaceId, runId });
+      if (!manifest) {
+        return browserToolsFailure({
+          requestId,
+          code: "browser_unknown_error",
+          message: `Evidence run not found: ${runId}`,
+        });
+      }
+    } else {
+      const manifest = await this.evidence().createRun({
+        workspaceId,
+        recipe: "browser-screenshot",
+        ...(input.agentId ? { agentId: input.agentId } : {}),
+      });
+      runId = manifest.runId;
+    }
+    const name = command.args.artifactName ?? "screenshot";
+    const entry = await this.evidence().writeArtifact({
+      runId,
+      name,
+      kind: "screenshot",
+      contentType: "image/png",
+      data,
+      capturedAt,
+    });
     return ok(requestId, {
       command: "screenshot",
       browserId: tab.browserId,
       mimeType: "image/png",
-      dataBase64: data.toString("base64"),
+      ...(command.args.reveal ? { dataBase64: data.toString("base64") } : {}),
+      evidenceRef: formatEvidenceRef({ workspaceId, runId, name }),
+      bytes: entry.bytes,
+      sha256: entry.sha256,
       width: viewport.width,
       height: viewport.height,
     });
+  }
+
+  private async captureScreenshot(tab: DaemonBrowserTab, fullPage: boolean): Promise<Buffer> {
+    try {
+      return await tab.page.screenshot({ fullPage });
+    } catch {
+      // The headless compositor is occasionally not ready for the first
+      // capture in a fresh context; a single immediate retry succeeds.
+      return await tab.page.screenshot({ fullPage });
+    }
   }
 
   private async runLogsCommand(input: {

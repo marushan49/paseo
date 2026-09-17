@@ -71,3 +71,78 @@ export type VerifyRecipeListRequest = z.infer<typeof VerifyRecipeListRequestSche
 export type VerifyRecipeListResponse = z.infer<typeof VerifyRecipeListResponseSchema>;
 export type VerifyRecipeRunRequest = z.infer<typeof VerifyRecipeRunRequestSchema>;
 export type VerifyRecipeRunResponse = z.infer<typeof VerifyRecipeRunResponseSchema>;
+
+export const EvidenceTimelineCursorSchema = z.object({
+  epoch: z.string(),
+  seq: z.number().int().nonnegative(),
+});
+
+export const EvidenceArtifactSummarySchema = z.object({
+  name: z.string(),
+  kind: z.string(),
+  contentType: z.string(),
+  bytes: z.number().int().nonnegative(),
+  sha256: z.string(),
+  capturedAt: z.string().optional(),
+  timelineCursor: EvidenceTimelineCursorSchema.optional(),
+});
+
+export const EvidenceRunSummarySchema = z.object({
+  runId: z.string(),
+  workspaceId: z.string(),
+  recipe: z.string(),
+  seq: z.number().int().nonnegative(),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+  status: z.enum(["pass", "fail", "error"]).optional(),
+  agentId: z.string().optional(),
+  artifactCount: z.number().int().nonnegative(),
+  artifacts: z.array(EvidenceArtifactSummarySchema).optional(),
+});
+
+export const VerifyEvidenceRunListRequestSchema = z.object({
+  type: z.literal("verify.evidence.run.list.request"),
+  workspaceId: z.string(),
+  requestId: z.string(),
+});
+
+export const VerifyEvidenceRunListResponseSchema = z.object({
+  type: z.literal("verify.evidence.run.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    runs: z.array(EvidenceRunSummarySchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const VerifyEvidenceArtifactGetRequestSchema = z.object({
+  type: z.literal("verify.evidence.artifact.get.request"),
+  workspaceId: z.string(),
+  runId: z.string(),
+  name: z.string(),
+  requestId: z.string(),
+});
+
+export const VerifyEvidenceArtifactGetResponseSchema = z.object({
+  type: z.literal("verify.evidence.artifact.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    artifact: EvidenceArtifactSummarySchema.nullable(),
+    dataBase64: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type EvidenceTimelineCursor = z.infer<typeof EvidenceTimelineCursorSchema>;
+export type EvidenceArtifactSummary = z.infer<typeof EvidenceArtifactSummarySchema>;
+export type EvidenceRunSummary = z.infer<typeof EvidenceRunSummarySchema>;
+export type VerifyEvidenceRunListRequest = z.infer<typeof VerifyEvidenceRunListRequestSchema>;
+export type VerifyEvidenceRunListResponse = z.infer<typeof VerifyEvidenceRunListResponseSchema>;
+export type VerifyEvidenceArtifactGetRequest = z.infer<
+  typeof VerifyEvidenceArtifactGetRequestSchema
+>;
+export type VerifyEvidenceArtifactGetResponse = z.infer<
+  typeof VerifyEvidenceArtifactGetResponseSchema
+>;

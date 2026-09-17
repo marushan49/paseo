@@ -30,6 +30,13 @@ export interface EvidenceArtifactEntry {
   contentType: string;
   bytes: number;
   sha256: string;
+  capturedAt: string;
+  timelineCursor?: EvidenceTimelineCursor;
+}
+
+export interface EvidenceTimelineCursor {
+  epoch: string;
+  seq: number;
 }
 
 export interface EvidenceRunManifest {
@@ -41,6 +48,7 @@ export interface EvidenceRunManifest {
   startedAt: string;
   finishedAt?: string;
   status?: EvidenceRunStatus;
+  agentId?: string;
   artifacts: EvidenceArtifactEntry[];
 }
 
@@ -60,6 +68,7 @@ export interface EvidenceStoreOptions {
 export interface CreateEvidenceRunInput {
   workspaceId: string;
   recipe: string;
+  agentId?: string;
 }
 
 export interface WriteEvidenceArtifactInput {
@@ -68,6 +77,8 @@ export interface WriteEvidenceArtifactInput {
   kind: EvidenceArtifactKind;
   contentType: string;
   data: string | Uint8Array;
+  capturedAt?: string;
+  timelineCursor?: EvidenceTimelineCursor;
 }
 
 export interface FinishEvidenceRunInput {
@@ -137,6 +148,7 @@ export class EvidenceStore {
         recipe: input.recipe,
         seq,
         startedAt: this.now().toISOString(),
+        ...(input.agentId ? { agentId: input.agentId } : {}),
         artifacts: [],
       };
       await fs.mkdir(this.runDir(input.workspaceId, runId), { recursive: true });
@@ -167,6 +179,8 @@ export class EvidenceStore {
         contentType: input.contentType,
         bytes: data.byteLength,
         sha256: createHash("sha256").update(data).digest("hex"),
+        capturedAt: input.capturedAt ?? this.now().toISOString(),
+        ...(input.timelineCursor ? { timelineCursor: input.timelineCursor } : {}),
       };
       const artifacts = manifest.artifacts.filter((existing) => existing.name !== input.name);
       artifacts.push(entry);
@@ -195,6 +209,29 @@ export class EvidenceStore {
       return null;
     }
     return manifest;
+  }
+
+  public async listRuns(workspaceId: string): Promise<EvidenceRunManifest[]> {
+    assertSafeSegment(workspaceId, "workspace id");
+    const workspaceDir = path.join(this.paseoHome, "artifacts", workspaceId);
+    let runIds: string[] = [];
+    try {
+      runIds = await fs.readdir(workspaceDir);
+    } catch {
+      return [];
+    }
+    const manifests: EvidenceRunManifest[] = [];
+    for (const runId of runIds) {
+      if (runId === "meta.json") {
+        continue;
+      }
+      const manifest = await this.tryLoadManifest(workspaceId, runId);
+      if (manifest) {
+        manifests.push(manifest);
+      }
+    }
+    manifests.sort((a, b) => b.seq - a.seq);
+    return manifests;
   }
 
   public async readArtifact(input: {

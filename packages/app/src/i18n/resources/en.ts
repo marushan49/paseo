@@ -648,6 +648,7 @@ export const en = {
         toggle: "Toggle Explorer sidebar",
         changes: "Changes",
         files: "Files",
+        evidence: "Evidence",
       },
       toasts: {
         copyFailed: "Copy failed",
@@ -1919,6 +1920,14 @@ export const en = {
       subtitle: "Pull request details",
       emptyTitle: "No pull request yet",
       emptyDescription: "Create a pull request for this checkout to see its details here.",
+    },
+    evidence: {
+      label: "Evidence",
+      subtitle: "Verification captures",
+      emptyTitle: "No evidence yet",
+      emptyDescription: "Run a verification recipe to capture screenshots and logs.",
+      loadFailed: "Could not load evidence.",
+      showInChat: "Show in chat",
     },
     diff: {
       changesLabel: "Changes",

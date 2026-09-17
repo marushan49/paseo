@@ -654,6 +654,7 @@ export const ptBR: TranslationResources = {
         toggle: "Alternar painel lateral",
         changes: "Alterações",
         files: "Arquivos",
+        evidence: "Evidências",
       },
       toasts: {
         copyFailed: "Falha ao copiar",
@@ -1925,6 +1926,14 @@ export const ptBR: TranslationResources = {
       subtitle: "Detalhes do pull request",
       emptyTitle: "Ainda não há pull request",
       emptyDescription: "Crie um pull request para este checkout para ver os detalhes aqui.",
+    },
+    evidence: {
+      label: "Evidências",
+      subtitle: "Capturas de verificação",
+      emptyTitle: "Ainda sem evidências",
+      emptyDescription: "Execute uma receita de verificação para capturar telas e registros.",
+      loadFailed: "Não foi possível carregar as evidências.",
+      showInChat: "Mostrar no chat",
     },
     diff: {
       changesLabel: "Alterações",

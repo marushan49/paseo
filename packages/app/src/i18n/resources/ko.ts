@@ -652,6 +652,7 @@ export const ko: TranslationResources = {
         toggle: "사이드 패널 토글",
         changes: "변경 사항",
         files: "파일",
+        evidence: "증거",
       },
       toasts: {
         copyFailed: "복사 실패",
@@ -1902,6 +1903,14 @@ export const ko: TranslationResources = {
       subtitle: "풀 리퀘스트 세부 정보",
       emptyTitle: "아직 풀 리퀘스트가 없습니다",
       emptyDescription: "이 체크아웃에 풀 리퀘스트를 만들면 세부 정보가 여기에 표시됩니다.",
+    },
+    evidence: {
+      label: "증거",
+      subtitle: "검증 기록",
+      emptyTitle: "아직 증거가 없습니다",
+      emptyDescription: "검증 레시피를 실행하면 스크린샷과 로그가 저장됩니다.",
+      loadFailed: "증거를 불러오지 못했습니다.",
+      showInChat: "채팅에서 보기",
     },
     diff: {
       changesLabel: "변경 사항",

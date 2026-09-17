@@ -656,6 +656,7 @@ export const fr: TranslationResources = {
         toggle: "Basculer le panneau latéral",
         changes: "Changements",
         files: "Fichiers",
+        evidence: "Preuves",
       },
       toasts: {
         copyFailed: "Échec de la copie",
@@ -1945,6 +1946,15 @@ export const fr: TranslationResources = {
       emptyTitle: "Aucune demande de fusion pour le moment",
       emptyDescription:
         "Créez une demande de fusion pour cette copie de travail afin d’afficher ses détails ici.",
+    },
+    evidence: {
+      label: "Preuves",
+      subtitle: "Captures de vérification",
+      emptyTitle: "Aucune preuve pour le moment",
+      emptyDescription:
+        "Exécutez une recette de vérification pour capturer des copies d'écran et des journaux.",
+      loadFailed: "Impossible de charger les preuves.",
+      showInChat: "Afficher dans le chat",
     },
     diff: {
       changesLabel: "Modifications",

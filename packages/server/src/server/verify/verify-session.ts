@@ -6,17 +6,24 @@ import {
 } from "@getpaseo/protocol/paseo-config-schema";
 import type {
   SessionOutboundMessage,
+  VerifyEvidenceArtifactGetRequest,
+  VerifyEvidenceRunListRequest,
   VerifyRecipeListRequest,
   VerifyRecipeRunRequest,
 } from "@getpaseo/protocol/messages";
-import type { VerifyRecipeSummary } from "@getpaseo/protocol/verify/rpc-schemas";
+import type {
+  EvidenceArtifactSummary,
+  EvidenceRunSummary,
+  VerifyRecipeSummary,
+} from "@getpaseo/protocol/verify/rpc-schemas";
 
 import { assertWorkspaceAutomationAllowedForWorkspace } from "../workspace-automation-gate.js";
 import type { WorkspaceRegistry } from "../workspace-registry.js";
 import type { WorkspaceScriptsService } from "../session/workspace-scripts/workspace-scripts-service.js";
 import type { WorkspaceScriptPayload } from "@getpaseo/protocol/messages";
 import { readPaseoConfigJson } from "../../utils/paseo-config-file.js";
-import type { EvidenceStore } from "./evidence-store.js";
+import type { EvidenceRunManifest, EvidenceStore } from "./evidence-store.js";
+import type { EvidenceArtifactEntry } from "./evidence-store.js";
 import type { DaemonPlaywrightHost } from "./playwright-host.js";
 import { RecipeRunner } from "./recipe-runner.js";
 
@@ -49,10 +56,38 @@ function toRecipeSummary(
   return summary;
 }
 
+function toEvidenceRunSummary(manifest: EvidenceRunManifest): EvidenceRunSummary {
+  return {
+    runId: manifest.runId,
+    workspaceId: manifest.workspaceId,
+    recipe: manifest.recipe,
+    seq: manifest.seq,
+    startedAt: manifest.startedAt,
+    ...(manifest.finishedAt ? { finishedAt: manifest.finishedAt } : {}),
+    ...(manifest.status ? { status: manifest.status } : {}),
+    ...(manifest.agentId ? { agentId: manifest.agentId } : {}),
+    artifactCount: manifest.artifacts.length,
+    artifacts: manifest.artifacts.map(toEvidenceArtifactSummary),
+  };
+}
+
+function toEvidenceArtifactSummary(entry: EvidenceArtifactEntry): EvidenceArtifactSummary {
+  return {
+    name: entry.name,
+    kind: entry.kind,
+    contentType: entry.contentType,
+    bytes: entry.bytes,
+    sha256: entry.sha256,
+    ...(entry.capturedAt ? { capturedAt: entry.capturedAt } : {}),
+    ...(entry.timelineCursor ? { timelineCursor: entry.timelineCursor } : {}),
+  };
+}
+
 export class VerifySession {
   private readonly workspaceRegistry: Pick<WorkspaceRegistry, "get">;
   private readonly workspaceScripts: Pick<WorkspaceScriptsService, "list">;
   private readonly runner: RecipeRunner;
+  private readonly evidence: EvidenceStore;
   private readonly isBrowserToolsEnabled: () => boolean;
   private readonly emit: (message: SessionOutboundMessage) => void;
 
@@ -61,6 +96,7 @@ export class VerifySession {
     this.workspaceScripts = options.workspaceScripts;
     this.isBrowserToolsEnabled = options.isBrowserToolsEnabled;
     this.emit = options.emit;
+    this.evidence = options.evidence;
     this.runner = new RecipeRunner({
       host: options.host,
       evidence: options.evidence,
@@ -148,6 +184,75 @@ export class VerifySession {
           workspaceId: request.workspaceId,
           result: null,
           error: error instanceof Error ? error.message : "Verification run failed",
+        },
+      });
+    }
+  }
+
+  public async handleEvidenceRunListRequest(request: VerifyEvidenceRunListRequest): Promise<void> {
+    try {
+      const workspace = await this.workspaceRegistry.get(request.workspaceId);
+      if (!workspace) {
+        throw new Error(`Unknown workspace "${request.workspaceId}"`);
+      }
+      const manifests = await this.evidence.listRuns(request.workspaceId);
+      this.emit({
+        type: "verify.evidence.run.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          runs: manifests.map(toEvidenceRunSummary),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "verify.evidence.run.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          runs: [],
+          error: error instanceof Error ? error.message : "Failed to list evidence runs",
+        },
+      });
+    }
+  }
+
+  public async handleEvidenceArtifactGetRequest(
+    request: VerifyEvidenceArtifactGetRequest,
+  ): Promise<void> {
+    try {
+      const workspace = await this.workspaceRegistry.get(request.workspaceId);
+      if (!workspace) {
+        throw new Error(`Unknown workspace "${request.workspaceId}"`);
+      }
+      const found = await this.evidence.readArtifact({
+        workspaceId: request.workspaceId,
+        runId: request.runId,
+        name: request.name,
+      });
+      if (!found) {
+        throw new Error(`Evidence artifact not found: ${request.name}`);
+      }
+      this.emit({
+        type: "verify.evidence.artifact.get.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          artifact: toEvidenceArtifactSummary(found.entry),
+          dataBase64: found.data.toString("base64"),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "verify.evidence.artifact.get.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          artifact: null,
+          dataBase64: null,
+          error: error instanceof Error ? error.message : "Failed to read evidence artifact",
         },
       });
     }

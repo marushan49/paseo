@@ -467,7 +467,13 @@ export class RecipeRunner {
     }
     const payload = await this.execute(context, {
       command: "screenshot",
-      args: { browserId: context.browserId, fullPage: false },
+      args: {
+        browserId: context.browserId,
+        fullPage: false,
+        reveal: false,
+        runId: context.runId,
+        artifactName: `screenshot-${step.name}`,
+      },
     });
     if (!payload.ok || payload.result.command !== "screenshot") {
       return fail(
@@ -475,14 +481,10 @@ export class RecipeRunner {
         payload.ok ? "Unexpected screenshot result" : payload.error.message,
       );
     }
-    const entry = await this.evidence.writeArtifact({
-      runId: context.runId,
-      name: `screenshot-${step.name}`,
-      kind: "screenshot",
-      contentType: "image/png",
-      data: Buffer.from(payload.result.dataBase64, "base64"),
-    });
-    context.rawArtifactBytes += entry.bytes;
+    if (!payload.result.evidenceRef) {
+      return fail("screenshot", "Screenshot returned no evidence reference");
+    }
+    context.rawArtifactBytes += payload.result.bytes ?? 0;
     return { name: `screenshot ${step.name}`, ok: true };
   }
 

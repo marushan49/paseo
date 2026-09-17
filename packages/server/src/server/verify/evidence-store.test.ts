@@ -213,3 +213,52 @@ describe("EvidenceStore", () => {
     expect(remaining).toEqual(expect.arrayContaining(runIds.slice(2)));
   });
 });
+
+describe("EvidenceStore capture metadata", () => {
+  it("persists an explicit capture time on artifacts", async () => {
+    const store = new EvidenceStore({ paseoHome: makePaseoHome() });
+    const { runId } = await store.createRun({
+      workspaceId: "wks_abc123",
+      recipe: "verify-case-report",
+    });
+    await store.writeArtifact({
+      runId,
+      name: "after-login",
+      kind: "screenshot",
+      contentType: "image/png",
+      data: new Uint8Array([137, 80, 78, 71]),
+      capturedAt: "2026-09-17T10:00:30.000Z",
+    });
+    const manifest = await store.getManifest({ workspaceId: "wks_abc123", runId });
+    expect(manifest?.artifacts[0]?.capturedAt).toBe("2026-09-17T10:00:30.000Z");
+  });
+
+  it("defaults the capture time when the caller passes none", async () => {
+    const store = new EvidenceStore({ paseoHome: makePaseoHome() });
+    const { runId } = await store.createRun({
+      workspaceId: "wks_abc123",
+      recipe: "verify-case-report",
+    });
+    await store.writeArtifact({
+      runId,
+      name: "report",
+      kind: "report",
+      contentType: "application/json",
+      data: "{}",
+    });
+    const manifest = await store.getManifest({ workspaceId: "wks_abc123", runId });
+    expect(manifest?.artifacts[0]?.capturedAt).toBeTypeOf("string");
+  });
+
+  it("lists runs newest first and returns none for unknown workspaces", async () => {
+    const store = new EvidenceStore({ paseoHome: makePaseoHome() });
+    await store.createRun({ workspaceId: "wks_abc123", recipe: "first", agentId: "agent_1" });
+    await store.createRun({ workspaceId: "wks_abc123", recipe: "second" });
+    const runs = await store.listRuns("wks_abc123");
+    expect(runs.map((run) => run.recipe)).toEqual(["second", "first"]);
+    expect(runs.map((run) => run.seq)).toEqual([2, 1]);
+    expect(runs[0]?.agentId).toBeUndefined();
+    expect(runs[1]?.agentId).toBe("agent_1");
+    await expect(store.listRuns("wks_unknown")).resolves.toEqual([]);
+  });
+});

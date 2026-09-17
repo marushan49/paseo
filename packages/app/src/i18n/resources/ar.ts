@@ -650,6 +650,7 @@ export const ar: TranslationResources = {
         toggle: "تبديل اللوحة الجانبية",
         changes: "التغييرات",
         files: "ملفات",
+        evidence: "الأدلة",
       },
       toasts: {
         copyFailed: "فشل النسخ",
@@ -1892,6 +1893,14 @@ export const ar: TranslationResources = {
       subtitle: "تفاصيل طلب السحب",
       emptyTitle: "لا يوجد طلب سحب بعد",
       emptyDescription: "أنشئ طلب سحب لنسخة العمل هذه لعرض تفاصيله هنا.",
+    },
+    evidence: {
+      label: "الأدلة",
+      subtitle: "سجلات التحقق",
+      emptyTitle: "لا توجد أدلة بعد",
+      emptyDescription: "شغّل وصفة تحقق لحفظ لقطات الشاشة والسجلات.",
+      loadFailed: "تعذّر تحميل الأدلة.",
+      showInChat: "عرض في الدردشة",
     },
     diff: {
       changesLabel: "التغييرات",
