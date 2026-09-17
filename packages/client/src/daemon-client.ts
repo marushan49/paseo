@@ -2620,6 +2620,35 @@ export class DaemonClient {
     });
   }
 
+  async listVerifyRecipes(
+    workspaceId: string,
+    requestId?: string,
+  ): Promise<Extract<SessionOutboundMessage, { type: "verify.recipe.list.response" }>["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "verify.recipe.list.request", workspaceId },
+      responseType: "verify.recipe.list.response",
+    });
+  }
+
+  async runVerifyRecipe(
+    workspaceId: string,
+    recipeName: string,
+    params?: Record<string, string>,
+    requestId?: string,
+  ): Promise<Extract<SessionOutboundMessage, { type: "verify.recipe.run.response" }>["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "verify.recipe.run.request",
+        workspaceId,
+        recipeName,
+        ...(params === undefined ? {} : { params }),
+      },
+      responseType: "verify.recipe.run.response",
+    });
+  }
+
   async archiveWorkspace(
     workspaceId: string,
     requestId?: string,
