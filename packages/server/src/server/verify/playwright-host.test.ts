@@ -174,13 +174,17 @@ describe.skipIf(!BROWSER_AVAILABLE)("DaemonPlaywrightHost", () => {
     }
   });
 
-  it("returns screenshots as PNG payloads", async () => {
+  it("returns screenshot evidence refs instead of inline payloads", async () => {
     const created = await host?.executeLocal({
       workspaceId: WORKSPACE_ID,
       command: { command: "new_tab", args: { url: `${app?.url}/login` } },
     });
     const browserId =
       created?.ok && created.result.command === "new_tab" ? created.result.browserId : "";
+    await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      command: { command: "wait", args: { browserId, text: "Sign in", timeoutMs: 10_000 } },
+    });
 
     const screenshot = await host?.executeLocal({
       workspaceId: WORKSPACE_ID,
@@ -189,9 +193,39 @@ describe.skipIf(!BROWSER_AVAILABLE)("DaemonPlaywrightHost", () => {
     expect(screenshot?.ok).toBe(true);
     if (screenshot?.ok && screenshot.result.command === "screenshot") {
       expect(screenshot.result.mimeType).toBe("image/png");
-      const bytes = Buffer.from(screenshot.result.dataBase64, "base64");
-      expect(bytes.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
+      expect("dataBase64" in screenshot.result).toBe(false);
+      expect(screenshot.result.evidenceRef).toMatch(/^evidence:\/\/\S+\/\S+\/screenshot$/);
+      expect(screenshot.result.bytes).toBeGreaterThan(0);
       expect(screenshot.result.width).toBeGreaterThan(0);
+      // Size guard: without reveal no single field may carry image bytes.
+      expect(Buffer.byteLength(JSON.stringify(screenshot), "utf8")).toBeLessThan(32 * 1024);
+    } else {
+      expect.unreachable();
+    }
+  });
+
+  it("returns inline PNG payloads only with reveal", async () => {
+    const created = await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      command: { command: "new_tab", args: { url: `${app?.url}/login` } },
+    });
+    const browserId =
+      created?.ok && created.result.command === "new_tab" ? created.result.browserId : "";
+    await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      command: { command: "wait", args: { browserId, text: "Sign in", timeoutMs: 10_000 } },
+    });
+
+    const screenshot = await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      command: { command: "screenshot", args: { browserId, fullPage: false, reveal: true } },
+    });
+    expect(screenshot?.ok).toBe(true);
+    if (screenshot?.ok && screenshot.result.command === "screenshot") {
+      expect(screenshot.result.mimeType).toBe("image/png");
+      expect(screenshot.result.evidenceRef).toMatch(/^evidence:\/\//);
+      const bytes = Buffer.from(screenshot.result.dataBase64 ?? "", "base64");
+      expect(bytes.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
     } else {
       expect.unreachable();
     }

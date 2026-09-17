@@ -160,6 +160,9 @@ export const BrowserAutomationScreenshotCommandSchema = z.object({
   command: z.literal("screenshot"),
   args: BrowserAutomationTabTargetSchema.extend({
     fullPage: z.boolean().default(false),
+    reveal: z.boolean().default(false),
+    runId: z.string().optional(),
+    artifactName: z.string().optional(),
   }),
 });
 
@@ -363,7 +366,10 @@ export const BrowserAutomationScreenshotResultSchema = z.object({
   command: z.literal("screenshot"),
   browserId: BrowserAutomationBrowserIdSchema,
   mimeType: z.literal("image/png"),
-  dataBase64: z.string().min(1),
+  dataBase64: z.string().min(1).optional(),
+  evidenceRef: z.string().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  sha256: z.string().optional(),
   width: z.number().int().nonnegative(),
   height: z.number().int().nonnegative(),
 });

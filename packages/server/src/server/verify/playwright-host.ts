@@ -21,6 +21,7 @@ import type {
 import type { BrowserHostClient } from "../browser-tools/broker.js";
 import { browserToolsFailure, type BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { resolveBrowserExecutable } from "./browser-capability.js";
+import { EvidenceStore, formatEvidenceRef } from "./evidence-store.js";
 import {
   collectSnapshotNodes,
   formatSnapshotYaml,
@@ -102,6 +103,14 @@ export class DaemonPlaywrightHost {
   private executablePath: string | null = null;
   private useNoSandboxFallback = false;
   private requestSequence = 0;
+  private evidenceStore: EvidenceStore | null = null;
+
+  private evidence(): EvidenceStore {
+    if (!this.evidenceStore) {
+      this.evidenceStore = new EvidenceStore({ paseoHome: this.paseoHome });
+    }
+    return this.evidenceStore;
+  }
 
   public constructor(options: DaemonPlaywrightHostOptions) {
     this.paseoHome = options.paseoHome;
@@ -479,16 +488,55 @@ export class DaemonPlaywrightHost {
     requestId: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
-    const data = await tab.page.screenshot({ fullPage: command.args.fullPage });
+    const data = await this.captureScreenshot(tab, command.args.fullPage);
     const viewport = tab.page.viewportSize() ?? DEFAULT_VERIFY_VIEWPORT;
+    const workspaceId = tab.workspaceId;
+    let runId = command.args.runId;
+    if (runId) {
+      const manifest = await this.evidence().getManifest({ workspaceId, runId });
+      if (!manifest) {
+        return browserToolsFailure({
+          requestId,
+          code: "browser_unknown_error",
+          message: `Evidence run not found: ${runId}`,
+        });
+      }
+    } else {
+      const manifest = await this.evidence().createRun({
+        workspaceId,
+        recipe: "browser-screenshot",
+      });
+      runId = manifest.runId;
+    }
+    const name = command.args.artifactName ?? "screenshot";
+    const entry = await this.evidence().writeArtifact({
+      runId,
+      name,
+      kind: "screenshot",
+      contentType: "image/png",
+      data,
+    });
     return ok(requestId, {
       command: "screenshot",
       browserId: tab.browserId,
       mimeType: "image/png",
-      dataBase64: data.toString("base64"),
+      ...(command.args.reveal ? { dataBase64: data.toString("base64") } : {}),
+      evidenceRef: formatEvidenceRef({ workspaceId, runId, name }),
+      bytes: entry.bytes,
+      sha256: entry.sha256,
       width: viewport.width,
       height: viewport.height,
     });
+  }
+
+  private async captureScreenshot(tab: DaemonBrowserTab, fullPage: boolean): Promise<Buffer> {
+    try {
+      return await tab.page.screenshot({ fullPage });
+    } catch {
+      // The headless compositor is occasionally not ready for the first
+      // capture in a fresh context; a single immediate retry succeeds.
+      return await tab.page.screenshot({ fullPage });
+    }
   }
 
   private async runLogsCommand(input: {

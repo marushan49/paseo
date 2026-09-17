@@ -105,12 +105,18 @@ const commandParseCases = [
   {
     name: "screenshot",
     command: { command: "screenshot", args: { browserId: BROWSER_ID } },
-    expected: { command: "screenshot", args: { browserId: BROWSER_ID, fullPage: false } },
+    expected: {
+      command: "screenshot",
+      args: { browserId: BROWSER_ID, fullPage: false, reveal: false },
+    },
   },
   {
     name: "full page screenshot",
     command: { command: "screenshot", args: { browserId: BROWSER_ID, fullPage: true } },
-    expected: { command: "screenshot", args: { browserId: BROWSER_ID, fullPage: true } },
+    expected: {
+      command: "screenshot",
+      args: { browserId: BROWSER_ID, fullPage: true, reveal: false },
+    },
   },
   {
     name: "upload",
