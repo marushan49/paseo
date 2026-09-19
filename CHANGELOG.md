@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0-beta.3 - 2026-09-20
+
+### Added
+
+- Added grouped session cards to History and sidebar workspace rows, with a Rows fallback under Appearance → Cards
+- Added a display serif setting for hub titles, applied to the sessions header and the appearance preview
+
+### Changed
+
+- Changed the mobile composer to a floating surface with higher contrast and a readable placeholder
+- Changed compact sidebar rows to larger touch targets with brighter project titles
+
 ## 0.9.0-beta.2 - 2026-09-18
 
 ### Fixed
