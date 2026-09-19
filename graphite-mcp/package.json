@@ -1,0 +1,13 @@
+{
+  "name": "graphite-mcp",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.8.0",
+    "@types/node": "^26.5.1",
+    "typescript": "^5.9.3"
+  }
+}
