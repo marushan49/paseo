@@ -626,6 +626,13 @@ export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 });
 
+// Display serif for hub titles (Claude-style). System serif only, no bundled font.
+export const DEFAULT_DISPLAY_FONT_STACK: string = Platform.select({
+  ios: "Georgia",
+  default: "serif",
+  web: "Georgia, 'Times New Roman', serif",
+});
+
 // `fontSize`, `fontFamily`, and `lineHeight` are deliberately widened to plain
 // `number`/`string` (not narrowed by `as const`) so the appearance updater can patch
 // them at runtime via `UnistylesRuntime.updateTheme`. The remaining tokens keep their
@@ -633,7 +640,7 @@ export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
 interface CommonTheme {
   spacing: typeof SPACING;
   fontSize: Record<keyof typeof FONT_SIZE, number>;
-  fontFamily: { ui: string; mono: string };
+  fontFamily: { ui: string; mono: string; display: string };
   lineHeight: Record<keyof typeof LINE_HEIGHT, number>;
   iconSize: typeof ICON_SIZE;
   fontWeight: typeof FONT_WEIGHT;
@@ -645,7 +652,11 @@ interface CommonTheme {
 const commonTheme: CommonTheme = {
   spacing: SPACING,
   fontSize: FONT_SIZE,
-  fontFamily: { ui: DEFAULT_UI_FONT_STACK, mono: DEFAULT_MONO_FONT_STACK },
+  fontFamily: {
+    ui: DEFAULT_UI_FONT_STACK,
+    mono: DEFAULT_MONO_FONT_STACK,
+    display: DEFAULT_DISPLAY_FONT_STACK,
+  },
   lineHeight: LINE_HEIGHT,
   iconSize: ICON_SIZE,
   fontWeight: FONT_WEIGHT,

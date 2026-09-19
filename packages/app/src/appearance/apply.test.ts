@@ -24,7 +24,7 @@ type ThemeUpdater = (theme: FakeTheme) => FakeTheme;
 // fake of this shape through `unknown` to ThemeUpdater's param is test-only.
 interface FakeTheme {
   colorScheme: "light" | "dark";
-  fontFamily: { ui: string; mono: string };
+  fontFamily: { ui: string; mono: string; display: string };
   fontSize: {
     code: number;
     content: number;
@@ -43,7 +43,7 @@ interface FakeTheme {
 function makeFakeTheme(): FakeTheme {
   return {
     colorScheme: "dark",
-    fontFamily: { ui: "seed-ui-stack", mono: "seed-mono-stack" },
+    fontFamily: { ui: "seed-ui-stack", mono: "seed-mono-stack", display: "seed-display-stack" },
     fontSize: {
       code: 12,
       content: 15,
@@ -64,6 +64,7 @@ function makeInput(overrides: Partial<AppearanceInput> = {}): AppearanceInput {
   return {
     uiFontFamily: "",
     monoFontFamily: "",
+    displayFontFamily: "",
     uiBaseFontSize: 14,
     contentFontSize: 15,
     codeFontSize: 12,

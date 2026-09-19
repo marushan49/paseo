@@ -2266,6 +2266,14 @@ export const ru: TranslationResources = {
       detailLevel: {
         title: "Уровень детализации",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Оглавление чата",
         description: "Показывать оглавление для перехода между запросами",
@@ -2283,6 +2291,9 @@ export const ru: TranslationResources = {
         interfaceFont: "Шрифт интерфейса",
         interfaceFontHint:
           "Используется во всём приложении. Оставьте поле пустым, чтобы использовать системный шрифт.",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Семейство интерфейсных шрифтов",
         interfaceSize: "Размер интерфейса",
         interfaceSizeHint: "Используется для навигации, элементов управления и подписей",

@@ -65,7 +65,7 @@ import {
 } from "@/components/ui/text-input";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
-  placeholderTextColor: theme.colors.surface4,
+  placeholderTextColor: theme.colors.foregroundMuted,
 }));
 import {
   resolveSendTooltipLabel,
@@ -1917,12 +1917,15 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexShrink: 1,
     flexDirection: "column",
     gap: theme.spacing[3],
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: {
+      xs: theme.colors.surface2,
+      md: theme.colors.surface1,
+    },
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     borderRadius: theme.borderRadius["2xl"],
     paddingVertical: {
-      xs: theme.spacing[2],
+      xs: theme.spacing[3],
       md: theme.spacing[4],
     },
     paddingHorizontal: {

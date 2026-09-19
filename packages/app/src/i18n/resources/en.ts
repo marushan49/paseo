@@ -2346,6 +2346,14 @@ export const en = {
       detailLevel: {
         title: "Detail level",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Chat outline",
         description: "Show an outline for jumping between prompts",
@@ -2362,6 +2370,9 @@ export const en = {
         interfaceFont: "Interface font",
         interfaceFontHint: "Used across the app. Leave empty for the system default",
         interfaceFontAccessibility: "Interface font family",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceSize: "Interface size",
         interfaceSizeHint: "Used for navigation, controls, and labels",
         interfaceSizeAccessibility: "Interface font size",

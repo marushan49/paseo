@@ -2201,6 +2201,14 @@ export const zhCN: TranslationResources = {
       detailLevel: {
         title: "详细程度",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "聊天大纲",
         description: "显示用于在提示词之间跳转的大纲",
@@ -2216,6 +2224,9 @@ export const zhCN: TranslationResources = {
         systemDefault: "系统默认",
         interfaceFont: "界面字体",
         interfaceFontHint: "用于整个应用。留空则使用系统默认",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "界面字体族",
         interfaceSize: "界面字号",
         interfaceSizeHint: "用于导航、控件和标签",

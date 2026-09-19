@@ -35,6 +35,7 @@ export type PullRequestOpenLocation = "main" | "side" | "explorer";
 /** What a sidebar workspace row shows in the space to the right of its title. */
 export type SidebarWorkspaceTrailing = "diff" | "timestamp" | "none";
 export type ToolCallDetailLevel = "overview" | "detailed";
+export type SessionCardStyle = "card" | "row";
 
 const ThemePreferenceSchema = z.enum([
   ...THEME_OPTIONS.map((option) => option.name),
@@ -75,6 +76,8 @@ export interface AppSettings {
   useLegacyTerminalRenderer: boolean;
   uiFontFamily: string; // "" = platform default UI stack
   monoFontFamily: string; // "" = platform default mono stack
+  displayFontFamily: string; // "" = platform default display serif stack
+  sessionCardStyle: SessionCardStyle; // "card" = Claude pill cards, "row" = legacy rows
   uiBaseFontSize: number; // clamped px, platform default 14 or 15
   contentFontSize: number; // clamped px, platform default 15 or 16
   codeFontSize: number; // clamped px, default 12
@@ -129,6 +132,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   useLegacyTerminalRenderer: false,
   uiFontFamily: "",
   monoFontFamily: "",
+  displayFontFamily: "",
+  sessionCardStyle: "card",
   uiBaseFontSize: DEFAULT_UI_BASE_FONT_SIZE,
   contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
@@ -207,6 +212,8 @@ const StoredAppSettingsSchema = z
     useLegacyTerminalRenderer: z.boolean().catch(false),
     uiFontFamily: sanitizedFontFamily().catch(""),
     monoFontFamily: sanitizedFontFamily().catch(""),
+    displayFontFamily: sanitizedFontFamily().catch(""),
+    sessionCardStyle: z.enum(["card", "row"]).catch("card"),
     uiBaseFontSize: clampedNumber(MIN_UI_BASE_FONT_SIZE, MAX_UI_BASE_FONT_SIZE)
       .optional()
       .catch(undefined),

@@ -7,15 +7,24 @@ interface ScreenTitleProps {
   numberOfLines?: number;
   testID?: string;
   style?: StyleProp<TextStyle>;
+  /** Large Claude-style serif hub title (e.g. Code, Chats). Default stays quiet. */
+  hub?: boolean;
 }
 
 /**
  * Canonical screen title for use inside `ScreenHeader`. One typography, one
  * color, responsive weight. Leading icons are siblings (HeaderToggleButton,
  * HeaderIconBadge) — never nested inside this component.
+ * `hub` opts into the large display-serif variant for hub screens.
  */
-export function ScreenTitle({ children, numberOfLines = 1, testID, style }: ScreenTitleProps) {
-  const combinedStyle = useMemo(() => [styles.text, style], [style]);
+export function ScreenTitle({
+  children,
+  numberOfLines = 1,
+  testID,
+  style,
+  hub = false,
+}: ScreenTitleProps) {
+  const combinedStyle = useMemo(() => [styles.text, hub && styles.hubText, style], [hub, style]);
   return (
     <Text style={combinedStyle} numberOfLines={numberOfLines} testID={testID}>
       {children}
@@ -33,5 +42,10 @@ const styles = StyleSheet.create((theme) => ({
       md: "300",
     },
     color: theme.colors.foreground,
+  },
+  hubText: {
+    fontFamily: theme.fontFamily.display,
+    fontSize: theme.fontSize["4xl"],
+    fontWeight: "400",
   },
 }));

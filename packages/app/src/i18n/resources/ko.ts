@@ -2236,6 +2236,14 @@ export const ko: TranslationResources = {
       detailLevel: {
         title: "세부 수준",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "채팅 개요",
         description: "프롬프트 사이를 이동하기 위한 개요 표시",
@@ -2251,6 +2259,9 @@ export const ko: TranslationResources = {
         systemDefault: "시스템 기본값",
         interfaceFont: "인터페이스 글꼴",
         interfaceFontHint: "앱 전체에 사용됩니다. 시스템 기본값을 사용하려면 비워 두세요",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "인터페이스 글꼴 패밀리",
         interfaceSize: "인터페이스 크기",
         interfaceSizeHint: "탐색, 컨트롤 및 레이블에 사용됩니다",

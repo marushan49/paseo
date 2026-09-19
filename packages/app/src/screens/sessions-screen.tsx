@@ -152,7 +152,7 @@ function SessionsScreenContent() {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title={t("sessions.title")} />
+      <MenuHeader title={t("sessions.title")} hub />
       {showFilterRow ? (
         <View style={styles.filterContainer}>
           {isSearchSupported ? (

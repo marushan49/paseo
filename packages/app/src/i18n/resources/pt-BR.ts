@@ -2261,6 +2261,14 @@ export const ptBR: TranslationResources = {
       detailLevel: {
         title: "Nível de detalhe",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Estrutura do chat",
         description: "Mostrar uma estrutura para navegar entre prompts",
@@ -2276,6 +2284,9 @@ export const ptBR: TranslationResources = {
         systemDefault: "Sistema padrão",
         interfaceFont: "Fonte da interface",
         interfaceFontHint: "Usada em todo o app. Deixe vazio para usar o padrão do sistema",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Família da fonte da interface",
         interfaceSize: "Tamanho da interface",
         interfaceSizeHint: "Usado na navegação, nos controles e nos rótulos",

@@ -2225,6 +2225,14 @@ export const ar: TranslationResources = {
       detailLevel: {
         title: "مستوى التفاصيل",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "مخطط المحادثة",
         description: "عرض مخطط للتنقل بين المطالبات",
@@ -2240,6 +2248,9 @@ export const ar: TranslationResources = {
         systemDefault: "الافتراضي للنظام",
         interfaceFont: "خط الواجهة",
         interfaceFontHint: "تستخدم عبر التطبيق. اتركه فارغًا للإعداد الافتراضي للنظام",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "عائلة خطوط الواجهة",
         interfaceSize: "حجم الواجهة",
         interfaceSizeHint: "يُستخدم للتنقل وعناصر التحكم والتسميات",

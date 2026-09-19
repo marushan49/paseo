@@ -16,6 +16,7 @@ interface MenuHeaderProps {
   title?: string;
   rightContent?: ReactNode;
   borderless?: boolean;
+  hub?: boolean;
 }
 
 interface SidebarMenuToggleProps {
@@ -141,13 +142,13 @@ export function WindowSidebarMenuToggle({ style, ...props }: SidebarMenuTogglePr
   );
 }
 
-export function MenuHeader({ title, rightContent, borderless }: MenuHeaderProps) {
+export function MenuHeader({ title, rightContent, borderless, hub = false }: MenuHeaderProps) {
   return (
     <ScreenHeader
       left={
         <>
           <SidebarMenuToggle />
-          {title && <ScreenTitle>{title}</ScreenTitle>}
+          {title && <ScreenTitle hub={hub}>{title}</ScreenTitle>}
         </>
       }
       right={rightContent}

@@ -34,7 +34,7 @@ The authored interface ramp uses a 14px base. New native installs default to 15p
 
 Weight has three tiers, applied by role:
 
-- **Screen titles** — the title in app chrome — use `<ScreenTitle>` (`packages/app/src/components/headers/screen-title.tsx`), which renders `fontSize.base` at weight `400` on compact and `300` on desktop. The New workspace hero is the only larger product title; it uses `fontSize["2xl"]` (`packages/app/src/screens/new-workspace-screen.tsx`).
+- **Screen titles** — the title in app chrome — use `<ScreenTitle>` (`packages/app/src/components/headers/screen-title.tsx`), which renders `fontSize.base` at weight `400` on compact and `300` on desktop. Hub screens (e.g. sessions) opt into the `hub` variant: `fontSize["4xl"]` in the `display` serif family. The New workspace hero is the only other larger product title; it uses `fontSize["2xl"]` (`packages/app/src/screens/new-workspace-screen.tsx`).
 - **Structural labels** use `fontWeight.medium`. This applies to section labels above a stack of rows (`packages/app/src/components/agent-list.tsx:519-523`, `packages/app/src/components/keyboard-shortcuts-dialog.tsx:63-67`), form field labels above an input inside a modal (`packages/app/src/components/add-host-modal.tsx:19-23`, `packages/app/src/components/pair-link-modal.tsx:24-28`), the title at the top of a modal/sheet/dialog (`packages/app/src/components/adaptive-modal-sheet.tsx:90-94`, `packages/app/src/components/ui/combobox.tsx:1607-1611`, `packages/app/src/components/welcome-screen.tsx:48-53`), action button labels in tight components such as the sidebar callout actions (`packages/app/src/components/sidebar-callout.tsx:218-221`), and inline data emphasis on dense metadata rows (`packages/app/src/components/git-diff-pane.tsx:2322-2327`, `packages/app/src/components/file-explorer-pane.tsx:1115-1122`).
 - **Content** uses `fontWeight.normal`. This applies to settings rows (`packages/app/src/styles/settings.ts`), sidebar primary list-item titles (`packages/app/src/components/sidebar-workspace-list.tsx:2680-2686`, `packages/app/src/components/agent-list.tsx:572-578`), `<Button>` text (`packages/app/src/components/ui/button.tsx:80-84`), `<StatusBadge>` text (`packages/app/src/components/ui/status-badge.tsx:56-60`), and `<SidebarCallout>` titles (`packages/app/src/components/sidebar-callout.tsx:175-180`).
 
@@ -227,6 +227,8 @@ Switches and segmented controls also sit in the trailing slot. A row that both n
 
 Selected state on rows in a desktop list+detail uses `surfaceSidebarHover` as the background (`packages/app/src/screens/projects-screen.tsx`). Selected state on rows in the sidebar list uses `surface2` (`packages/app/src/components/agent-list.tsx:563-571`).
 
+Session and sidebar lists render as grouped cards when `sessionCardStyle` is `card` (the default): `surface1` fill, 1px `border`, `borderRadius.xl`, titles in `foreground`. `row` restores the legacy borderless rows. The card switch lives in Appearance settings; row components read it and keep their badges, stacks, and navigation untouched. On compact the rows also gain vertical padding (`spacing[3]`) for touch targets.
+
 ---
 
 ## 13. Status pills and badges
@@ -247,14 +249,14 @@ New status pills use `<StatusBadge>`. Identity, shortcut, and interactive link b
 
 ## 14. Forbidden
 
-- `fontWeight.medium` on row titles, body text, button labels, badge text, or `<SidebarCallout>` titles. Medium is reserved for the structural-label tier described in §3 — section labels, modal/sheet titles, dense metadata emphasis, and tight action labels. Anything else is `normal`. `<ScreenTitle>` is responsive `400/300` and is never overridden.
+- `fontWeight.medium` on row titles, body text, button labels, badge text, or `<SidebarCallout>` titles. Medium is reserved for the structural-label tier described in §3 — section labels, modal/sheet titles, dense metadata emphasis, and tight action labels. Anything else is `normal`. `<ScreenTitle>` is responsive `400/300` and is never overridden except by its own `hub` variant.
 - `<Pressable>` wrapping `<Text>` to make a button. `<Button>` exists.
 - Bare `<Text>` for a section header inside settings. `<SettingsSection>` exists.
 - A muted paragraph between a section header and its card. Section-level explanation is the header's `info` tooltip (§7).
 - A "Settings" CTA on a detail page. Detail pages are settings; settings is reached from the sidebar, the host entry, or a row's kebab menu.
 - The word "checkout" in UI strings or identifiers. The term is "workspace".
 - New color tokens or hardcoded hex outside the palette. The identity color table is the documented exception (§13), not a license.
-- Placeholder text dimmed beyond `foregroundMuted`. No extra opacity, no italics, no ghost-text.
+- Placeholder text dimmed beyond `foregroundMuted`. No extra opacity, no italics, no ghost-text. The composer placeholder uses `foregroundMuted`.
 - `onPointerEnter` and `onPointerLeave`. They do not fire on native iOS. Hover uses Pressable's `onHoverIn`/`onHoverOut` gated with `isHovered || isCompact || isNative`.
 - Raw DOM APIs without an `isWeb` guard.
 - Spacing values outside the scale. `padding: 20` and `gap: 10` are wrong.

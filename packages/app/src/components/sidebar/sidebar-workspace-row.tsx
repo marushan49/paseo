@@ -18,6 +18,7 @@ import { useWorkspaceReadState } from "@/hooks/use-workspace-read-state";
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { isNative as platformIsNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useAppSettings } from "@/hooks/use-settings";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
   SidebarWorkspaceContextMenu,
@@ -246,6 +247,8 @@ function WorkspaceRowBody({
 }: WorkspaceRowBodyProps) {
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
+  const { settings } = useAppSettings();
+  const isCardCompact = isCompact && settings.sessionCardStyle === "card";
   const [isPressed, setIsPressed] = useState(false);
   const trailing = useSidebarWorkspaceTrailing();
   const draggable = Boolean(drag);
@@ -291,6 +294,7 @@ function WorkspaceRowBody({
           isPressed,
           selected,
           isHovered,
+          isCardCompact,
         });
         const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
         return (
@@ -480,14 +484,17 @@ function getWorkspaceRowStyle({
   isPressed,
   selected,
   isHovered,
+  isCardCompact,
 }: {
   isDragging: boolean;
   isPressed: boolean;
   selected: boolean;
   isHovered: boolean;
+  isCardCompact: boolean;
 }) {
   return [
     styles.workspaceRow,
+    isCardCompact && styles.workspaceRowCard,
     isHovered && styles.workspaceRowHovered,
     selected && styles.sidebarRowSelected,
     isDragging && styles.workspaceRowDragging,
@@ -504,7 +511,10 @@ const styles = StyleSheet.create((theme) => ({
   workspaceRow: {
     minHeight: 36,
     marginBottom: theme.spacing[1],
-    paddingVertical: theme.spacing[2],
+    paddingVertical: {
+      xs: theme.spacing[3],
+      md: theme.spacing[2],
+    },
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
@@ -513,6 +523,14 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[1],
     userSelect: "none",
+  },
+  workspaceRowCard: {
+    backgroundColor: theme.colors.surface1,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.xl,
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[4],
   },
   workspaceRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,

@@ -2248,6 +2248,14 @@ export const ja: TranslationResources = {
       detailLevel: {
         title: "詳細レベル",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "チャットのアウトライン",
         description: "プロンプト間を移動するためのアウトラインを表示します",
@@ -2264,6 +2272,9 @@ export const ja: TranslationResources = {
         interfaceFont: "インターフェースフォント",
         interfaceFontHint:
           "アプリ全体で使用されます。システムデフォルトにするには空のままにしてください",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "インターフェースフォントファミリー",
         interfaceSize: "インターフェースサイズ",
         interfaceSizeHint: "ナビゲーション、コントロール、ラベルに使用されます",

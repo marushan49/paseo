@@ -2283,6 +2283,14 @@ export const fr: TranslationResources = {
       detailLevel: {
         title: "Niveau de détail",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Plan de la discussion",
         description: "Afficher un plan pour passer d’une requête à l’autre",
@@ -2299,6 +2307,9 @@ export const fr: TranslationResources = {
         interfaceFont: "Police d'interface",
         interfaceFontHint:
           "Utilisé dans toute l'application. Laisser vide pour la valeur par défaut du système",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Famille de polices d'interface",
         interfaceSize: "Taille de l'interface",
         interfaceSizeHint: "Utilisée pour la navigation, les contrôles et les libellés",

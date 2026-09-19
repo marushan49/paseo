@@ -3,6 +3,7 @@ import { resolveSyntaxColors, type SyntaxThemeId } from "@getpaseo/highlight";
 import {
   DEFAULT_UI_FONT_STACK,
   DEFAULT_MONO_FONT_STACK,
+  DEFAULT_DISPLAY_FONT_STACK,
   FONT_SIZE,
   REGISTERED_THEMES,
   type Theme,
@@ -14,6 +15,7 @@ const ALL_THEME_KEYS = Object.keys(REGISTERED_THEMES) as (keyof typeof REGISTERE
 export interface AppearanceInput {
   uiFontFamily: string; // "" -> default stack
   monoFontFamily: string; // "" -> default stack
+  displayFontFamily: string; // "" -> default display serif stack
   uiBaseFontSize: number; // already clamped
   contentFontSize: number; // already clamped
   codeFontSize: number; // already clamped
@@ -62,6 +64,7 @@ function scaleFontSize(
 export function applyAppearance(input: AppearanceInput): void {
   const ui = input.uiFontFamily.trim() || DEFAULT_UI_FONT_STACK;
   const mono = input.monoFontFamily.trim() || DEFAULT_MONO_FONT_STACK;
+  const display = input.displayFontFamily.trim() || DEFAULT_DISPLAY_FONT_STACK;
   const diffLineHeight = Math.round(input.codeFontSize * 1.5); // couple to code size
   const activeTheme = UnistylesRuntime.themeName;
   // Unistyles web emits after each registry patch. Updating the mounted theme
@@ -73,7 +76,7 @@ export function applyAppearance(input: AppearanceInput): void {
 
   for (const key of themeKeys) {
     UnistylesRuntime.updateTheme(key, (t) => {
-      const fontFamily = { ui, mono };
+      const fontFamily = { ui, mono, display };
       const fontSize = scaleFontSize(
         input.uiBaseFontSize,
         input.contentFontSize,
