@@ -405,6 +405,86 @@ describe("OpenCodeEventConsumer", () => {
     expect(inputs).toEqual([expect.objectContaining({ type: "server-exited" })]);
   });
 
+  test("retries a response whose headers never arrive", async () => {
+    const upstream = await createSseUpstream();
+    upstream.stallNext(1);
+    const timing = new ControlledTiming();
+    const consumer = new OpenCodeEventConsumer({
+      serverUrl: upstream.url,
+      processExit: new Promise<Error>(() => undefined),
+      logger: createRecordingLogger(),
+      timing,
+    });
+    cleanups.push(async () => {
+      await consumer.close();
+      await upstream.close();
+    });
+
+    await upstream.stalledRequests(1);
+    timing.expireWatchdog();
+    await timing.waiting();
+    expect(consumer.diagnostics()).toMatchObject({
+      attempt: 1,
+      phase: "first-record",
+      lastOutcome: "watchdog",
+      lastError: "OpenCode event stream first-record watchdog expired",
+    });
+
+    timing.advanceWait();
+    await upstream.connected(1);
+    upstream.send(0, connectedRecord("/recovered"));
+    await consumer.ready();
+  });
+
+  test("recovers when the aborted attempt never settles", async () => {
+    const timing = new ControlledTiming();
+    const stream = controllableStream();
+    const inputs: OpenCodeEventSourceInput[] = [];
+    const consumer = new OpenCodeEventConsumer({
+      serverUrl: "http://127.0.0.1:1",
+      processExit: new Promise<Error>(() => undefined),
+      logger: createRecordingLogger(),
+      timing,
+      createClient: () =>
+        ({
+          global: { event: async () => ({ stream: stream.iterable }) },
+        }) as unknown as OpencodeClient,
+    });
+    cleanups.push(() => consumer.close());
+    consumer.subscribe((input) => inputs.push(input));
+
+    await eventually(() => expect(timing.watchdogDelays).toHaveLength(1));
+    timing.expireWatchdog();
+    await timing.waiting();
+    expect(consumer.diagnostics()).toMatchObject({
+      attempt: 1,
+      phase: "first-record",
+      lastOutcome: "watchdog",
+      lastError: "OpenCode event stream first-record watchdog expired",
+    });
+
+    stream.emit(connectedRecord("/late"));
+    await eventually(() => expect(stream.consumed).toBe(1));
+    expect(inputs).toEqual([]);
+    expect(await promiseState(consumer.ready())).toBe("pending");
+  });
+
+  test("reports the transport cause behind a generic fetch failure", async () => {
+    const upstream = await createSseUpstream();
+    await upstream.close();
+    const timing = new ControlledTiming();
+    const consumer = new OpenCodeEventConsumer({
+      serverUrl: upstream.url,
+      processExit: new Promise<Error>(() => undefined),
+      logger: createRecordingLogger(),
+      timing,
+    });
+    cleanups.push(() => consumer.close());
+
+    await timing.waiting();
+    expect(consumer.diagnostics().lastError).toContain("ECONNREFUSED");
+  });
+
   test("intentional close does not publish a false terminal", async () => {
     const upstream = await createSseUpstream();
     const consumer = new OpenCodeEventConsumer({
@@ -459,6 +539,30 @@ class ControlledTiming implements OpenCodeEventConsumerTiming {
   }
 }
 
+function controllableStream() {
+  const queue: unknown[] = [];
+  let notify: (() => void) | null = null;
+  const state = {
+    consumed: 0,
+    emit(value: unknown) {
+      queue.push(value);
+      notify?.();
+    },
+    iterable: (async function* () {
+      while (true) {
+        while (queue.length === 0) {
+          await new Promise<void>((resolve) => {
+            notify = resolve;
+          });
+        }
+        state.consumed += 1;
+        yield queue.shift() as never;
+      }
+    })(),
+  };
+  return state;
+}
+
 function connectedRecord(directory: string) {
   return { directory, payload: { type: "server.connected", properties: {} } };
 }
@@ -497,13 +601,20 @@ function pluginErrorRecord(directory: string) {
 
 async function createSseUpstream() {
   const responses: ServerResponse[] = [];
+  const stalled: ServerResponse[] = [];
   const requests: Array<{ url: string | undefined }> = [];
   let failuresRemaining = 0;
+  let stallsRemaining = 0;
   const server = createServer((request, response) => {
     requests.push({ url: request.url });
     if (failuresRemaining > 0) {
       failuresRemaining -= 1;
       response.writeHead(503).end();
+      return;
+    }
+    if (stallsRemaining > 0) {
+      stallsRemaining -= 1;
+      stalled.push(response);
       return;
     }
     response.writeHead(200, {
@@ -533,6 +644,10 @@ async function createSseUpstream() {
     failNext(count: number) {
       failuresRemaining = count;
     },
+    stallNext(count: number) {
+      stallsRemaining = count;
+    },
+    stalledRequests: async (count: number) => eventually(() => expect(stalled).toHaveLength(count)),
     close: async () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
