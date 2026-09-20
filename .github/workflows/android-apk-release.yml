@@ -102,7 +102,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run build:client
+          # build:client alone leaves highlight/plugin/relay dist outputs
+          # missing, which fails Metro bundling inside Gradle. server-deps
+          # builds every workspace package the app bundle resolves.
+          npm run build:server-deps
           cd packages/app
           APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
           cd android
