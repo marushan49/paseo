@@ -440,9 +440,15 @@ dispatch runs from `--ref main` and uses the explicit `paseo_version`; it does
 not check out or move the `v*` release tag.
 
 To retry a failed non-Docker release workflow, push a retry tag on the commit
-you want to build. Reusing the same tag name is expected: move it with
-`git tag -f ...` and push it with `--force` so the workflow rebuilds the commit
-you actually want.
+you want to build.
+
+**Never move a version tag after pushing it.** A pushed `vX.Y.Z` or
+`vX.Y.Z-beta.N` tag is immutable: a local clone may already resolve it to the
+old commit, so force-pushing it makes the same version point at two commits.
+When the tagged commit needs a product change, cut the next beta instead of
+reusing the tag name. Force-moving a tag is only acceptable when it was never
+published or used anywhere outside the local checkout, and it never becomes
+procedure.
 
 A failed desktop build leaves the GitHub Release as a draft. `finalize-rollout`
 uploads manifests from successful platforms before it fails. A later
