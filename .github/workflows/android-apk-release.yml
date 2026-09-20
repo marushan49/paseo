@@ -106,6 +106,9 @@ jobs:
           # missing, which fails Metro bundling inside Gradle. server-deps
           # builds every workspace package the app bundle resolves.
           npm run build:server-deps
+          # Fail in seconds instead of ~40 minutes into Gradle when a dist
+          # output is missing.
+          node scripts/verify-app-dist.mjs
           cd packages/app
           APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
           cd android
