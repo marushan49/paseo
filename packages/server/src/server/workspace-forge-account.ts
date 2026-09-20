@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isAbsolute, normalize } from "node:path";
+import { posix, win32 } from "node:path";
 
 /**
  * A workspace pins the forge CLI to one account by naming that account's config
@@ -41,13 +41,15 @@ export function normalizeForgeConfigDir(value: string | null | undefined): strin
     return null;
   }
   const expanded = expandHome(trimmed);
-  if (!isAbsolute(expanded)) {
+  const pathApi = expanded.startsWith("/") ? posix : win32;
+  if (!pathApi.isAbsolute(expanded)) {
     return null;
   }
-  const normalized = normalize(expanded);
+  const normalized = pathApi.normalize(expanded);
+  const root = pathApi.parse(normalized).root;
   // Keep a root path intact; strip the trailing separator everywhere else so
   // two spellings of the same directory compare equal.
-  return normalized.length > 1 ? normalized.replace(/[/\\]+$/, "") : normalized;
+  return normalized === root ? root : normalized.replace(/[/\\]+$/, "");
 }
 
 /**

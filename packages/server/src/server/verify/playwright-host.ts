@@ -26,6 +26,7 @@ import {
   collectSnapshotNodes,
   formatSnapshotYaml,
   snapshotRefIndex,
+  type CollectedSnapshotNode,
   type SnapshotNodeWithRef,
 } from "./page-snapshot.js";
 
@@ -53,6 +54,7 @@ export const DAEMON_PLAYWRIGHT_COMMANDS: readonly BrowserAutomationCommandName[]
   "wait",
   "scroll",
   "hover",
+  "drag",
   "resize",
   "screenshot",
   "logs",
@@ -275,6 +277,7 @@ export class DaemonPlaywrightHost {
       case "fill":
       case "select":
       case "hover":
+      case "drag":
         return this.runRefCommand({ tab, command, requestId });
       case "type":
       case "keypress":
@@ -344,15 +347,42 @@ export class DaemonPlaywrightHost {
 
   private async runRefCommand(input: {
     tab: DaemonBrowserTab;
-    command: Extract<BrowserAutomationCommand, { command: "click" | "fill" | "select" | "hover" }>;
+    command: Extract<
+      BrowserAutomationCommand,
+      { command: "click" | "fill" | "select" | "hover" | "drag" }
+    >;
     requestId: string;
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     switch (command.command) {
       case "click":
-        await tab.page.locator(resolveRefSelector(tab, command.args.ref, requestId)).click();
+        if ("ref" in command.args) {
+          await tab.page.locator(resolveRefSelector(tab, command.args.ref, requestId)).click();
+          invalidateSnapshot(tab);
+          return ok(requestId, {
+            command: "click",
+            browserId: tab.browserId,
+            ref: command.args.ref,
+          });
+        }
+        if (!("x" in command.args) || !("y" in command.args)) {
+          return browserToolsFailure({
+            requestId,
+            code: "browser_unknown_error",
+            message: "The browser click command has no target coordinates.",
+          });
+        }
+        const { button, doubleClick, modifiers, x, y } = command.args;
+        await withKeyboardModifiers(tab.page, modifiers, async () => {
+          await tab.page.mouse.click(x, y, { button, clickCount: doubleClick ? 2 : 1 });
+        });
         invalidateSnapshot(tab);
-        return ok(requestId, { command: "click", browserId: tab.browserId, ref: command.args.ref });
+        return ok(requestId, {
+          command: "click",
+          browserId: tab.browserId,
+          x,
+          y,
+        });
       case "fill":
         await tab.page
           .locator(resolveRefSelector(tab, command.args.ref, requestId))
@@ -369,8 +399,50 @@ export class DaemonPlaywrightHost {
           value: command.args.value,
         });
       case "hover":
-        await tab.page.locator(resolveRefSelector(tab, command.args.ref, requestId)).hover();
-        return ok(requestId, { command: "hover", browserId: tab.browserId, ref: command.args.ref });
+        if ("ref" in command.args) {
+          await tab.page.locator(resolveRefSelector(tab, command.args.ref, requestId)).hover();
+          return ok(requestId, {
+            command: "hover",
+            browserId: tab.browserId,
+            ref: command.args.ref,
+          });
+        }
+        await tab.page.mouse.move(command.args.x, command.args.y);
+        return ok(requestId, {
+          command: "hover",
+          browserId: tab.browserId,
+          x: command.args.x,
+          y: command.args.y,
+        });
+      case "drag":
+        if ("sourceRef" in command.args) {
+          await tab.page
+            .locator(resolveRefSelector(tab, command.args.sourceRef, requestId))
+            .dragTo(tab.page.locator(resolveRefSelector(tab, command.args.targetRef, requestId)));
+          invalidateSnapshot(tab);
+          return ok(requestId, {
+            command: "drag",
+            browserId: tab.browserId,
+            sourceRef: command.args.sourceRef,
+            targetRef: command.args.targetRef,
+          });
+        }
+        await tab.page.mouse.move(command.args.sourceX, command.args.sourceY);
+        await tab.page.mouse.down();
+        try {
+          await tab.page.mouse.move(command.args.targetX, command.args.targetY, { steps: 8 });
+        } finally {
+          await tab.page.mouse.up();
+        }
+        invalidateSnapshot(tab);
+        return ok(requestId, {
+          command: "drag",
+          browserId: tab.browserId,
+          sourceX: command.args.sourceX,
+          sourceY: command.args.sourceY,
+          targetX: command.args.targetX,
+          targetY: command.args.targetY,
+        });
     }
   }
 
@@ -411,6 +483,9 @@ export class DaemonPlaywrightHost {
           ...(command.args.ref ? { ref: command.args.ref } : {}),
         });
       case "scroll":
+        if (command.args.x !== undefined && command.args.y !== undefined) {
+          await tab.page.mouse.move(command.args.x, command.args.y);
+        }
         if (command.args.ref) {
           await tab.page
             .locator(resolveRefSelector(tab, command.args.ref, requestId))
@@ -423,6 +498,9 @@ export class DaemonPlaywrightHost {
           ...(command.args.ref ? { ref: command.args.ref } : {}),
           deltaX: command.args.deltaX,
           deltaY: command.args.deltaY,
+          ...(command.args.x !== undefined && command.args.y !== undefined
+            ? { x: command.args.x, y: command.args.y }
+            : {}),
         });
     }
   }
@@ -441,8 +519,7 @@ export class DaemonPlaywrightHost {
           | "close_tab"
           | "list_tabs"
           | "new_tab"
-          | "upload"
-          | "drag";
+          | "upload";
       }
     >;
     requestId: string;
@@ -470,7 +547,6 @@ export class DaemonPlaywrightHost {
       case "list_tabs":
       case "new_tab":
       case "upload":
-      case "drag":
         return browserToolsFailure({
           requestId,
           code: "browser_unsupported",
@@ -511,6 +587,18 @@ export class DaemonPlaywrightHost {
   }): Promise<BrowserToolsResponsePayload> {
     const { tab, command, requestId } = input;
     const data = await this.captureScreenshot(tab, command.args.fullPage);
+    if (command.args.ephemeral) {
+      const viewport = tab.page.viewportSize() ?? DEFAULT_VERIFY_VIEWPORT;
+      return ok(requestId, {
+        command: "screenshot",
+        browserId: tab.browserId,
+        mimeType: "image/png",
+        dataBase64: data.toString("base64"),
+        bytes: data.byteLength,
+        width: viewport.width,
+        height: viewport.height,
+      });
+    }
     // Capture time, not write time: with a capture retry the two differ,
     // and the timeline anchor must point at the moment the pixels existed.
     const capturedAt = new Date().toISOString();
@@ -694,7 +782,10 @@ export class DaemonPlaywrightHost {
     truncated: boolean;
     stats: { nodeCount: number; refCount: number; textLength: number };
   }> {
-    const collected = await tab.page.evaluate(collectSnapshotNodes);
+    // Playwright serializes this function into the page, where the tsx/esbuild
+    // __name() helper does not exist. Strip those calls before evaluating.
+    const snapshotSource = collectSnapshotNodes.toString().replace(/__name\([^;]*\);?/g, "");
+    const collected = (await tab.page.evaluate(`(${snapshotSource})()`)) as CollectedSnapshotNode[];
     const formatted = formatSnapshotYaml(collected);
     tab.snapshot = formatted.nodes;
     return { yaml: formatted.yaml, truncated: formatted.truncated, stats: formatted.stats };
@@ -728,7 +819,21 @@ export class DaemonPlaywrightHost {
   ): Promise<{ resultJson: string; truncated: boolean }> {
     const selector = ref ? resolveRefSelector(tab, ref, "evaluate") : undefined;
     const raw = await tab.page.evaluate(
-      `(() => { const element = ${selector ? `document.querySelector(${JSON.stringify(selector)})` : "document"}; const fn = new Function("element", ${JSON.stringify(functionSource)}); return fn(element); })()`,
+      async ({ source, elementSelector }) => {
+        const userFunction = new Function(`return (${source})`)();
+        if (typeof userFunction !== "function") {
+          throw new Error("browser_evaluate input must evaluate to a function.");
+        }
+        if (!elementSelector) {
+          return userFunction();
+        }
+        const element = document.querySelector(elementSelector);
+        if (!element) {
+          throw new Error("The referenced browser element is no longer available.");
+        }
+        return userFunction(element);
+      },
+      { source: functionSource, elementSelector: selector ?? null },
     );
     const resultJson = JSON.stringify(raw ?? null) ?? "null";
     if (Buffer.byteLength(resultJson, "utf8") <= MAX_EVALUATE_JSON_BYTES) {
@@ -917,6 +1022,23 @@ function pushNetwork(tab: DaemonBrowserTab, entry: VerifyNetworkEntry): void {
 
 function truncateLogText(text: string): string {
   return text.length > 2000 ? `${text.slice(0, 2000)}…` : text;
+}
+
+async function withKeyboardModifiers(
+  page: Page,
+  modifiers: readonly string[],
+  action: () => Promise<void>,
+): Promise<void> {
+  for (const modifier of modifiers) {
+    await page.keyboard.down(modifier);
+  }
+  try {
+    await action();
+  } finally {
+    for (const modifier of modifiers.toReversed()) {
+      await page.keyboard.up(modifier);
+    }
+  }
 }
 
 function truncateErrorMessage(error: unknown): string {

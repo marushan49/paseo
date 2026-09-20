@@ -1,4 +1,4 @@
-import { prefersDaemonHost, DAEMON_BROWSER_HOST_ID } from "./host-preference.js";
+import { DAEMON_BROWSER_HOST_ID } from "./host-preference.js";
 import { randomUUID } from "node:crypto";
 import {
   BrowserAutomationExecuteRequestSchema,
@@ -205,7 +205,7 @@ export class BrowserToolsBroker {
     request: BrowserAutomationExecuteRequest;
     timeoutMs: number;
   }): Promise<BrowserToolsResponsePayload> {
-    const hosts = Array.from(this.clients.values());
+    const hosts = this.selectBrowserHosts();
     if (hosts.length === 0) {
       return this.noBrowserHostFailure(params.request.requestId);
     }
@@ -272,12 +272,7 @@ export class BrowserToolsBroker {
     | { ok: true; value: RegisteredBrowserHost }
     | { ok: false; payload: BrowserToolsResponsePayload } {
     if (command.command === "new_tab") {
-      // A loopback URL only exists on the daemon's own machine, so the newest
-      // host is the wrong answer there: the desktop app's browser would resolve
-      // it against the laptop and load an empty document.
-      const host = prefersDaemonHost(command.args.url)
-        ? (this.selectDaemonHost() ?? this.selectMostRecentlyRegisteredHost())
-        : this.selectMostRecentlyRegisteredHost();
+      const host = this.selectDaemonHost() ?? this.selectMostRecentlyRegisteredHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -346,6 +341,11 @@ export class BrowserToolsBroker {
       }
     }
     return null;
+  }
+
+  private selectBrowserHosts(): RegisteredBrowserHost[] {
+    const daemonHost = this.selectDaemonHost();
+    return daemonHost ? [daemonHost] : Array.from(this.clients.values());
   }
 
   private selectMostRecentlyRegisteredHost(): RegisteredBrowserHost | null {

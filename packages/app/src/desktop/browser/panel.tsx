@@ -2,10 +2,13 @@ import { useMemo } from "react";
 import { Image } from "react-native";
 import { Globe } from "lucide-react-native";
 import invariant from "tiny-invariant";
+import { getIsElectron } from "@/constants/platform";
+import { RemoteBrowserPane } from "@/desktop/browser/remote-pane";
 import { BrowserPane } from "@/desktop/browser/pane";
 import { usePaneContext, usePaneFocus } from "@/panels/pane-context";
 import { definePanel, type PanelDescriptor, type PanelIconProps } from "@/panels/panel-registry";
 import { useBrowserStore } from "@/desktop/browser/store";
+import { useHostFeature } from "@/runtime/host-features";
 import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
 
 function getBrowserLabel(input: { title: string; url: string }): string {
@@ -58,13 +61,25 @@ function BrowserPanel() {
   const { serverId, workspaceId, target } = usePaneContext();
   const { focusPane, isInteractive } = usePaneFocus();
   const cwd = useWorkspaceDirectory(serverId, workspaceId);
+  const supportsRemoteBrowser = useHostFeature(serverId, "remoteBrowser");
   invariant(target.kind === "browser", "BrowserPanel requires browser target");
+  if (!supportsRemoteBrowser && getIsElectron()) {
+    return (
+      <BrowserPane
+        browserId={target.browserId}
+        serverId={serverId}
+        workspaceId={workspaceId}
+        cwd={cwd}
+        isInteractive={isInteractive}
+        onFocusPane={focusPane}
+      />
+    );
+  }
   return (
-    <BrowserPane
+    <RemoteBrowserPane
       browserId={target.browserId}
       serverId={serverId}
       workspaceId={workspaceId}
-      cwd={cwd}
       isInteractive={isInteractive}
       onFocusPane={focusPane}
     />

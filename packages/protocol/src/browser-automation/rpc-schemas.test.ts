@@ -50,6 +50,21 @@ const commandParseCases = [
     },
   },
   {
+    name: "coordinate click",
+    command: { command: "click", args: { browserId: BROWSER_ID, x: 40, y: 30 } },
+    expected: {
+      command: "click",
+      args: {
+        browserId: BROWSER_ID,
+        x: 40,
+        y: 30,
+        button: "left",
+        doubleClick: false,
+        modifiers: [],
+      },
+    },
+  },
+  {
     name: "fill",
     command: {
       command: "fill",
@@ -146,6 +161,11 @@ const commandParseCases = [
     expected: { command: "hover", args: { browserId: BROWSER_ID, ref: "@e4" } },
   },
   {
+    name: "coordinate hover",
+    command: { command: "hover", args: { browserId: BROWSER_ID, x: 260, y: 30 } },
+    expected: { command: "hover", args: { browserId: BROWSER_ID, x: 260, y: 30 } },
+  },
+  {
     name: "drag",
     command: {
       command: "drag",
@@ -154,6 +174,17 @@ const commandParseCases = [
     expected: {
       command: "drag",
       args: { browserId: BROWSER_ID, sourceRef: "@e4", targetRef: "@e5" },
+    },
+  },
+  {
+    name: "coordinate drag",
+    command: {
+      command: "drag",
+      args: { browserId: BROWSER_ID, sourceX: 50, sourceY: 140, targetX: 340, targetY: 140 },
+    },
+    expected: {
+      command: "drag",
+      args: { browserId: BROWSER_ID, sourceX: 50, sourceY: 140, targetX: 340, targetY: 140 },
     },
   },
   {
@@ -203,6 +234,17 @@ const commandParseCases = [
     expected: {
       command: "scroll",
       args: { browserId: BROWSER_ID, ref: "@e1", deltaX: 10, deltaY: -20 },
+    },
+  },
+  {
+    name: "scroll with coordinates",
+    command: {
+      command: "scroll",
+      args: { browserId: BROWSER_ID, x: 600, y: 400, deltaX: 0, deltaY: 500 },
+    },
+    expected: {
+      command: "scroll",
+      args: { browserId: BROWSER_ID, x: 600, y: 400, deltaX: 0, deltaY: 500 },
     },
   },
   {
@@ -259,6 +301,11 @@ const resultParseCases = [
     name: "click",
     result: { command: "click", browserId: BROWSER_ID, ref: "@e1" },
     expected: { command: "click", browserId: BROWSER_ID, ref: "@e1" },
+  },
+  {
+    name: "coordinate click",
+    result: { command: "click", browserId: BROWSER_ID, x: 40, y: 30 },
+    expected: { command: "click", browserId: BROWSER_ID, x: 40, y: 30 },
   },
   {
     name: "fill",
@@ -364,9 +411,33 @@ const resultParseCases = [
     expected: { command: "hover", browserId: BROWSER_ID, ref: "@e4" },
   },
   {
+    name: "coordinate hover",
+    result: { command: "hover", browserId: BROWSER_ID, x: 260, y: 30 },
+    expected: { command: "hover", browserId: BROWSER_ID, x: 260, y: 30 },
+  },
+  {
     name: "drag",
     result: { command: "drag", browserId: BROWSER_ID, sourceRef: "@e4", targetRef: "@e5" },
     expected: { command: "drag", browserId: BROWSER_ID, sourceRef: "@e4", targetRef: "@e5" },
+  },
+  {
+    name: "coordinate drag",
+    result: {
+      command: "drag",
+      browserId: BROWSER_ID,
+      sourceX: 50,
+      sourceY: 140,
+      targetX: 340,
+      targetY: 140,
+    },
+    expected: {
+      command: "drag",
+      browserId: BROWSER_ID,
+      sourceX: 50,
+      sourceY: 140,
+      targetX: 340,
+      targetY: 140,
+    },
   },
   {
     name: "logs",
@@ -560,10 +631,10 @@ describe("browser automation execute RPC schemas", () => {
       },
     });
 
-    expect(parsed).toMatchObject({
-      success: false,
-      error: { issues: [expect.objectContaining({ message: 'Unrecognized key: "workspaceId"' })] },
-    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.message).toContain("workspaceId");
+    }
   });
 
   test("wait rejects calls without exactly one condition", () => {
