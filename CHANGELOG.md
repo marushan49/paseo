@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0-beta.4 - 2026-09-20
+
+### Added
+
+- Added persistent workspace browsers hosted by the daemon, with remote keyboard, pointer, scroll, hover, and drag input on desktop, web, and mobile ([#1](https://github.com/marushan49/paseo/pull/1))
+
+### Changed
+
+- Changed desktop updates to download releases from the `marushan49/paseo` fork
+- Changed fork Android APK releases to build directly in GitHub Actions without an Expo account
+
+### Fixed
+
+- Fixed unsigned fork macOS release builds treating an empty certificate path as the desktop package directory
+
 ## 0.9.0-beta.3 - 2026-09-20
 
 ### Added
