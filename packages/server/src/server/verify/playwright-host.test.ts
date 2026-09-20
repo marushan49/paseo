@@ -143,6 +143,85 @@ describe.skipIf(!BROWSER_AVAILABLE)("DaemonPlaywrightHost", () => {
     expect(waited?.ok).toBe(true);
   });
 
+  it("dispatches trusted coordinate pointer actions", async () => {
+    const browserId = await openTab(`${app?.url}/interaction`, "pointer-flow");
+
+    const clicked = await executeTabCommand(
+      {
+        command: "click",
+        args: {
+          browserId,
+          x: 40,
+          y: 30,
+          button: "left",
+          doubleClick: false,
+          modifiers: [],
+        },
+      },
+      "pointer-flow",
+    );
+    expect(clicked).toMatchObject({ ok: true, result: { command: "click", x: 40, y: 30 } });
+
+    const hovered = await executeTabCommand(
+      { command: "hover", args: { browserId, x: 260, y: 30 } },
+      "pointer-flow",
+    );
+    expect(hovered).toMatchObject({ ok: true, result: { command: "hover", x: 260, y: 30 } });
+
+    const dragged = await executeTabCommand(
+      {
+        command: "drag",
+        args: {
+          browserId,
+          sourceX: 50,
+          sourceY: 140,
+          targetX: 340,
+          targetY: 140,
+        },
+      },
+      "pointer-flow",
+    );
+    expect(dragged).toMatchObject({
+      ok: true,
+      result: { command: "drag", sourceX: 50, sourceY: 140, targetX: 340, targetY: 140 },
+    });
+
+    const scrolled = await executeTabCommand(
+      {
+        command: "scroll",
+        args: { browserId, x: 600, y: 400, deltaX: 0, deltaY: 500 },
+      },
+      "pointer-flow",
+    );
+    expect(scrolled).toMatchObject({
+      ok: true,
+      result: { command: "scroll", x: 600, y: 400, deltaX: 0, deltaY: 500 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const state = await executeTabCommand(
+      {
+        command: "evaluate",
+        args: {
+          browserId,
+          function:
+            "return { clicked: document.body.dataset.clicked, hovered: document.body.dataset.hovered, dragged: document.body.dataset.dragged, scrollY: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }",
+        },
+      },
+      "pointer-flow",
+    );
+    expect(state).toMatchObject({ ok: true, result: { command: "evaluate" } });
+    if (state?.ok && state.result.command === "evaluate") {
+      expect(JSON.parse(state.result.resultJson)).toEqual({
+        clicked: "yes",
+        hovered: "yes",
+        dragged: "yes",
+        scrollY: expect.any(Number),
+      });
+      expect(JSON.parse(state.result.resultJson).scrollY).toBeGreaterThan(0);
+    }
+  });
+
   it("captures console errors and failed requests without recording successes", async () => {
     const created = await host?.executeLocal({
       workspaceId: WORKSPACE_ID,

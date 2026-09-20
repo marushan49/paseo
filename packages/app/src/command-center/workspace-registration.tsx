@@ -195,6 +195,7 @@ export function useWorkspaceCommandCenterActions(): void {
   const isPinned = fields?.pinnedAt != null;
   const isCompact = useIsCompactFormFactor();
   const canPin = useHostFeature(serverId, "workspacePinning");
+  const canOpenRemoteBrowserTabs = useHostFeature(serverId, "remoteBrowser");
   const persistenceKey =
     serverId && fields
       ? buildWorkspaceTabPersistenceKey({ serverId, workspaceId: fields.id })
@@ -285,7 +286,7 @@ export function useWorkspaceCommandCenterActions(): void {
         shortcuts: resolveWorkspaceShortcuts(overrides),
         capabilities: {
           canSplitPanes: supportsDesktopPaneSplits() && !isCompact,
-          canOpenBrowserTabs: getIsElectron(),
+          canOpenBrowserTabs: getIsElectron() || canOpenRemoteBrowserTabs,
           isGit,
           canPin,
           canShowSetup,
@@ -308,6 +309,7 @@ export function useWorkspaceCommandCenterActions(): void {
     [
       activeTabIndex,
       activeTabKind,
+      canOpenRemoteBrowserTabs,
       canPin,
       canShowSetup,
       copyBranchName,

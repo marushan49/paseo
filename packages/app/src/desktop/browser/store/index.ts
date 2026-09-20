@@ -11,6 +11,7 @@ import {
   type BrowserRecordPatch,
   type BrowserViewport,
   createBrowserRecord,
+  createRemoteBrowserRecord,
   normalizeBrowserIndexState,
   normalizeBrowserUrl,
   removeBrowserFromIndex,
@@ -27,6 +28,7 @@ export {
 
 interface BrowserStoreState extends BrowserIndexState {
   createBrowser: (input?: { initialUrl?: string }) => string;
+  upsertRemoteBrowser: (input: { browserId: string; url: string; title?: string }) => void;
   updateBrowser: (browserId: string, patch: BrowserRecordPatch) => void;
   setBrowserViewport: (browserId: string, viewport: BrowserViewport) => void;
   removeBrowser: (browserId: string) => void;
@@ -63,6 +65,18 @@ export const useBrowserStore = create<BrowserStoreState>()(
         }));
 
         return browserId;
+      },
+      upsertRemoteBrowser: (input) => {
+        set((state) => {
+          if (state.browsersById[input.browserId]) return state;
+          const record = createRemoteBrowserRecord({
+            browserId: input.browserId,
+            initialUrl: input.url,
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            now: Date.now(),
+          });
+          return { browsersById: { ...state.browsersById, [input.browserId]: record } };
+        });
       },
       updateBrowser: (browserId, patch) => {
         set((state) => applyBrowserPatch(state, browserId, patch));

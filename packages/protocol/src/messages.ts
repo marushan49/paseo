@@ -76,8 +76,10 @@ import {
 } from "./loop/rpc-schemas.js";
 import {
   BROWSER_AUTOMATION_COMMAND_NAMES,
+  BrowserAutomationCommandSchema,
   BrowserAutomationExecuteRequestSchema,
   BrowserAutomationExecuteResponseSchema,
+  BrowserAutomationResponsePayloadSchema,
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
@@ -3281,6 +3283,18 @@ export const BrowserHostRegisterResponseSchema = z.object({
   payload: z.object({ requestId: z.string(), subscriptionId: z.string() }),
 });
 
+export const BrowserRemoteExecuteRequestSchema = z.object({
+  type: z.literal("browser.remote.execute.request"),
+  requestId: z.string(),
+  workspaceId: z.string().min(1),
+  command: BrowserAutomationCommandSchema,
+});
+
+export const BrowserRemoteExecuteResponseSchema = z.object({
+  type: z.literal("browser.remote.execute.response"),
+  payload: BrowserAutomationResponsePayloadSchema,
+});
+
 export const SubscriptionReleaseRequestSchema = z.object({
   type: z.literal("subscription.release.request"),
   requestId: z.string(),
@@ -3299,6 +3313,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
   BrowserAutomationExecuteResponseSchema,
+  BrowserRemoteExecuteRequestSchema,
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
   AudioPlayedMessageSchema,
@@ -3692,6 +3707,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
+        remoteBrowser: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -6921,6 +6937,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionAgentUpdateSchema,
   HubExecutionAgentStreamSchema,
   BrowserAutomationExecuteRequestSchema,
+  BrowserRemoteExecuteResponseSchema,
   PluginCatalogGetResponseSchema,
   PluginListResponseSchema,
   PluginLogsGetResponseSchema,
@@ -6990,8 +7007,6 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunResponseSchema,
-  VerifyEvidenceRunListResponseSchema,
-  VerifyEvidenceArtifactGetResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,

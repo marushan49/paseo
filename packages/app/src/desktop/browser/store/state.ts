@@ -8,6 +8,7 @@ export const RESPONSIVE_BROWSER_VIEWPORT: BrowserViewport = { mode: "responsive"
 
 export interface BrowserRecord {
   browserId: string;
+  remoteBrowserId: string | null;
   url: string;
   title: string;
   isLoading: boolean;
@@ -36,6 +37,7 @@ const BrowserViewportSchema = z.discriminatedUnion("mode", [
 
 const BrowserRecordSchema = z.strictObject({
   browserId: z.string(),
+  remoteBrowserId: z.string().nullable().optional().default(null),
   url: z.string(),
   title: z.string(),
   isLoading: z.boolean(),
@@ -111,6 +113,7 @@ export function createBrowserRecord(input: {
 }): BrowserRecord {
   return {
     browserId: input.browserId,
+    remoteBrowserId: null,
     url: normalizeBrowserUrl(input.initialUrl),
     title: "",
     isLoading: false,
@@ -120,6 +123,19 @@ export function createBrowserRecord(input: {
     lastError: null,
     viewport: RESPONSIVE_BROWSER_VIEWPORT,
     createdAt: input.now,
+  };
+}
+
+export function createRemoteBrowserRecord(input: {
+  browserId: string;
+  initialUrl: string | null | undefined;
+  title?: string;
+  now: number;
+}): BrowserRecord {
+  return {
+    ...createBrowserRecord(input),
+    remoteBrowserId: input.browserId,
+    title: input.title ?? "",
   };
 }
 
@@ -149,6 +165,7 @@ export function applyBrowserPatch<S extends BrowserIndexState>(
 
   if (
     nextRecord.url === existing.url &&
+    nextRecord.remoteBrowserId === existing.remoteBrowserId &&
     nextRecord.title === existing.title &&
     nextRecord.isLoading === existing.isLoading &&
     nextRecord.canGoBack === existing.canGoBack &&

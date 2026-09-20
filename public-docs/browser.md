@@ -42,9 +42,9 @@ The tools are part of the [Paseo MCP toolset](/docs/mcp), so **Enable Paseo tool
 
 > Browser tools let agents access and control Paseo browser tabs, including logged-in browser state. Only enable this for agents you trust.
 
-## Desktop only, for now
+## Host-native browser
 
-Browser tabs are hosted by the Paseo desktop app. The daemon itself doesn't run a browser — it routes tool calls to a connected desktop app, and returns an error when none is connected. The wire contract is host-neutral, so other hosts can carry the same tools later.
+Browser tabs are hosted by the Paseo daemon on the machine where your workspace runs. The app shows a remote viewport and forwards clicks, keyboard input, scrolling, hover, and long-press drags, so Mac, Android, and the web client can use the same Linux browser profile. The desktop app remains a compatibility fallback for older daemons.
 
 ## How an agent sees a page
 
@@ -65,12 +65,15 @@ For anything the tree can't capture, agents fall back to `browser_screenshot`, a
 ## Architecture
 
 ```
-agent ──MCP──▶ daemon (broker) ──▶ browser host (desktop app) ──▶ webview
+agent ──MCP──▶ daemon (broker) ──▶ persistent browser (workspace host)
+                                      ▲
+                         app viewport + input RPC
 ```
 
 - **Workspace-scoped tabs.** An agent only sees and controls tabs in its own workspace. New tabs open in the background without stealing your focus.
-- **Tab-to-host routing.** The daemon remembers which host owns each tab and routes tab commands there. `browser_list_tabs` aggregates all connected hosts.
-- **Trusted input.** Clicks, keys, hovers, and drags are dispatched as real browser input events — CSS `:hover` triggers, and pages can't tell an agent's click from a user's. Every action first waits for its target to be visible, enabled, and stable.
+- **Persistent profiles.** The daemon stores browser profiles below its Paseo home, so cookies, local storage, and logins stay on the workspace host.
+- **Tab-to-host routing.** The daemon browser owns new tabs when available and keeps tab commands on that host. `browser_list_tabs` still aggregates connected hosts for compatibility.
+- **Trusted input.** Clicks, keys, hovers, scrolls, and drags are dispatched as real browser input events — CSS `:hover` triggers, and pages can't tell an agent's click from a user's. Ref-based actions first wait for their target to be visible, enabled, and stable.
 - **Dialogs never block.** `alert` is accepted; `confirm`, `prompt`, and `beforeunload` are dismissed. Every handled dialog is reported in the tool result so the agent knows the page flow changed.
 
 ## Security

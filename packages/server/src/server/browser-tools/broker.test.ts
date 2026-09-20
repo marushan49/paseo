@@ -302,6 +302,37 @@ describe("BrowserToolsBroker", () => {
     });
   });
 
+  test("daemon browser host owns new tabs when it is connected", async () => {
+    const broker = createBroker();
+    const appHost = new FakeBrowserHostClient("desktop-app");
+    const daemonHost = new FakeBrowserHostClient("daemon-playwright");
+    broker.registerClient(appHost);
+    broker.registerClient(daemonHost);
+
+    const newTabPromise = broker.execute({
+      command: { command: "new_tab", args: { url: "https://example.com" } },
+      workspaceId: "workspace-1",
+    });
+
+    expect(appHost.receivedRequests).toEqual([]);
+    expect(daemonHost.receivedRequests).toHaveLength(1);
+    daemonHost.resolveLatestWith(broker, {
+      requestId: "req-1",
+      ok: true,
+      result: {
+        command: "new_tab",
+        browserId: BROWSER_ID,
+        workspaceId: "workspace-1",
+        url: "https://example.com",
+      },
+    });
+
+    await expect(newTabPromise).resolves.toMatchObject({
+      ok: true,
+      result: { command: "new_tab", browserId: BROWSER_ID },
+    });
+  });
+
   test("list tabs aggregates all hosts and seeds browser id affinity", async () => {
     const broker = createBroker();
     const firstHost = new FakeBrowserHostClient("host-1");
