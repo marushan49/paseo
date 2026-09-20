@@ -98,6 +98,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Setup Gradle
+        # Default cache backend restores Gradle User Home state; cache writes
+        # happen on the default branch, tag builds read. A main build warms it.
+        uses: gradle/actions/setup-gradle@v6
+
       - name: Build Android APK
         shell: bash
         run: |
@@ -119,7 +124,7 @@ jobs:
             -x generateReleaseLintModel \
             -x generateReleaseLintVitalModel \
             --no-daemon \
-            --max-workers=1 \
+            --max-workers=2 \
             -Dorg.gradle.parallel=false
 
       - name: Resolve APK artifact
