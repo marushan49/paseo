@@ -687,6 +687,7 @@ function RemoteBrowserPane({
             accessible={true}
             onPointerMove={isWeb ? handleFramePointerMove : undefined}
             style={styles.frameButton}
+            testID={`remote-browser-frame-${browserId}`}
           >
             <Image source={frameSource} style={styles.frame} />
           </View>

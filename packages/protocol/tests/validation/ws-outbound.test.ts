@@ -138,6 +138,37 @@ const SourceSchema = z.object({
     );
   });
 
+  it("accepts successful remote browser responses", () => {
+    const envelope = {
+      type: "session",
+      message: {
+        type: "browser.remote.execute.response",
+        payload: {
+          requestId: "browser-list-tabs",
+          ok: true,
+          result: {
+            command: "list_tabs",
+            tabs: [
+              {
+                browserId: "1789916825098-240aff690890fca6",
+                workspaceId: "workspace-1",
+                url: "https://example.com",
+                title: "Example",
+                isActive: true,
+                isLoading: false,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(GeneratedWSOutboundMessageSchema.safeParse(envelope)).toEqual({
+      success: true,
+      data: envelope,
+    });
+  });
+
   it("accepts project config responses with and without setup commit status", () => {
     const payload = {
       requestId: "project-config-read",

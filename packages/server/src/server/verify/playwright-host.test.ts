@@ -205,7 +205,7 @@ describe.skipIf(!BROWSER_AVAILABLE)("DaemonPlaywrightHost", () => {
         args: {
           browserId,
           function:
-            "return { clicked: document.body.dataset.clicked, hovered: document.body.dataset.hovered, dragged: document.body.dataset.dragged, scrollY: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) }",
+            "() => ({ clicked: document.body.dataset.clicked, hovered: document.body.dataset.hovered, dragged: document.body.dataset.dragged, scrollY: Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop) })",
         },
       },
       "pointer-flow",

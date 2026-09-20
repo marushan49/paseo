@@ -26,6 +26,7 @@ import {
   collectSnapshotNodes,
   formatSnapshotYaml,
   snapshotRefIndex,
+  type CollectedSnapshotNode,
   type SnapshotNodeWithRef,
 } from "./page-snapshot.js";
 
@@ -781,7 +782,10 @@ export class DaemonPlaywrightHost {
     truncated: boolean;
     stats: { nodeCount: number; refCount: number; textLength: number };
   }> {
-    const collected = await tab.page.evaluate(collectSnapshotNodes);
+    // Playwright serializes this function into the page, where the tsx/esbuild
+    // __name() helper does not exist. Strip those calls before evaluating.
+    const snapshotSource = collectSnapshotNodes.toString().replace(/__name\([^;]*\);?/g, "");
+    const collected = (await tab.page.evaluate(`(${snapshotSource})()`)) as CollectedSnapshotNode[];
     const formatted = formatSnapshotYaml(collected);
     tab.snapshot = formatted.nodes;
     return { yaml: formatted.yaml, truncated: formatted.truncated, stats: formatted.stats };
@@ -815,7 +819,21 @@ export class DaemonPlaywrightHost {
   ): Promise<{ resultJson: string; truncated: boolean }> {
     const selector = ref ? resolveRefSelector(tab, ref, "evaluate") : undefined;
     const raw = await tab.page.evaluate(
-      `(() => { const element = ${selector ? `document.querySelector(${JSON.stringify(selector)})` : "document"}; const fn = new Function("element", ${JSON.stringify(functionSource)}); return fn(element); })()`,
+      async ({ source, elementSelector }) => {
+        const userFunction = new Function(`return (${source})`)();
+        if (typeof userFunction !== "function") {
+          throw new Error("browser_evaluate input must evaluate to a function.");
+        }
+        if (!elementSelector) {
+          return userFunction();
+        }
+        const element = document.querySelector(elementSelector);
+        if (!element) {
+          throw new Error("The referenced browser element is no longer available.");
+        }
+        return userFunction(element);
+      },
+      { source: functionSource, elementSelector: selector ?? null },
     );
     const resultJson = JSON.stringify(raw ?? null) ?? "null";
     if (Buffer.byteLength(resultJson, "utf8") <= MAX_EVALUATE_JSON_BYTES) {

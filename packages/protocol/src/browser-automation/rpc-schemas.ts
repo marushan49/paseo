@@ -539,7 +539,7 @@ export const BrowserAutomationExecuteRequestSchema = z
   })
   .strict();
 
-export const BrowserAutomationResponsePayloadSchema = z.discriminatedUnion("ok", [
+export const BrowserAutomationResponsePayloadSchema = z.union([
   z.object({
     requestId: z.string().min(1),
     ok: z.literal(true),

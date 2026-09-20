@@ -1643,6 +1643,70 @@ function WorkspaceScreenContent({
     [normalizedServerId, normalizedWorkspaceId],
   );
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
+  const canOpenRemoteBrowserTabs = useHostFeature(normalizedServerId, "remoteBrowser");
+  useEffect(() => {
+    if (
+      !isRouteFocused ||
+      !isConnected ||
+      !client ||
+      !persistenceKey ||
+      !canOpenRemoteBrowserTabs
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const syncRemoteTabs = async () => {
+      try {
+        const response = await client.executeRemoteBrowserCommand({
+          workspaceId: normalizedWorkspaceId,
+          command: { command: "list_tabs", args: {} },
+        });
+        if (cancelled || !response.ok || response.result.command !== "list_tabs") return;
+
+        for (const tab of response.result.tabs) {
+          if (tab.workspaceId && tab.workspaceId !== normalizedWorkspaceId) continue;
+          useBrowserStore.getState().upsertRemoteBrowser({
+            browserId: tab.browserId,
+            url: tab.url,
+            title: tab.title,
+          });
+          const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[persistenceKey];
+          const isOpen = layout
+            ? collectAllTabs(layout.root).some(
+                (candidate) =>
+                  candidate.target.kind === "browser" &&
+                  candidate.target.browserId === tab.browserId,
+              )
+            : false;
+          if (!isOpen) {
+            openTab({
+              workspaceKey: persistenceKey,
+              target: { kind: "browser", browserId: tab.browserId },
+              intent: "background",
+            });
+          }
+        }
+      } catch {
+        // Connection state owns user-visible errors; this refresh is opportunistic.
+      }
+    };
+
+    void syncRemoteTabs();
+    const interval = setInterval(() => void syncRemoteTabs(), 1_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [
+    canOpenRemoteBrowserTabs,
+    client,
+    isConnected,
+    isRouteFocused,
+    normalizedWorkspaceId,
+    openTab,
+    persistenceKey,
+  ]);
   const replaceWorkspaceTabTarget = useWorkspaceLayoutStore((state) => state.replaceTab);
   const openWorkspaceTabFocused = useCallback(
     (workspaceKey: string, target: WorkspaceTabTarget, placement?: WorkspaceTabPlacement) =>
@@ -3918,7 +3982,6 @@ function WorkspaceScreenContent({
     () => createTerminalMutation.isPending || pendingTerminalCreateInput !== null,
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
-  const canOpenRemoteBrowserTabs = useHostFeature(normalizedServerId, "remoteBrowser");
   const showCreateBrowserTab = [getIsElectron(), canOpenRemoteBrowserTabs].some(Boolean);
   const newTabLauncher = useMemo<NewTabLauncher>(
     () => ({
