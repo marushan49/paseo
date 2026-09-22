@@ -297,6 +297,13 @@ const commandHandlers: Record<BrowserAutomationCommand["command"], CommandHandle
   },
   click: ({ command, requestId, workspaceId, registry, snapshotEngine }) => {
     const clickCommand = command as Extract<BrowserAutomationCommand, { command: "click" }>;
+    if (!("ref" in clickCommand.args)) {
+      return fail(
+        requestId,
+        "browser_unsupported",
+        "Coordinate browser clicks require a daemon host.",
+      );
+    }
     return executeClick(
       requestId,
       workspaceId,
@@ -444,6 +451,13 @@ const commandHandlers: Record<BrowserAutomationCommand["command"], CommandHandle
   },
   hover: ({ command, requestId, workspaceId, registry, snapshotEngine }) => {
     const hoverCommand = command as Extract<BrowserAutomationCommand, { command: "hover" }>;
+    if (!("ref" in hoverCommand.args)) {
+      return fail(
+        requestId,
+        "browser_unsupported",
+        "Coordinate browser hovers require a daemon host.",
+      );
+    }
     return executeHover(
       requestId,
       workspaceId,
@@ -455,6 +469,13 @@ const commandHandlers: Record<BrowserAutomationCommand["command"], CommandHandle
   },
   drag: ({ command, requestId, workspaceId, registry, snapshotEngine }) => {
     const dragCommand = command as Extract<BrowserAutomationCommand, { command: "drag" }>;
+    if (!("sourceRef" in dragCommand.args)) {
+      return fail(
+        requestId,
+        "browser_unsupported",
+        "Coordinate browser drags require a daemon host.",
+      );
+    }
     return executeDrag(
       requestId,
       workspaceId,

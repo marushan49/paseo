@@ -172,8 +172,10 @@ import {
 } from "./compat/normalize-provider-models.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 import type {
+  BrowserAutomationCommand,
   BrowserAutomationExecuteRequest,
   BrowserAutomationExecuteResponse,
+  BrowserAutomationResponsePayload,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 
 export interface Logger {
@@ -2232,6 +2234,24 @@ export class DaemonClient {
       { type: "browser.host.register.request", ...registration },
       options,
     );
+  }
+
+  executeRemoteBrowserCommand(input: {
+    workspaceId: string;
+    command: BrowserAutomationCommand;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<BrowserAutomationResponsePayload> {
+    return this.sendCorrelatedSessionRequest<"browser.remote.execute.response">({
+      requestId: input.requestId,
+      message: {
+        type: "browser.remote.execute.request",
+        workspaceId: input.workspaceId,
+        command: input.command,
+      },
+      responseType: "browser.remote.execute.response",
+      timeout: input.timeout,
+    });
   }
 
   observeEvents(

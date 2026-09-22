@@ -1094,7 +1094,9 @@ function summarizeBrowserRefActionSuccess(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): string | null {
   if (result.command === "click") {
-    return `Clicked browser element ${result.ref}.`;
+    return result.ref
+      ? `Clicked browser element ${result.ref}.`
+      : `Clicked browser at (${result.x}, ${result.y}).`;
   }
 
   if (result.command === "fill") {
@@ -1112,11 +1114,15 @@ function summarizeBrowserControlSuccess(
   }
 
   if (result.command === "hover") {
-    return `Hovered browser element ${result.ref}.`;
+    return result.ref
+      ? `Hovered browser element ${result.ref}.`
+      : `Hovered browser at (${result.x}, ${result.y}).`;
   }
 
   if (result.command === "drag") {
-    return `Dragged browser element ${result.sourceRef} to ${result.targetRef}.`;
+    return result.sourceRef && result.targetRef
+      ? `Dragged browser element ${result.sourceRef} to ${result.targetRef}.`
+      : `Dragged browser from (${result.sourceX}, ${result.sourceY}) to (${result.targetX}, ${result.targetY}).`;
   }
 
   if (result.command === "scroll") {

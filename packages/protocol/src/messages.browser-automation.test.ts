@@ -156,6 +156,31 @@ describe("browser automation protocol integration", () => {
     expect(parsed.type).toBe("browser.automation.execute.response");
   });
 
+  test("remote browser execute messages round-trip through the session schemas", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "browser.remote.execute.request",
+        requestId: "req-remote-1",
+        workspaceId: "workspace-1",
+        command: { command: "screenshot", args: { browserId, reveal: true } },
+      }),
+    ).toMatchObject({
+      type: "browser.remote.execute.request",
+      workspaceId: "workspace-1",
+    });
+
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "browser.remote.execute.response",
+        payload: {
+          requestId: "req-remote-1",
+          ok: false,
+          error: { code: "browser_no_host", message: "offline", retryable: true },
+        },
+      }),
+    ).toMatchObject({ type: "browser.remote.execute.response" });
+  });
+
   test("mutable daemon config defaults browser tools off and accepts opt-in patches", () => {
     expect(
       MutableDaemonConfigSchema.parse({

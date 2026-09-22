@@ -1,5 +1,6 @@
 import { searchTimeline } from "./agent/chat-search/index.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import { browserToolsFailure } from "./browser-tools/errors.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
 import type { EvidenceStore } from "./verify/evidence-store.js";
@@ -2300,6 +2301,7 @@ export class Session {
     msg: SessionInboundMessage,
     source?: object,
   ): Promise<void> | undefined {
+    if (msg.type === "browser.remote.execute.request") return this.executeRemoteBrowser(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
       if (source)
@@ -2319,6 +2321,23 @@ export class Session {
       });
     }
     return undefined;
+  }
+
+  private async executeRemoteBrowser(
+    request: Extract<SessionInboundMessage, { type: "browser.remote.execute.request" }>,
+  ): Promise<void> {
+    const payload = this.browserToolsBroker
+      ? await this.browserToolsBroker.execute({
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          command: request.command,
+        })
+      : browserToolsFailure({
+          requestId: request.requestId,
+          code: "browser_unsupported",
+          message: "Remote browser hosting is unavailable.",
+        });
+    this.emit({ type: "browser.remote.execute.response", payload });
   }
 
   private async dispatchInboundMessage(msg: SessionInboundMessage, source?: object): Promise<void> {

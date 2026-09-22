@@ -57,6 +57,19 @@ function noisyPage(): string {
   ].join("");
 }
 
+function interactionPage(): string {
+  return [
+    "<!doctype html><html><head><title>Interaction</title></head>",
+    '<body style="height: 2400px; margin: 0">',
+    '<button id="click-target" onclick="document.body.dataset.clicked = \'yes\'" style="position:absolute;left:16px;top:16px">Click target</button>',
+    '<div id="hover-target" onmouseenter="document.body.dataset.hovered = \'yes\'" style="position:absolute;left:220px;top:16px;width:140px;height:48px">Hover target</div>',
+    '<div id="drag-source" onpointerdown="document.body.dataset.dragging = \'yes\'" style="position:absolute;left:16px;top:120px;width:100px;height:48px">Drag source</div>',
+    '<div id="drag-target" onpointerup="if (document.body.dataset.dragging === \'yes\') document.body.dataset.dragged = \'yes\'" style="position:absolute;left:300px;top:120px;width:100px;height:48px">Drag target</div>',
+    '<div style="height: 2200px"></div>',
+    "</body></html>",
+  ].join("");
+}
+
 function sendHtml(response: ServerResponse, status: number, html: string): void {
   response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
   response.end(html);
@@ -130,6 +143,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
   }
   if (url.pathname === "/noisy" && request.method === "GET") {
     sendHtml(response, 200, noisyPage());
+    return;
+  }
+  if (url.pathname === "/interaction" && request.method === "GET") {
+    sendHtml(response, 200, interactionPage());
     return;
   }
   if (url.pathname === "/api/missing") {

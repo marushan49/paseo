@@ -205,7 +205,7 @@ export class BrowserToolsBroker {
     request: BrowserAutomationExecuteRequest;
     timeoutMs: number;
   }): Promise<BrowserToolsResponsePayload> {
-    const hosts = this.selectConnectedPaseoHosts();
+    const hosts = this.selectBrowserHosts();
     if (hosts.length === 0) {
       return this.noBrowserHostFailure(params.request.requestId);
     }
@@ -272,7 +272,7 @@ export class BrowserToolsBroker {
     | { ok: true; value: RegisteredBrowserHost }
     | { ok: false; payload: BrowserToolsResponsePayload } {
     if (command.command === "new_tab") {
-      const host = this.selectMostRecentlyRegisteredPaseoHost();
+      const host = this.selectDaemonHost() ?? this.selectMostRecentlyRegisteredHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -280,7 +280,7 @@ export class BrowserToolsBroker {
 
     const browserId = getBrowserIdForCommand(command);
     if (!browserId) {
-      const host = this.selectMostRecentlyRegisteredPaseoHost();
+      const host = this.selectMostRecentlyRegisteredHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -288,9 +288,6 @@ export class BrowserToolsBroker {
 
     const ownerClientId = this.browserHostByBrowserId.get(browserId);
     if (ownerClientId) {
-      if (ownerClientId === DAEMON_BROWSER_HOST_ID) {
-        return { ok: false, payload: this.noBrowserHostFailure(requestId) };
-      }
       const host = this.clients.get(ownerClientId);
       if (host) {
         return { ok: true, value: host };
@@ -315,14 +312,14 @@ export class BrowserToolsBroker {
       };
     }
 
-    if (this.selectConnectedPaseoHosts().length === 1) {
-      const host = this.selectMostRecentlyRegisteredPaseoHost();
+    if (this.clients.size === 1) {
+      const host = this.selectMostRecentlyRegisteredHost();
       if (host) {
         return { ok: true, value: host };
       }
     }
 
-    if (this.selectConnectedPaseoHosts().length === 0) {
+    if (this.clients.size === 0) {
       return { ok: false, payload: this.noBrowserHostFailure(requestId) };
     }
 
@@ -336,15 +333,24 @@ export class BrowserToolsBroker {
     };
   }
 
-  private selectConnectedPaseoHosts(): RegisteredBrowserHost[] {
-    return Array.from(this.clients.entries())
-      .filter(([id]) => id !== DAEMON_BROWSER_HOST_ID)
-      .map(([, host]) => host);
+  /** The host that runs where the code does, when one is registered. */
+  private selectDaemonHost(): RegisteredBrowserHost | null {
+    for (const [id, host] of this.clients) {
+      if (id === DAEMON_BROWSER_HOST_ID) {
+        return host;
+      }
+    }
+    return null;
   }
 
-  private selectMostRecentlyRegisteredPaseoHost(): RegisteredBrowserHost | null {
+  private selectBrowserHosts(): RegisteredBrowserHost[] {
+    const daemonHost = this.selectDaemonHost();
+    return daemonHost ? [daemonHost] : Array.from(this.clients.values());
+  }
+
+  private selectMostRecentlyRegisteredHost(): RegisteredBrowserHost | null {
     let selected: RegisteredBrowserHost | null = null;
-    for (const host of this.selectConnectedPaseoHosts()) {
+    for (const host of this.clients.values()) {
       selected = host;
     }
     return selected;

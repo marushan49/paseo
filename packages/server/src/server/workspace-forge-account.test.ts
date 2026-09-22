@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { forgeAccountEnvOverlay, normalizeForgeConfigDir } from "./workspace-forge-account.js";
 
@@ -10,7 +11,9 @@ describe("normalizeForgeConfigDir", () => {
   });
 
   it("expands a leading tilde", () => {
-    expect(normalizeForgeConfigDir("~/.config/gh-private")).toBe(`${homedir()}/.config/gh-private`);
+    expect(normalizeForgeConfigDir("~/.config/gh-private")).toBe(
+      path.join(homedir(), ".config", "gh-private"),
+    );
     expect(normalizeForgeConfigDir("~")).toBe(homedir());
   });
 
@@ -45,7 +48,7 @@ describe("normalizeForgeConfigDir", () => {
 describe("forgeAccountEnvOverlay", () => {
   it("pins gh to the workspace's config directory", () => {
     expect(forgeAccountEnvOverlay("~/.config/gh-work")).toEqual({
-      GH_CONFIG_DIR: `${homedir()}/.config/gh-work`,
+      GH_CONFIG_DIR: path.join(homedir(), ".config", "gh-work"),
     });
   });
 
