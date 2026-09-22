@@ -107,4 +107,25 @@ test.describe("Settings host page", () => {
     await expectHostLabelDisplayed(page);
     await expectHostActionCards(page, serverId);
   });
+
+  test("explains shared System One decisions and Jev browser automation", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+
+    await openHostSection(page, serverId, "system-one");
+    await expectSettingsHeader(page, "System One");
+    await expect(page.getByTestId("host-system-one-settings")).toBeVisible();
+    await expect(page.getByText("Jev / System One", { exact: true })).toBeVisible();
+    await expect(page.getByText("Split decisions", { exact: true })).toBeVisible();
+    if (process.env.E2E_SYSTEM_ONE_SCREENSHOT) {
+      await page.screenshot({ path: process.env.E2E_SYSTEM_ONE_SCREENSHOT, fullPage: true });
+    }
+
+    await openHostSection(page, serverId, "browser");
+    await expectSettingsHeader(page, "Browser");
+    await expect(page.getByTestId("host-page-browser-tools-card")).toBeVisible();
+    await expect(page.getByText("Jev browser goals", { exact: true })).toBeVisible();
+  });
 });

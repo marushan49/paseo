@@ -2110,6 +2110,8 @@ export const fr: TranslationResources = {
       projects: "Projets",
       connections: "Relations",
       agents: "Agents",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Métadonnées",
       workspaces: "Workspaces",
       providers: "Fournisseurs",
@@ -2118,6 +2120,8 @@ export const fr: TranslationResources = {
       plugins: "Plugins",
       host: "Aperçu",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.fr,
     metadataGeneration: {
       title: "Génération de métadonnées",

@@ -1,4 +1,4 @@
-import { prefersDaemonHost, DAEMON_BROWSER_HOST_ID } from "./host-preference.js";
+import { DAEMON_BROWSER_HOST_ID } from "./host-preference.js";
 import { randomUUID } from "node:crypto";
 import {
   BrowserAutomationExecuteRequestSchema,
@@ -205,7 +205,7 @@ export class BrowserToolsBroker {
     request: BrowserAutomationExecuteRequest;
     timeoutMs: number;
   }): Promise<BrowserToolsResponsePayload> {
-    const hosts = Array.from(this.clients.values());
+    const hosts = this.selectConnectedPaseoHosts();
     if (hosts.length === 0) {
       return this.noBrowserHostFailure(params.request.requestId);
     }
@@ -272,12 +272,7 @@ export class BrowserToolsBroker {
     | { ok: true; value: RegisteredBrowserHost }
     | { ok: false; payload: BrowserToolsResponsePayload } {
     if (command.command === "new_tab") {
-      // A loopback URL only exists on the daemon's own machine, so the newest
-      // host is the wrong answer there: the desktop app's browser would resolve
-      // it against the laptop and load an empty document.
-      const host = prefersDaemonHost(command.args.url)
-        ? (this.selectDaemonHost() ?? this.selectMostRecentlyRegisteredHost())
-        : this.selectMostRecentlyRegisteredHost();
+      const host = this.selectMostRecentlyRegisteredPaseoHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -285,7 +280,7 @@ export class BrowserToolsBroker {
 
     const browserId = getBrowserIdForCommand(command);
     if (!browserId) {
-      const host = this.selectMostRecentlyRegisteredHost();
+      const host = this.selectMostRecentlyRegisteredPaseoHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -293,6 +288,9 @@ export class BrowserToolsBroker {
 
     const ownerClientId = this.browserHostByBrowserId.get(browserId);
     if (ownerClientId) {
+      if (ownerClientId === DAEMON_BROWSER_HOST_ID) {
+        return { ok: false, payload: this.noBrowserHostFailure(requestId) };
+      }
       const host = this.clients.get(ownerClientId);
       if (host) {
         return { ok: true, value: host };
@@ -317,14 +315,14 @@ export class BrowserToolsBroker {
       };
     }
 
-    if (this.clients.size === 1) {
-      const host = this.selectMostRecentlyRegisteredHost();
+    if (this.selectConnectedPaseoHosts().length === 1) {
+      const host = this.selectMostRecentlyRegisteredPaseoHost();
       if (host) {
         return { ok: true, value: host };
       }
     }
 
-    if (this.clients.size === 0) {
+    if (this.selectConnectedPaseoHosts().length === 0) {
       return { ok: false, payload: this.noBrowserHostFailure(requestId) };
     }
 
@@ -338,19 +336,15 @@ export class BrowserToolsBroker {
     };
   }
 
-  /** The host that runs where the code does, when one is registered. */
-  private selectDaemonHost(): RegisteredBrowserHost | null {
-    for (const [id, host] of this.clients) {
-      if (id === DAEMON_BROWSER_HOST_ID) {
-        return host;
-      }
-    }
-    return null;
+  private selectConnectedPaseoHosts(): RegisteredBrowserHost[] {
+    return Array.from(this.clients.entries())
+      .filter(([id]) => id !== DAEMON_BROWSER_HOST_ID)
+      .map(([, host]) => host);
   }
 
-  private selectMostRecentlyRegisteredHost(): RegisteredBrowserHost | null {
+  private selectMostRecentlyRegisteredPaseoHost(): RegisteredBrowserHost | null {
     let selected: RegisteredBrowserHost | null = null;
-    for (const host of this.clients.values()) {
+    for (const host of this.selectConnectedPaseoHosts()) {
       selected = host;
     }
     return selected;

@@ -2089,6 +2089,8 @@ export const ptBR: TranslationResources = {
       projects: "Projetos",
       connections: "Conexões",
       agents: "Agentes",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Metadados",
       workspaces: "Workspaces",
       providers: "Provedores",
@@ -2097,6 +2099,8 @@ export const ptBR: TranslationResources = {
       plugins: "Plugins",
       host: "Visão geral",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings["pt-BR"],
     metadataGeneration: {
       title: "Geração de metadados",

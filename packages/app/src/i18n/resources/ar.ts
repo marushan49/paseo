@@ -2055,6 +2055,8 @@ export const ar: TranslationResources = {
       projects: "المشاريع",
       connections: "اتصالات",
       agents: "Agents",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "البيانات الوصفية",
       workspaces: "Workspaces",
       providers: "مقدمي الخدمات",
@@ -2063,6 +2065,8 @@ export const ar: TranslationResources = {
       plugins: "Plugins",
       host: "نظرة عامة",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.ar,
     metadataGeneration: {
       title: "إنشاء البيانات الوصفية",

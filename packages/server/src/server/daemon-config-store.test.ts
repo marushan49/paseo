@@ -22,6 +22,7 @@ function reloadableConfig(
     },
     mcp: { enabled: true, injectIntoAgents: false },
     browserTools: { enabled: daemon.browserTools?.enabled ?? false },
+    systemOne: reloadableSystemOne(daemon.systemOne),
     providers: (agents.providers ?? {}) as MutableDaemonConfig["providers"],
     metadataGeneration: { providers: agents.metadataGeneration?.providers ?? [] },
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
@@ -40,6 +41,16 @@ function reloadableConfig(
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins ?? {},
   };
+}
+
+function reloadableSystemOne(systemOne: NonNullable<PersistedConfig["daemon"]>["systemOne"]) {
+  return {
+    enabled: systemOne?.enabled ?? false,
+    model: systemOne?.model ?? "jev-latest",
+    minimumConfidence: systemOne?.minimumConfidence ?? 0.5,
+    configured: false,
+    credentialSource: null,
+  } as const;
 }
 
 describe("applyMutableProviderConfigToOverrides", () => {
@@ -120,6 +131,37 @@ describe("DaemonConfigStore", () => {
 
     expect(changes).toEqual([true]);
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
+  });
+
+  test("patch persists System One settings but never its write-only API key", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      systemOne: {
+        enabled: false,
+        model: "jev-latest",
+        minimumConfidence: 0.5,
+        configured: false,
+        credentialSource: null,
+      },
+      providers: {},
+      metadataGeneration: { providers: [] },
+    });
+
+    store.patch({
+      systemOne: { enabled: true, model: "jev-1.12", minimumConfidence: 0.7 },
+      systemOneApiKey: "write-only-key",
+    });
+
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.systemOne).toEqual({
+      enabled: true,
+      model: "jev-1.12",
+      minimumConfidence: 0.7,
+    });
+    expect(JSON.stringify(persisted)).not.toContain("write-only-key");
   });
 
   test("patch round-trips agent profiles through the strictly-parsed persisted config", () => {

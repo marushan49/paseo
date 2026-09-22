@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
+import { SystemOneCredentialStore } from "./system-one/credential-store.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -401,6 +402,11 @@ export interface PaseoDaemonConfig {
   mcpEnabled?: boolean;
   mcpInjectIntoAgents?: boolean;
   browserToolsEnabled?: boolean;
+  systemOne?: {
+    enabled: boolean;
+    model: string;
+    minimumConfidence: number;
+  };
   git?: {
     maxProcessesPerSecond: number;
     maxProcessConcurrency: number;
@@ -530,7 +536,13 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
-function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
+function createInitialMutableDaemonConfig(
+  config: PaseoDaemonConfig,
+  systemOneCredential: {
+    configured: boolean;
+    credentialSource: "paseo" | "environment" | "env-file" | null;
+  },
+): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
   const initialConfig: MutableDaemonConfig = {
@@ -548,6 +560,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
       ? { catalogRefreshTimeoutMs: config.providerCatalogRefreshTimeoutMs }
       : {}),
     browserTools: { enabled: config.browserToolsEnabled ?? false },
+    systemOne: createInitialSystemOneConfig(config.systemOne, systemOneCredential),
     providers,
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
@@ -572,6 +585,21 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   return initialConfig;
 }
 
+function createInitialSystemOneConfig(
+  config: PaseoDaemonConfig["systemOne"],
+  credential: {
+    configured: boolean;
+    credentialSource: "paseo" | "environment" | "env-file" | null;
+  },
+) {
+  return {
+    enabled: config?.enabled ?? false,
+    model: config?.model ?? "jev-latest",
+    minimumConfidence: config?.minimumConfidence ?? 0.5,
+    ...credential,
+  };
+}
+
 export async function createPaseoDaemon(
   config: PaseoDaemonConfig,
   rootLogger: Logger,
@@ -589,7 +617,11 @@ export async function createPaseoDaemon(
   const bootstrapStart = performance.now();
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = config.daemonVersion ?? resolveDaemonVersion(import.meta.url);
-  const initialMutableConfig = createInitialMutableDaemonConfig(config);
+  const systemOneCredentials = new SystemOneCredentialStore(config.paseoHome);
+  const initialMutableConfig = createInitialMutableDaemonConfig(
+    config,
+    systemOneCredentials.getStatus(),
+  );
   const daemonConfigStore = new DaemonConfigStore(config.paseoHome, initialMutableConfig, logger, {
     relayEnabledMutable: config.relayEnabledMutable ?? true,
     startupPersisted: config.configReload?.startupPersisted,
@@ -601,7 +633,7 @@ export async function createPaseoDaemon(
           relayEnabledFallback: config.configReload?.relayEnabledFallback,
         });
         return {
-          mutable: createInitialMutableDaemonConfig(reloaded),
+          mutable: createInitialMutableDaemonConfig(reloaded, systemOneCredentials.getStatus()),
           overrideControlledPaths: reloaded.configReload?.overrideControlledPaths ?? [],
         };
       },

@@ -252,6 +252,14 @@ export const PersistedConfigSchema = z
           })
           .passthrough()
           .optional(),
+        systemOne: z
+          .object({
+            enabled: z.boolean().optional(),
+            model: z.string().trim().min(1).optional(),
+            minimumConfidence: z.number().min(0).max(1).optional(),
+          })
+          .strict()
+          .optional(),
         git: z
           .object({
             maxProcessesPerSecond: z.number().int().positive().optional(),

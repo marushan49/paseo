@@ -522,6 +522,14 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
+function resolveSystemOneConfig(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return {
+    enabled: persisted.daemon?.systemOne?.enabled ?? false,
+    model: persisted.daemon?.systemOne?.model ?? "jev-latest",
+    minimumConfidence: persisted.daemon?.systemOne?.minimumConfidence ?? 0.5,
+  };
+}
+
 /**
  * Both profile lists stay `undefined` when absent rather than defaulting to an
  * empty array: for terminal profiles that is what selects the built-in
@@ -544,6 +552,7 @@ function resolveStaticLoadConfigSettings(
     mcpInjectIntoAgents:
       cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
+    systemOne: resolveSystemOneConfig(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     resourcePolicy: resolveResourcePolicy(persisted),
@@ -580,6 +589,7 @@ export function resolveConfigFromPersisted(
     mcpEnabled,
     mcpInjectIntoAgents,
     browserToolsEnabled,
+    systemOne,
     autoArchiveAfterMerge,
     appendSystemPrompt,
     resourcePolicy,
@@ -624,6 +634,7 @@ export function resolveConfigFromPersisted(
     mcpEnabled,
     mcpInjectIntoAgents,
     browserToolsEnabled,
+    systemOne,
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,

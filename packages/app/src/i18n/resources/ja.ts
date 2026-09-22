@@ -2079,6 +2079,8 @@ export const ja: TranslationResources = {
       projects: "プロジェクト",
       connections: "接続",
       agents: "エージェント",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "メタデータ",
       workspaces: "ワークスペース",
       providers: "プロバイダー",
@@ -2087,6 +2089,8 @@ export const ja: TranslationResources = {
       plugins: "プラグイン",
       host: "概要",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.ja,
     metadataGeneration: {
       title: "メタデータ生成",

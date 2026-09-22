@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  collectSnapshotNodes,
   findSnapshotRef,
   formatSnapshotYaml,
   type CollectedSnapshotNode,
@@ -45,5 +46,13 @@ describe("findSnapshotRef", () => {
   it("returns null when nothing matches", () => {
     expect(findSnapshotRef(withRefs, { role: "button", name: "Delete" })).toBeNull();
     expect(findSnapshotRef([], { role: "button", name: "Sign in" })).toBeNull();
+  });
+});
+
+describe("browser snapshot privacy", () => {
+  it("does not treat mutable input values as accessible names", () => {
+    const source = collectSnapshotNodes.toString();
+
+    expect(source).not.toContain('element.getAttribute("value")');
   });
 });

@@ -169,4 +169,25 @@ describe("browser automation protocol integration", () => {
       }).browserTools,
     ).toEqual({ enabled: true });
   });
+
+  test("System One exposes status without accepting a key in readable config", () => {
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: false },
+      systemOne: {
+        enabled: true,
+        model: "jev-latest",
+        minimumConfidence: 0.7,
+        configured: true,
+        credentialSource: "paseo",
+        apiKey: "must-not-survive",
+      },
+    });
+    const patch = MutableDaemonConfigPatchSchema.parse({
+      systemOne: { model: "jev-1.12" },
+      systemOneApiKey: "write-only-key",
+    });
+
+    expect(config.systemOne).not.toHaveProperty("apiKey");
+    expect(patch.systemOneApiKey).toBe("write-only-key");
+  });
 });

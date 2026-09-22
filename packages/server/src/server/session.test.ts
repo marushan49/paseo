@@ -331,6 +331,7 @@ interface SessionForTestOptions {
   binaryMessages?: Uint8Array[];
   pluginRuntime?: SessionOptions["pluginRuntime"];
   orchestrationSkills?: SessionOptions["orchestrationSkills"];
+  daemonConfigStore?: SessionOptions["daemonConfigStore"];
   workspaceLabelService?: WorkspaceLabelService;
 }
 
@@ -416,13 +417,15 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     checkoutDiffManager: asCheckoutDiffManager(checkoutDiffManager),
     github: asGitHubService(github),
     workspaceGitService: asWorkspaceGitService(workspaceGitService),
-    daemonConfigStore: asDaemonConfigStore({
-      get: vi.fn(() => ({
-        mcp: { injectIntoAgents: false },
-        providers: {},
-      })),
-      onChange: vi.fn(() => () => {}),
-    }),
+    daemonConfigStore:
+      options.daemonConfigStore ??
+      asDaemonConfigStore({
+        get: vi.fn(() => ({
+          mcp: { injectIntoAgents: false },
+          providers: {},
+        })),
+        onChange: vi.fn(() => () => {}),
+      }),
     pluginRuntime: options.pluginRuntime,
     orchestrationSkills: options.orchestrationSkills,
     stt: options.stt ?? null,
@@ -443,6 +446,58 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
   };
   return new Session(sessionOptions);
 }
+
+test("stores a System One API key without echoing or persisting it in daemon config", async () => {
+  const paseoHome = mkdtempSync(join(tmpdir(), "paseo-system-one-session-"));
+  const messages: SessionOutboundMessage[] = [];
+  const currentConfig = {
+    mcp: { injectIntoAgents: true },
+    browserTools: { enabled: false },
+    systemOne: {
+      enabled: true,
+      model: "jev-latest",
+      minimumConfidence: 0.5,
+      configured: true,
+      credentialSource: "paseo" as const,
+    },
+    providers: {},
+    metadataGeneration: { providers: [] },
+    autoArchiveAfterMerge: false,
+    enableTerminalAgentHooks: false,
+    appendSystemPrompt: "",
+    resourcePolicy: "balanced" as const,
+  };
+  const patch = vi.fn(() => currentConfig);
+  const setSystemOneCredentialStatus = vi.fn();
+  const session = createSessionForTest({
+    paseoHome,
+    messages,
+    daemonConfigStore: asDaemonConfigStore({
+      get: vi.fn(() => currentConfig),
+      patch,
+      setSystemOneCredentialStatus,
+      onChange: vi.fn(() => () => {}),
+    }),
+  });
+
+  try {
+    await session.handleMessage({
+      type: "set_daemon_config_request",
+      requestId: "set-system-one",
+      config: { systemOneApiKey: "private-sentinel", systemOne: { enabled: true } },
+    });
+
+    expect(patch).toHaveBeenCalledWith({ systemOne: { enabled: true } });
+    expect(setSystemOneCredentialStatus).toHaveBeenCalledWith({
+      configured: true,
+      credentialSource: "paseo",
+    });
+    expect(JSON.stringify(messages)).not.toContain("private-sentinel");
+  } finally {
+    session.cleanup();
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
+});
 
 test("routes host-scoped agent skills requests through the daemon owner", async () => {
   const messages: SessionOutboundMessage[] = [];

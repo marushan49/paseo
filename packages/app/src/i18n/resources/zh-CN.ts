@@ -2034,6 +2034,8 @@ export const zhCN: TranslationResources = {
       projects: "项目",
       connections: "连接",
       agents: "Agents",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "元数据",
       workspaces: "Workspaces",
       providers: "Providers",
@@ -2042,6 +2044,8 @@ export const zhCN: TranslationResources = {
       plugins: "插件",
       host: "概览",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings["zh-CN"],
     metadataGeneration: {
       title: "元数据生成",

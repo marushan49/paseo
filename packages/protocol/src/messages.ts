@@ -174,6 +174,22 @@ const MutableBrowserToolsConfigSchema = z
     enabled: z.boolean().default(false),
   })
   .passthrough();
+const MutableSystemOneConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    model: z.string().trim().min(1).default("jev-latest"),
+    minimumConfidence: z.number().min(0).max(1).default(0.5),
+    configured: z.boolean().default(false),
+    credentialSource: z.enum(["paseo", "environment", "env-file"]).nullable().default(null),
+  })
+  .strip();
+const MutableSystemOnePatchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    model: z.string().trim().min(1).optional(),
+    minimumConfidence: z.number().min(0).max(1).optional(),
+  })
+  .strict();
 const MutableRelayConfigSchema = z
   .object({
     enabled: z.boolean(),
@@ -208,6 +224,8 @@ export const MutableDaemonConfigSchema = z
     app: z.object({ baseUrl: z.string() }).optional(),
     catalogRefreshTimeoutMs: z.number().int().positive().optional(),
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
+    // COMPAT(systemOne): added in v0.9, keep optional while older daemons are supported.
+    systemOne: MutableSystemOneConfigSchema.optional(),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
@@ -229,6 +247,8 @@ export const MutableDaemonConfigPatchSchema = z
     relay: MutableRelayConfigSchema.partial().optional(),
     mcp: z.object({ injectIntoAgents: z.boolean().optional() }).passthrough().optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
+    systemOne: MutableSystemOnePatchSchema.optional(),
+    systemOneApiKey: z.string().trim().min(1).nullable().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
@@ -6990,8 +7010,6 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunResponseSchema,
-  VerifyEvidenceRunListResponseSchema,
-  VerifyEvidenceArtifactGetResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,

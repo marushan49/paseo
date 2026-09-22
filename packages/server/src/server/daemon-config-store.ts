@@ -20,6 +20,9 @@ interface SupportedMutableConfigPatch {
   relay?: { enabled?: boolean };
   mcp?: { injectIntoAgents?: boolean };
   browserTools?: { enabled?: boolean };
+  systemOne?: Partial<
+    Pick<NonNullable<MutableDaemonConfig["systemOne"]>, "enabled" | "model" | "minimumConfidence">
+  >;
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
   metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
@@ -174,6 +177,9 @@ const RELOADABLE_PATHS = [
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
   "daemon.browserTools.enabled",
+  "daemon.systemOne.enabled",
+  "daemon.systemOne.model",
+  "daemon.systemOne.minimumConfidence",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
   "daemon.trustedProxies",
@@ -198,6 +204,9 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
+  ["daemon.systemOne.enabled", "systemOne.enabled"],
+  ["daemon.systemOne.model", "systemOne.model"],
+  ["daemon.systemOne.minimumConfidence", "systemOne.minimumConfidence"],
   ["daemon.hostnames", "hostnames"],
   ["daemon.cors.allowedOrigins", "cors.allowedOrigins"],
   ["daemon.trustedProxies", "trustedProxies"],
@@ -261,6 +270,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.browserTools?.enabled !== undefined
       ? { browserTools: { enabled: patch.browserTools.enabled } }
       : {}),
+    ...(patch.systemOne !== undefined ? { systemOne: patch.systemOne } : {}),
     ...(patch.providers !== undefined ? { providers: patch.providers } : {}),
     ...(patch.removeProviders !== undefined ? { removeProviders: patch.removeProviders } : {}),
     ...(patch.metadataGeneration?.providers !== undefined
@@ -357,6 +367,23 @@ export class DaemonConfigStore {
 
   public setAgentSkillSelection(selection: AgentSkillSelection): MutableDaemonConfig {
     return this.applySupportedPatch({ skills: { selection } });
+  }
+
+  public setSystemOneCredentialStatus(status: {
+    configured: boolean;
+    credentialSource: NonNullable<MutableDaemonConfig["systemOne"]>["credentialSource"];
+  }): MutableDaemonConfig {
+    const next = MutableDaemonConfigSchema.parse({
+      ...this.current,
+      systemOne: {
+        enabled: this.current.systemOne?.enabled ?? false,
+        model: this.current.systemOne?.model ?? "jev-latest",
+        minimumConfidence: this.current.systemOne?.minimumConfidence ?? 0.5,
+        ...status,
+      },
+    });
+    this.applyReplacement(next, { removedProviders: [] });
+    return this.current;
   }
 
   private applySupportedPatch(parsedPatch: SupportedMutableConfigPatch): MutableDaemonConfig {
@@ -655,6 +682,9 @@ function mergeMutableDaemonPatch(
   }
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };
+  }
+  if (patch.systemOne !== undefined) {
+    next.systemOne = { ...next.systemOne, ...patch.systemOne };
   }
   if (patch.autoArchiveAfterMerge !== undefined) {
     next.autoArchiveAfterMerge = patch.autoArchiveAfterMerge;

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "./broker.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
+import type { JevBrowserGoalResult } from "./jev-goal-runner.js";
 import { registerBrowserTools, type RegisterBrowserToolsOptions } from "./tools.js";
 import type {
   PaseoToolConfig,
@@ -48,12 +49,14 @@ class BrowserToolHarness {
       workspaceId: "wks_workspace_a",
     },
     private readonly callerAgentId: string | null = "agent-1",
+    goalRunner?: RegisterBrowserToolsOptions["goalRunner"],
   ) {
     registerBrowserTools({
       registerTool: (name, config, handler) => {
         this.tools.set(name, { config, handler });
       },
       broker: this.broker as Pick<BrowserToolsBroker, "execute">,
+      ...(goalRunner ? { goalRunner } : {}),
       ...(this.callerAgentId ? { callerAgentId: this.callerAgentId } : {}),
       resolveCallerAgent: () => this.callerAgent,
     });
@@ -601,6 +604,7 @@ describe("registerBrowserTools", () => {
     expect(harness.toolNames()).toEqual([
       "browser_list_tabs",
       "browser_new_tab",
+      "browser_goal",
       "browser_snapshot",
       "browser_click",
       "browser_fill",
@@ -622,6 +626,68 @@ describe("registerBrowserTools", () => {
       "browser_resize",
       "browser_close_tab",
     ]);
+  });
+
+  test("browser goal delegates the validated request to the Jev runner", async () => {
+    const calls: unknown[] = [];
+    const result: JevBrowserGoalResult = {
+      status: "passed",
+      browserId: BROWSER_ID,
+      url: "https://example.com/done",
+      title: "Done",
+      message: "Goal completed and verified.",
+      steps: [],
+      model: "jev-test",
+    };
+    const harness = new BrowserToolHarness(undefined, "agent-1", {
+      run: async (input, context) => {
+        calls.push({ input, context });
+        return result;
+      },
+    });
+
+    const response = await harness.execute("browser_goal", {
+      goal: "Open the finished page",
+      browserId: BROWSER_ID,
+      verify: [{ url: "/done" }],
+    });
+
+    expect(calls).toEqual([
+      {
+        input: {
+          goal: "Open the finished page",
+          browserId: BROWSER_ID,
+          verify: [{ url: "/done" }],
+        },
+        context: { agentId: "agent-1", cwd: "/repo", workspaceId: "wks_workspace_a" },
+      },
+    ]);
+    expect(response.structuredContent).toMatchObject({
+      ok: true,
+      result: { status: "passed", browserId: BROWSER_ID },
+    });
+  });
+
+  test("browser goal accepts environment references but rejects literal values", () => {
+    const harness = new BrowserToolHarness();
+    const base = {
+      goal: "Sign in",
+      browserId: BROWSER_ID,
+      verify: [{ text: "Welcome" }],
+    };
+
+    expect(
+      harness.validate("browser_goal", {
+        ...base,
+        values: { password: { env: "TEST_PASSWORD", description: "test password" } },
+      }).success,
+    ).toBe(true);
+    expect(
+      harness.validate("browser_goal", {
+        ...base,
+        values: { password: { value: "must-not-enter-tool-transcript" } },
+      }).success,
+    ).toBe(false);
   });
 
   test("list tabs sends workspace in the request envelope", async () => {

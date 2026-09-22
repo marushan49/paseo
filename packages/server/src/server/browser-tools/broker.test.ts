@@ -94,6 +94,30 @@ describe("BrowserToolsBroker", () => {
     });
   });
 
+  test("does not fall back to the daemon Playwright host", async () => {
+    const broker = createBroker();
+    const daemonHost = new FakeBrowserHostClient("daemon-playwright", {
+      hostKind: "daemon-playwright",
+    });
+    broker.registerClient(daemonHost);
+
+    await expect(
+      broker.execute({
+        command: { command: "new_tab", args: { url: "https://example.com" } },
+        workspaceId: "workspace-1",
+      }),
+    ).resolves.toEqual({
+      requestId: "req-1",
+      ok: false,
+      error: {
+        code: "browser_no_host",
+        message: "No browser automation host is connected.",
+        retryable: true,
+      },
+    });
+    expect(daemonHost.receivedRequests).toEqual([]);
+  });
+
   test("invalid browser requests return structured failures without contacting a host", async () => {
     const broker = createBroker();
     const client = new FakeBrowserHostClient("host-1");

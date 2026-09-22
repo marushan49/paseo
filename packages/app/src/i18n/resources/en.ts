@@ -2116,6 +2116,8 @@ export const en = {
       projects: "Projects",
       connections: "Connections",
       agents: "Agents",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Metadata",
       workspaces: "Workspaces",
       providers: "Providers",
@@ -2123,6 +2125,74 @@ export const en = {
       terminals: "Terminals",
       plugins: "Plugins",
       host: "Overview",
+    },
+    systemOne: {
+      title: "Jev / System One",
+      info: "Paseo gives every supported coding agent the same fast, typed decision primitive. Jev complements the agent's main model; it does not replace it.",
+      offline: "Connect to this host to configure System One.",
+      updateHost: "Update this host to configure System One.",
+      enabled: {
+        label: "Use System One decisions",
+        hint: "Expose Jev to Claude Code, Codex, OpenCode, Pi, Copilot, and other Paseo tool clients on this host.",
+      },
+      credentials: {
+        label: "API key",
+        hint: "The secret stays in a host-local file readable only by your user. Clients receive status, never the key.",
+        input: "Replace API key",
+        inputHint: "Leave blank to keep the current key.",
+        notConfigured: "Not configured",
+        sources: {
+          paseo: "Stored by Paseo",
+          environment: "Process environment",
+          envFile: "Shared TypeSafe env file",
+        },
+        removeLabel: "Paseo API key",
+        removeHint: "Remove Paseo's private copy. An environment fallback may remain active.",
+        removeAction: "Remove",
+      },
+      model: {
+        label: "Model",
+        hint: "Use jev-latest to follow TypeSafe's current recommended Jev release, or pin a model name.",
+      },
+      confidence: {
+        label: "Minimum confidence",
+        hint: "Below this threshold, browser goals stop before mutating and agents should gather evidence or use slower reasoning.",
+      },
+      save: {
+        label: "System One configuration",
+        hint: "Save the model, confidence threshold, and any newly entered key.",
+        action: "Save",
+        saving: "Saving…",
+      },
+      agentUse: {
+        title: "How agents use Jev",
+        info: "Paseo adds one shared instruction and one shared tool to every supported agent provider.",
+        splitDecisions: "Split decisions",
+        splitDecisionsHint:
+          "Agents send small closed-set judgments such as route, relevance, risk, next action, or yes/no checks instead of spending a long reasoning turn on them.",
+        batch: "One state, many questions",
+        batchHint:
+          "Independent Choice, Score, and Noul questions share one structured state and one API round trip.",
+        boundary: "Code stays in control",
+        boundaryHint:
+          "Jev returns probabilities and confidence. Paseo or the coding agent still verifies facts, executes tools, and escalates uncertain decisions.",
+      },
+    },
+    browser: {
+      title: "Paseo browser",
+      info: "Paseo hosts browser tabs and brokers explicit tools to agents. Browser access is separate from general System One decisions.",
+      howItWorks: {
+        label: "How it works",
+        hint: "An agent observes a compact accessibility snapshot, then calls explicit actions such as click, fill, navigate, wait, and screenshot against that Paseo tab.",
+      },
+      jev: {
+        label: "Jev browser goals",
+        hint: "browser_goal enriches Jev with the goal, current URL, accessible elements, recent steps, and allowed values. Jev selects the next bounded action; Paseo executes and verifies it.",
+      },
+      safety: {
+        label: "Safety boundary",
+        hint: "Screenshots and secret values are not sent to TypeSafe. Low-confidence decisions stop, stale element references are observed again, and success requires explicit text or URL checks.",
+      },
     },
     plugins: {
       title: "Plugins",

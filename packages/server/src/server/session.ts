@@ -92,6 +92,7 @@ import {
 } from "./session/workspace-scripts/workspace-scripts-service.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { ResourcePolicyRuntime } from "./resource-policy.js";
+import { SystemOneCredentialStore } from "./system-one/credential-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -2829,14 +2830,7 @@ export class Session {
       case "daemon.update.request":
         return this.daemonSession.handleUpdateRequest(msg);
       case "set_daemon_config_request":
-        this.emit({
-          type: "set_daemon_config_response",
-          payload: {
-            requestId: msg.requestId,
-            config: this.daemonConfigStore.patch(msg.config),
-          },
-        });
-        return undefined;
+        return this.handleSetDaemonConfigRequest(msg);
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
@@ -2844,6 +2838,26 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private handleSetDaemonConfigRequest(
+    msg: Extract<SessionInboundMessage, { type: "set_daemon_config_request" }>,
+  ): undefined {
+    const { systemOneApiKey, ...configPatch } = msg.config;
+    if (systemOneApiKey !== undefined) {
+      const credentialStore = new SystemOneCredentialStore(this.paseoHome);
+      const status =
+        systemOneApiKey === null ? credentialStore.clear() : credentialStore.set(systemOneApiKey);
+      this.daemonConfigStore.setSystemOneCredentialStatus(status);
+    }
+    this.emit({
+      type: "set_daemon_config_response",
+      payload: {
+        requestId: msg.requestId,
+        config: this.daemonConfigStore.patch(configPatch),
+      },
+    });
+    return undefined;
   }
 
   // eslint-disable-next-line complexity

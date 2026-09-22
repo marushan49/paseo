@@ -176,7 +176,6 @@ export function collectSnapshotNodes(): CollectedSnapshotNode[] {
     const direct =
       element.getAttribute("aria-label") ??
       element.textContent ??
-      element.getAttribute("value") ??
       element.getAttribute("placeholder") ??
       element.getAttribute("title") ??
       element.getAttribute("alt") ??

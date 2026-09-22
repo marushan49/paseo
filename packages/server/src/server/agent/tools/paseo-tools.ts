@@ -84,7 +84,12 @@ import {
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
+import { JevBrowserGoalRunner } from "../../browser-tools/jev-goal-runner.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
+import {
+  createConfiguredSystemOneDecisionSource,
+  registerSystemOneTools,
+} from "../../system-one/tools.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -1238,10 +1243,45 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return toCatalog();
   }
 
+  if (options.paseoHome && options.daemonConfigStore) {
+    registerSystemOneTools({
+      registerTool,
+      paseoHome: options.paseoHome,
+      daemonConfigStore: options.daemonConfigStore,
+    });
+  }
+
   if (options.browserToolsEnabled && options.browserToolsBroker) {
+    const configuredGoalRunner =
+      options.paseoHome && options.daemonConfigStore
+        ? new JevBrowserGoalRunner({
+            broker: options.browserToolsBroker,
+            decisionSource: createConfiguredSystemOneDecisionSource(
+              options.paseoHome,
+              options.daemonConfigStore,
+            ),
+          })
+        : null;
     registerBrowserTools({
       registerTool,
       broker: options.browserToolsBroker,
+      ...(configuredGoalRunner && options.daemonConfigStore
+        ? {
+            goalRunner: {
+              run: (input, context) =>
+                configuredGoalRunner.run(
+                  {
+                    ...input,
+                    minConfidence:
+                      input.minConfidence ??
+                      options.daemonConfigStore?.get().systemOne?.minimumConfidence ??
+                      0.5,
+                  },
+                  context,
+                ),
+            },
+          }
+        : {}),
       callerAgentId,
       resolveCallerAgent,
     });

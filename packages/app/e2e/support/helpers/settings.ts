@@ -36,6 +36,8 @@ type HostSection =
   | "connections"
   | "pair-device"
   | "agents"
+  | "system-one"
+  | "browser"
   | "metadata"
   | "workspaces"
   | "providers"

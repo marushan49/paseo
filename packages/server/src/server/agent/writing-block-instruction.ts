@@ -17,7 +17,10 @@ Paseo renders that block set apart from your prose, with a copy button. Use four
 
 Use \`writing\` only when the content is meant to be taken verbatim. Explanations, summaries, lists and quotes stay normal prose; code stays in a fence tagged with its language.`;
 
+export const SYSTEM_ONE_INSTRUCTION = `When the \`system_one_decide\` tool is available, use it proactively before spending substantial reasoning on a bounded judgment that can be expressed as Choice, Score, or Noul questions. Give it the smallest relevant structured state, batch independent questions into one call, and use its probabilities and confidence to decide whether to act, inspect more evidence, or escalate to slower reasoning. Keep deterministic facts and multi-step execution in code. Never send secrets.`;
+
 export function composeDaemonAppendSystemPrompt(userPrompt: string): string {
   const trimmed = userPrompt.trim();
-  return trimmed ? `${WRITING_BLOCK_INSTRUCTION}\n\n${trimmed}` : WRITING_BLOCK_INSTRUCTION;
+  const base = `${WRITING_BLOCK_INSTRUCTION}\n\n${SYSTEM_ONE_INSTRUCTION}`;
+  return trimmed ? `${base}\n\n${trimmed}` : base;
 }

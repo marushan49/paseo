@@ -2,6 +2,11 @@ import { z } from "zod";
 import { BrowserAutomationBrowserIdSchema } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import type { BrowserToolsBroker } from "./broker.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
+import {
+  JevBrowserGoalRunner,
+  type JevBrowserGoalInput,
+  type JevBrowserGoalResult,
+} from "./jev-goal-runner.js";
 import type {
   PaseoToolConfig,
   PaseoToolExecutionContext,
@@ -25,6 +30,7 @@ export interface RegisterBrowserToolsOptions {
     ) => Promise<PaseoToolResult>,
   ) => void;
   broker: Pick<BrowserToolsBroker, "execute">;
+  goalRunner?: Pick<JevBrowserGoalRunner, "run">;
   callerAgentId?: string;
   resolveCallerAgent: () => CallerAgentContext | null;
 }
@@ -61,6 +67,33 @@ const BrowserWaitInputSchema = z
   })
   .refine((input) => Number(Boolean(input.text)) + Number(Boolean(input.url)) === 1, {
     message: "browser_wait requires exactly one of text or url",
+  });
+const BrowserGoalVerificationSchema = z.union([
+  z.object({ text: z.string().min(1) }).strict(),
+  z.object({ url: z.string().min(1) }).strict(),
+]);
+const BrowserGoalInputSchema = z
+  .object({
+    goal: z.string().trim().min(1),
+    browserId: BrowserAutomationBrowserIdSchema.optional(),
+    url: BrowserHttpUrlInputSchema.optional(),
+    values: z
+      .record(
+        z.string().min(1),
+        z
+          .object({
+            env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+            description: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    verify: z.array(BrowserGoalVerificationSchema).min(1),
+    maxSteps: z.number().int().min(1).max(30).optional(),
+    minConfidence: z.number().min(0).max(1).optional(),
+  })
+  .refine((input) => Boolean(input.browserId || input.url), {
+    message: "browser_goal requires browserId or url",
   });
 
 export function registerBrowserTools(options: RegisterBrowserToolsOptions): void {
@@ -117,6 +150,42 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
         },
       });
       return browserToolResult({ payload, context });
+    },
+  );
+
+  options.registerTool(
+    "browser_goal",
+    {
+      title: "Run browser goal with Jev",
+      description:
+        "Run a bounded Jev decision loop against an existing Paseo browser tab or a new http(s) URL. Paseo sends the page's accessibility element summary, goal, and recent action metadata to TypeSafe, but not screenshots or values loaded locally from environment-variable names in the values map. Every successful run must pass the explicit text or URL checks in verify.",
+      inputSchema: BrowserGoalInputSchema,
+    },
+    async (input: JevBrowserGoalInput) => {
+      const context = resolveBrowserToolContext(options);
+      const missingWorkspace = requireWorkspaceContext(context);
+      if (missingWorkspace) {
+        return missingWorkspace;
+      }
+
+      try {
+        const runner = options.goalRunner ?? new JevBrowserGoalRunner({ broker: options.broker });
+        const result = await runner.run(input, context);
+        return browserGoalToolResult(result, context);
+      } catch (error) {
+        return browserToolResult({
+          payload: {
+            requestId: "browser-goal",
+            ok: false,
+            error: {
+              code: "browser_unknown_error",
+              message: error instanceof Error ? error.message : "Browser goal failed.",
+              retryable: false,
+            },
+          },
+          context,
+        });
+      }
     },
   );
 
@@ -799,6 +868,37 @@ function browserToolResult(params: {
       error: payload.error,
       ...(payload.dialogs ? { dialogs: payload.dialogs } : {}),
       context,
+    },
+  };
+}
+
+function browserGoalToolResult(
+  result: JevBrowserGoalResult,
+  context: { agentId?: string; cwd?: string; workspaceId?: string },
+): PaseoToolResult {
+  const trace = result.steps
+    .map((step) => {
+      const target = step.target ? ` target=${step.target}` : "";
+      const value = step.value ? ` value=${step.value}` : "";
+      return `- ${step.step}. ${step.operation}${target}${value} (${step.outcome}, confidence=${step.confidence.toFixed(2)}, ${step.latencyMs}ms)`;
+    })
+    .join("\n");
+  return {
+    content: [
+      {
+        type: "text",
+        text: [
+          `Browser goal ${result.status}: ${result.message}`,
+          `Title: ${result.title || "Untitled"}`,
+          `URL: ${result.url}`,
+          ...(trace ? ["", trace] : []),
+        ].join("\n"),
+      },
+    ],
+    structuredContent: {
+      ok: result.status === "passed",
+      result,
+      context: { ...context, browserId: result.browserId },
     },
   };
 }

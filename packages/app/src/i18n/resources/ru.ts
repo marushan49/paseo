@@ -2091,6 +2091,8 @@ export const ru: TranslationResources = {
       projects: "Проекты",
       connections: "Подключения",
       agents: "Агенты",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Метаданные",
       workspaces: "Рабочие пространства",
       providers: "Провайдеры",
@@ -2099,6 +2101,8 @@ export const ru: TranslationResources = {
       plugins: "Плагины",
       host: "Обзор",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.ru,
     metadataGeneration: {
       title: "Генерация метаданных",
