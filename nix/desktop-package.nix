@@ -79,6 +79,12 @@ buildNpmPackage {
     stdenv.cc.cc.lib # libstdc++ for sherpa-onnx prebuilt binaries
   ];
 
+  # npm packages ship unused musl variants beside the glibc binary selected at runtime.
+  autoPatchelfIgnoreMissingDeps =
+    lib.optionals (stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isMusl) [
+      "libc.musl-*.so.*"
+    ];
+
   dontNpmBuild = true;
 
   env = {
