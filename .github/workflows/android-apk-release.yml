@@ -107,10 +107,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # build:client alone leaves highlight/plugin/relay dist outputs
-          # missing, which fails Metro bundling inside Gradle. server-deps
-          # builds every workspace package the app bundle resolves.
-          npm run build:server-deps
+          # build:app-deps is the exact set Metro resolves for the app bundle
+          # (highlight, client, plugin, expo-two-way-audio). Anything less
+          # fails bundling inside Gradle after tens of minutes.
+          npm run build:app-deps
           # Fail in seconds instead of ~40 minutes into Gradle when a dist
           # output is missing.
           node scripts/verify-app-dist.mjs
