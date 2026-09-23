@@ -89,6 +89,8 @@ buildNpmPackage {
 
   env = {
     EXPO_NO_TELEMETRY = "1";
+    # Metro's 5k-module desktop bundle exceeds Node's default heap on Darwin runners.
+    NODE_OPTIONS = "--max-old-space-size=4096";
     # Expo's web build pulls in some pre-bundled assets; ensure it doesn't try
     # to phone home during the build.
     CI = "1";
