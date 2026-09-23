@@ -64,7 +64,10 @@ export function toScheduleLogRow(run: ScheduleRunRecord): ScheduleLogRow {
   };
 }
 
-export function createScheduleInspectRows(schedule: ScheduleRecord): ScheduleInspectRow[] {
+export function createScheduleInspectRows(
+  schedule: ScheduleRecord,
+  automationBlockedReason?: string | null,
+): ScheduleInspectRow[] {
   return [
     { key: "Id", value: schedule.id },
     { key: "Name", value: schedule.name ?? "null" },
@@ -78,6 +81,11 @@ export function createScheduleInspectRows(schedule: ScheduleRecord): ScheduleIns
     },
     { key: "Target", value: formatTarget(schedule.target) },
     { key: "Status", value: schedule.status },
+    // Omitted when the caller has no blocked-state to report (e.g. update);
+    // explicit null means the host runs schedules.
+    ...(automationBlockedReason === undefined
+      ? []
+      : [{ key: "BlockedReason", value: automationBlockedReason ?? "null" }]),
     { key: "CreatedAt", value: schedule.createdAt },
     { key: "UpdatedAt", value: schedule.updatedAt },
     { key: "NextRunAt", value: schedule.nextRunAt ?? "null" },

@@ -462,12 +462,16 @@ export interface ScheduleRow {
 }
 
 export function toScheduleRow(schedule: ScheduleListItem | ScheduleRecord): ScheduleRow {
+  // Mirrors the app's schedule derivation: the host-wide block only overrides
+  // a schedule that would otherwise be running. Paused/completed/expired stay
+  // what they are; the reason is visible via inspect.
+  const blocked = schedule.status === "active" && !!schedule.automationBlockedReason;
   return {
     id: schedule.id,
     name: schedule.name,
     cadence: formatCadence(schedule.cadence),
     target: formatTarget(schedule.target),
-    status: schedule.status,
+    status: blocked ? "blocked" : schedule.status,
     nextRunAt: schedule.nextRunAt,
     lastRunAt: schedule.lastRunAt,
   };

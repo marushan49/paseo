@@ -59,6 +59,7 @@ export interface ScheduleRecord {
   expiresAt: string | null;
   maxRuns: number | null;
   runs: ScheduleRunRecord[];
+  automationBlockedReason?: string | null;
 }
 
 export interface ScheduleListItem {
@@ -74,6 +75,7 @@ export interface ScheduleListItem {
   pausedAt: string | null;
   expiresAt: string | null;
   maxRuns: number | null;
+  automationBlockedReason?: string | null;
 }
 
 export interface CreateScheduleInput {
@@ -101,6 +103,7 @@ export interface ScheduleListPayload {
 export interface ScheduleInspectPayload {
   requestId: string;
   schedule: ScheduleRecord | null;
+  automationBlockedReason?: string | null;
   error: string | null;
 }
 

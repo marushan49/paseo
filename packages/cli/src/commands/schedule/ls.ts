@@ -21,9 +21,9 @@ export async function runLsCommand(
     }
     return {
       type: "list",
-      data: payload.schedules
-        .filter((schedule) => schedule.target.type === "new-agent")
-        .map(toScheduleRow),
+      // Agent-target schedules (heartbeats) are listed too: there is no other
+      // surface that shows them, and hiding them made runs unfindable.
+      data: payload.schedules.map(toScheduleRow),
       schema: scheduleSchema,
     };
   } catch (error) {

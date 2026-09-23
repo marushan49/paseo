@@ -6,7 +6,9 @@ import {
   compileEveryPresetToCron,
   parseScheduleCreateInput,
   parseScheduleUpdateInput,
+  toScheduleRow,
 } from "./shared.js";
+import type { ScheduleListItem } from "./types.js";
 
 const baseOptions = {
   daemonTarget: selectDaemonTarget({ home: process.cwd() }, {}),
@@ -321,5 +323,45 @@ describe("compileEveryPresetToCron", () => {
 
   test.each(["15minutes", "junk15m", "1h-nope"])("rejects malformed preset %s", (value) => {
     expect(() => compileEveryPresetToCron(value)).toThrow("Invalid duration format");
+  });
+});
+
+function makeListItem(overrides: Partial<ScheduleListItem> = {}): ScheduleListItem {
+  return {
+    id: "sched-1",
+    name: "Nightly",
+    cadence: { type: "cron", expression: "0 8 * * *" },
+    target: { type: "agent", agentId: "agent-1" },
+    status: "active",
+    nextRunAt: "2026-09-24T06:00:00.000Z",
+    lastRunAt: null,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-20T00:00:00.000Z",
+    pausedAt: null,
+    expiresAt: null,
+    maxRuns: null,
+    ...overrides,
+  };
+}
+
+describe("toScheduleRow blocked state", () => {
+  test("reports blocked instead of active when the host blocks automation", () => {
+    const row = toScheduleRow(
+      makeListItem({ automationBlockedReason: "Automated schedules is disabled." }),
+    );
+    expect(row.status).toBe("blocked");
+  });
+
+  test("keeps paused, completed and expired states ahead of the block", () => {
+    const blocked = { automationBlockedReason: "Automated schedules is disabled." };
+    expect(toScheduleRow(makeListItem({ status: "paused", ...blocked })).status).toBe("paused");
+    expect(toScheduleRow(makeListItem({ status: "completed", ...blocked })).status).toBe(
+      "completed",
+    );
+  });
+
+  test("stays active when nothing blocks it", () => {
+    expect(toScheduleRow(makeListItem()).status).toBe("active");
+    expect(toScheduleRow(makeListItem({ automationBlockedReason: null })).status).toBe("active");
   });
 });

@@ -122,6 +122,7 @@ export class ScheduleSession {
         payload: {
           requestId: request.requestId,
           schedule,
+          automationBlockedReason: this.scheduleService.automationBlockedReason(),
           error: null,
         },
       });

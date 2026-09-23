@@ -22,10 +22,10 @@ export async function runInspectCommand(
     if (payload.error || !payload.schedule) {
       throw new Error(payload.error ?? `Schedule not found: ${id}`);
     }
-    if (payload.schedule.target.type !== "new-agent") {
-      throw new Error(`Schedule not found: ${id}`);
-    }
-    const rows = createScheduleInspectRows(payload.schedule);
+    const rows = createScheduleInspectRows(
+      payload.schedule,
+      payload.automationBlockedReason ?? null,
+    );
     return {
       type: "list",
       data: rows,
