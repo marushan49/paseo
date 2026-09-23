@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0-beta.5 - 2026-09-23
+
+### Added
+
+- Added System One decisions and Jev-driven browser goals, configurable in Host Settings
+
+### Changed
+
+- Changed direct Android APK downloads to target modern ARM64 devices
+- Changed macOS chat, file, and terminal Find to use Command+F while leaving Control+F for text editing ([#5129](https://github.com/getpaseo/paseo/pull/5129))
+
+### Improved
+
+- Chat Find now counts and navigates matches across the entire chat ([#5167](https://github.com/getpaseo/paseo/pull/5167))
+
+### Fixed
+
+- Fixed Chat Find timing out on streamed multi-block assistant messages ([#5146](https://github.com/getpaseo/paseo/pull/5146))
+- Fixed Pi model pickers and sessions using unsupported thinking levels ([#4413](https://github.com/getpaseo/paseo/pull/4413) by [@mcowger](https://github.com/mcowger), [@therainisme](https://github.com/therainisme))
+- Fixed blocked scheduled agents appearing as still running in heartbeat CLI output
+
 ## 0.9.0-beta.4 - 2026-09-20
 
 ### Added
