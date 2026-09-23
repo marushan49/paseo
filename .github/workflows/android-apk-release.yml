@@ -106,7 +106,7 @@ jobs:
         with:
           # Gradle User Home persists on the dedicated runner. Uploading it to
           # GitHub would archive gigabytes after every release.
-          cache-provider: external
+          cache-disabled: true
 
       - name: Build app JavaScript dependencies
         timeout-minutes: 10
