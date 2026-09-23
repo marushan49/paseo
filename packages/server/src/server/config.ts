@@ -556,6 +556,7 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     resourcePolicy: resolveResourcePolicy(persisted),
+    allowScheduledAutomation: persisted.daemon?.allowScheduledAutomation,
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -593,6 +594,7 @@ export function resolveConfigFromPersisted(
     autoArchiveAfterMerge,
     appendSystemPrompt,
     resourcePolicy,
+    allowScheduledAutomation,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -640,6 +642,7 @@ export function resolveConfigFromPersisted(
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
     resourcePolicy,
+    allowScheduledAutomation,
     terminalProfiles,
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,

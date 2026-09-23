@@ -68,6 +68,54 @@ test.describe("Settings host page", () => {
     });
   });
 
+  test("schedules can be enabled with Economy and remain enabled after reload", async ({
+    page,
+  }, testInfo) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+    await openHostSection(page, serverId, "agents");
+
+    const card = page.getByTestId("host-page-resource-policy-card");
+    const economy = card.getByTestId("host-page-resource-policy-economy");
+    const schedules = card.getByTestId("host-page-schedule-automation-switch");
+
+    await economy.click();
+    await expect(economy).toHaveAttribute("aria-selected", "true");
+    await expect(schedules).toHaveAttribute("aria-checked", "false");
+    await schedules.click();
+    await expect(schedules).toHaveAttribute("aria-checked", "true");
+
+    await page.reload();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+    await openHostSection(page, serverId, "agents");
+
+    const reloadedCard = page.getByTestId("host-page-resource-policy-card");
+    await expect(reloadedCard.getByTestId("host-page-resource-policy-economy")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const reloadedSchedules = reloadedCard.getByTestId("host-page-schedule-automation-switch");
+    await expect(reloadedSchedules).toHaveAttribute("aria-checked", "true");
+    const screenshotPath = testInfo.outputPath("schedules-enabled-under-economy.png");
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await testInfo.attach("schedules-enabled-under-economy", {
+      path: screenshotPath,
+      contentType: "image/png",
+    });
+
+    await reloadedCard.getByTestId("host-page-resource-policy-balanced").click();
+    await expect(reloadedCard.getByTestId("host-page-resource-policy-balanced")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await reloadedSchedules.click();
+    await expect(reloadedSchedules).toHaveAttribute("aria-checked", "false");
+  });
+
   test("a failed remote daemon update remains visible in the host UI", async ({
     page,
     outdatedDaemon,

@@ -750,6 +750,36 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.resourcePolicy).toBe("deep");
   });
 
+  test("patch persists scheduled automation overrides independently of economy", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+      resourcePolicy: "economy",
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("allowScheduledAutomation", (value) => changes.push(value));
+
+    store.patch({ allowScheduledAutomation: true });
+
+    expect(changes).toEqual([true]);
+    expect(store.get().resourcePolicy).toBe("economy");
+    expect(store.get().allowScheduledAutomation).toBe(true);
+    expect(loadPersistedConfig(paseoHome).daemon?.allowScheduledAutomation).toBe(true);
+
+    store.patch({ allowScheduledAutomation: false });
+
+    expect(changes).toEqual([true, false]);
+    expect(loadPersistedConfig(paseoHome).daemon?.allowScheduledAutomation).toBe(false);
+  });
+
   test("patch persists browser tools opt-in into config.json", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

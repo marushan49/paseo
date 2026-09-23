@@ -415,6 +415,7 @@ export interface PaseoDaemonConfig {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   resourcePolicy?: ResourcePolicy;
+  allowScheduledAutomation?: boolean;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
@@ -569,6 +570,7 @@ function createInitialMutableDaemonConfig(
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     resourcePolicy: resolveResourcePolicy(config.resourcePolicy),
+    allowScheduledAutomation: config.allowScheduledAutomation,
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },

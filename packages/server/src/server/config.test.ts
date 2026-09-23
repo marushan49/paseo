@@ -58,6 +58,23 @@ describe("server config", () => {
     expect(loadConfig(paseoHome, { env: {} }).browserToolsEnabled).toBe(true);
   });
 
+  test("loads a persisted schedule override while resource policy is economy", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-schedules-"));
+    roots.push(paseoHome);
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        daemon: { resourcePolicy: "economy", allowScheduledAutomation: true },
+      }),
+    );
+    const persisted = loadPersistedConfig(paseoHome);
+
+    expect(
+      resolveConfigFromPersisted(paseoHome, persisted, { env: {} }).allowScheduledAutomation,
+    ).toBe(true);
+    expect(loadConfig(paseoHome, { env: {} }).allowScheduledAutomation).toBe(true);
+  });
+
   test("records mutable and startup launch overrides by persisted leaf", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-overrides-"));
     roots.push(paseoHome);

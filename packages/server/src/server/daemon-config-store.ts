@@ -30,6 +30,7 @@ interface SupportedMutableConfigPatch {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   resourcePolicy?: MutableDaemonConfig["resourcePolicy"];
+  allowScheduledAutomation?: boolean;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   skills?: MutableDaemonConfig["skills"];
@@ -168,6 +169,14 @@ function getValueAtPath(config: MutableDaemonConfig, path: string): unknown {
     .reduce<unknown>((value, segment) => (isRecord(value) ? value[segment] : undefined), config);
 }
 
+function pickScheduledAutomationPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "allowScheduledAutomation"> {
+  return patch.allowScheduledAutomation === undefined
+    ? {}
+    : { allowScheduledAutomation: patch.allowScheduledAutomation };
+}
+
 function isEqualValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -189,6 +198,7 @@ const RELOADABLE_PATHS = [
   "daemon.enableTerminalAgentHooks",
   "daemon.appendSystemPrompt",
   "daemon.resourcePolicy",
+  "daemon.allowScheduledAutomation",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -216,6 +226,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
   ["daemon.resourcePolicy", "resourcePolicy"],
+  ["daemon.allowScheduledAutomation", "allowScheduledAutomation"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["app.baseUrl", "app.baseUrl"],
@@ -286,6 +297,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       ? { appendSystemPrompt: patch.appendSystemPrompt }
       : {}),
     ...(patch.resourcePolicy !== undefined ? { resourcePolicy: patch.resourcePolicy } : {}),
+    ...pickScheduledAutomationPatch(patch),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
@@ -694,6 +706,9 @@ function mergeMutableDaemonPatch(
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
   if (patch.resourcePolicy !== undefined) next.resourcePolicy = patch.resourcePolicy;
+  if (patch.allowScheduledAutomation !== undefined) {
+    next.allowScheduledAutomation = patch.allowScheduledAutomation;
+  }
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;
