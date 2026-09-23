@@ -32,7 +32,7 @@ describe("SystemOneCredentialStore", () => {
     });
 
     const filePath = path.join(paseoHome, "secrets", "system-one.json");
-    expect(statSync(filePath).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(filePath).mode & 0o777).toBe(0o600);
     expect(readFileSync(filePath, "utf8")).toContain("private-key");
   });
 

@@ -20,9 +20,7 @@ const packages = Object.keys(appManifest.dependencies ?? {})
 
 function isFileTarget(value) {
   return (
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    /^(dist|build|src|lib|out)\//.test(value)
+    value.startsWith("./") || value.startsWith("../") || /^(dist|build|src|lib|out)\//.test(value)
   );
 }
 
