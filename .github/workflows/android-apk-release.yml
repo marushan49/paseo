@@ -68,6 +68,7 @@ jobs:
       contents: write
       packages: read
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -99,11 +100,15 @@ jobs:
           java-version: "17"
 
       - name: Setup Gradle
-        # Default cache backend restores Gradle User Home state; cache writes
-        # happen on the default branch, tag builds read. A main build warms it.
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # Release tags and manual rebuilds need to preserve their first cold
+          # build so retries do not download and transform everything again.
+          cache-read-only: false
+          cache-cleanup: always
 
-      - name: Build Android APK
+      - name: Build app JavaScript dependencies
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
@@ -114,8 +119,21 @@ jobs:
           # Fail in seconds instead of ~40 minutes into Gradle when a dist
           # output is missing.
           node scripts/verify-app-dist.mjs
+
+      - name: Generate Android project
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
           cd packages/app
           APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Build Android APK
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/app
           cd android
           APP_VARIANT=production ./gradlew assembleRelease \
             -x lint \
@@ -123,9 +141,12 @@ jobs:
             -x lintVitalRelease \
             -x generateReleaseLintModel \
             -x generateReleaseLintVitalModel \
+            --build-cache \
+            --parallel \
             --no-daemon \
-            --max-workers=2 \
-            -Dorg.gradle.parallel=false
+            --max-workers=4 \
+            --console=plain \
+            --stacktrace
 
       - name: Resolve APK artifact
         id: artifact
