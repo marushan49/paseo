@@ -212,6 +212,8 @@ Beta tags like `v0.1.1-beta.1` only trigger the GitHub APK workflow. They publis
 
 The GitHub release APK targets `arm64-v8a`. It is the direct-download build for modern physical Android devices; store and F-Droid builds keep their own architecture policies.
 
+The fork's APK job runs on the dedicated `paseo-android` runner on the Zotac. Its Gradle, Metro, and generated-native state persists across trusted tag and manual release builds. Native configuration inputs are fingerprinted; a change to the lockfile, app config, plugins, assets, or native version helper forces a clean Expo prebuild. The first build after such a change remains a cold build.
+
 `android-v*` tags also trigger only the GitHub APK workflow — useful when you want to ship an APK without going through stores. The GitHub APK workflow supports `workflow_dispatch` with an existing `tag` input so you can rebuild without cutting a new tag.
 
 ### Useful commands

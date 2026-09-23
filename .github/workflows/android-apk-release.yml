@@ -67,12 +67,14 @@ jobs:
     permissions:
       contents: write
       packages: read
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, paseo-android]
     timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
         with:
+          # The dedicated release runner keeps generated native state warm.
+          clean: false
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
@@ -102,10 +104,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          # Release tags and manual rebuilds need to preserve their first cold
-          # build so retries do not download and transform everything again.
-          cache-read-only: false
-          cache-cleanup: always
+          # Gradle User Home persists on the dedicated runner. Uploading it to
+          # GitHub would archive gigabytes after every release.
+          cache-provider: external
 
       - name: Build app JavaScript dependencies
         timeout-minutes: 10
@@ -125,8 +126,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          fingerprint="$({
+            git ls-files -s \
+              package-lock.json \
+              packages/app/app.config.js \
+              packages/app/package.json \
+              packages/app/plugins \
+              packages/app/assets \
+              packages/app/native-release-version.js
+          } | sha256sum | cut -d' ' -f1)"
+
           cd packages/app
-          APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
+          if [[ -f "android/.paseo-prebuild-fingerprint" ]] && \
+             [[ "$(<"android/.paseo-prebuild-fingerprint")" == "$fingerprint" ]]; then
+            APP_VARIANT=production npx expo prebuild --platform android --non-interactive
+          else
+            APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
+          fi
+          printf '%s\n' "$fingerprint" > "android/.paseo-prebuild-fingerprint"
 
       - name: Build Android APK
         timeout-minutes: 30
@@ -144,7 +162,6 @@ jobs:
             -x generateReleaseLintVitalModel \
             --build-cache \
             --parallel \
-            --no-daemon \
             --max-workers=4 \
             --console=plain \
             --stacktrace
