@@ -136,6 +136,7 @@ jobs:
           cd packages/app
           cd android
           APP_VARIANT=production ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
             -x lint \
             -x lintVitalAnalyzeRelease \
             -x lintVitalRelease \

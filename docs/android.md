@@ -210,6 +210,8 @@ iOS auto-submits to App Store review via a Fastlane lane after EAS uploads to Te
 
 Beta tags like `v0.1.1-beta.1` only trigger the GitHub APK workflow. They publish a GitHub prerelease APK for testing and do not submit to the stores.
 
+The GitHub release APK targets `arm64-v8a`. It is the direct-download build for modern physical Android devices; store and F-Droid builds keep their own architecture policies.
+
 `android-v*` tags also trigger only the GitHub APK workflow — useful when you want to ship an APK without going through stores. The GitHub APK workflow supports `workflow_dispatch` with an existing `tag` input so you can rebuild without cutting a new tag.
 
 ### Useful commands
