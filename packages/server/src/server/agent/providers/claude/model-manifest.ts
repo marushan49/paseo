@@ -44,6 +44,8 @@ export const CLAUDE_MODEL_MANIFEST = [
     label: "Opus 5.5",
     description: "Opus 5.5 · Latest release",
     defaultPriority: 3,
+    // Verified floor: 2.1.261 rejects the ID as unknown, 2.1.281 runs it.
+    minimumClaudeCodeVersion: "2.1.281",
     contextWindowMaxTokens: 1_000_000,
     effortLevels: CLAUDE_EFFORT_LEVELS.standard,
     defaultThinkingOptionId: "medium",

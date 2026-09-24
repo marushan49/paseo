@@ -50,6 +50,7 @@ describe("getClaudeModels", () => {
   it("returns all claude models", () => {
     const models = getClaudeModels();
     expect(models.map((m) => m.id)).toEqual([
+      "claude-opus-5-5",
       "claude-opus-5",
       "claude-fable-5-1",
       "claude-fable-5",
@@ -72,7 +73,7 @@ describe("getClaudeModels", () => {
     const models = getClaudeModels();
     const defaults = models.filter((m) => m.isDefault);
     expect(defaults).toHaveLength(1);
-    expect(defaults[0].id).toBe("claude-opus-5");
+    expect(defaults[0].id).toBe("claude-opus-5-5");
   });
 
   it("defines context window sizes in the catalog", () => {
@@ -82,6 +83,7 @@ describe("getClaudeModels", () => {
 
     expect(contextWindows).toEqual(
       new Map([
+        ["claude-opus-5-5", 1_000_000],
         ["claude-opus-5", 1_000_000],
         ["claude-fable-5-1", 1_000_000],
         ["claude-fable-5", 1_000_000],
@@ -106,6 +108,8 @@ describe("getClaudeModels", () => {
     expect(oldVersionModels.map((model) => model.id)).not.toContain("claude-opus-5");
     expect(oldVersionModels.find((model) => model.isDefault)?.id).toBe("claude-opus-4-8");
     expect(getClaudeModels("2.1.219").map((model) => model.id)).toContain("claude-opus-5");
+    expect(getClaudeModels("2.1.261").map((model) => model.id)).not.toContain("claude-opus-5-5");
+    expect(getClaudeModels("2.1.281").find((model) => model.isDefault)?.id).toBe("claude-opus-5-5");
 
     expect(getClaudeModels("2.1.168").map((model) => model.id)).not.toContain("claude-fable-5");
     expect(getClaudeModels("2.1.169").map((model) => model.id)).toContain("claude-fable-5");
@@ -216,7 +220,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
     });
 
     expect(models).toEqual([
-      ...getClaudeModels(),
+      ...getClaudeModels("2.1.219"),
       {
         provider: "claude",
         id: "us.anthropic.claude-opus-4-7[1m]",
@@ -268,7 +272,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
       force: true,
     });
 
-    expect(models).toEqual(getClaudeModels());
+    expect(models).toEqual(getClaudeModels("2.1.219"));
   });
 
   it("falls back to hardcoded models when settings.json is malformed", async () => {
@@ -282,7 +286,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
       force: true,
     });
 
-    expect(models).toEqual(getClaudeModels());
+    expect(models).toEqual(getClaudeModels("2.1.219"));
   });
 
   it("ignores empty env blocks and unexpected settings shapes", async () => {
@@ -302,7 +306,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
       force: true,
     });
 
-    expect(models).toEqual(getClaudeModels());
+    expect(models).toEqual(getClaudeModels("2.1.219"));
   });
 
   it("deduplicates discovered settings models by ID", async () => {
@@ -323,7 +327,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
     });
 
     expect(models.map((model) => model.id)).toEqual([
-      ...getClaudeModels().map((model) => model.id),
+      ...getClaudeModels("2.1.219").map((model) => model.id),
       "glm-5.1",
     ]);
   });
@@ -436,12 +440,13 @@ describe("findClaudeModel", () => {
 });
 
 describe("Claude Opus 5 catalog", () => {
-  it("offers a single Opus 5 entry with a 1M context window", () => {
+  it("offers Opus 5.5 and Opus 5 entries with a 1M context window", () => {
     const opus5Models = getClaudeModels()
       .filter((model) => model.id.startsWith("claude-opus-5"))
       .map(({ id, label, contextWindowMaxTokens }) => ({ id, label, contextWindowMaxTokens }));
 
     expect(opus5Models).toEqual([
+      { id: "claude-opus-5-5", label: "Opus 5.5", contextWindowMaxTokens: 1_000_000 },
       { id: "claude-opus-5", label: "Opus 5", contextWindowMaxTokens: 1_000_000 },
     ]);
   });
