@@ -730,7 +730,7 @@ describe("registerBrowserTools", () => {
     expect(response.content).toEqual([
       {
         type: "text",
-        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com. Use this browserId for tab-scoped browser tools. If you are testing, stop and use paseo_test with steps instead.`,
+        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com. Use this browserId for tab-scoped browser tools. If you are testing, stop and use browser_test with steps instead.`,
       },
     ]);
   });
@@ -1124,7 +1124,7 @@ describe("registerBrowserTools", () => {
     });
   });
 
-  it("runs paseo_test in the caller's workspace and flags a failed verdict", async () => {
+  it("runs browser_test in the caller's workspace and flags a failed verdict", async () => {
     const calls: unknown[] = [];
     const harness = new BrowserToolHarness(undefined, "agent-1", undefined, {
       runForAgent: async (input) => {
@@ -1152,7 +1152,7 @@ describe("registerBrowserTools", () => {
       },
     });
 
-    const listed = await harness.execute("paseo_test", {});
+    const listed = await harness.execute("browser_test", {});
     expect(listed.structuredContent).toEqual({
       recipes: [{ name: "smoke", params: [], stepCount: 2 }],
     });
@@ -1161,9 +1161,11 @@ describe("registerBrowserTools", () => {
       { action: "navigate", url: "http://localhost:3000" },
       { action: "goal", goal: "Open settings", verify: [{ text: "Settings" }] },
     ];
-    const run = await harness.execute("paseo_test", { steps });
+    const run = await harness.execute("browser_test", { steps });
     expect(run.isError).toBe(true);
     expect(calls.at(-1)).toEqual({ workspaceId: "wks_workspace_a", steps });
-    expect(harness.validate("paseo_test", { steps: [{ action: "teleport" }] }).success).toBe(false);
+    expect(harness.validate("browser_test", { steps: [{ action: "teleport" }] }).success).toBe(
+      false,
+    );
   });
 });

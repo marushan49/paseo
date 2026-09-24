@@ -744,6 +744,7 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private resolveBlockedMcpServers: () => readonly string[] = () => [];
   private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -873,6 +874,10 @@ export class AgentManager {
    */
   getMcpAuthToken(): string | null {
     return this.mcpAuthToken;
+  }
+
+  setBlockedMcpServers(resolver: () => readonly string[]): void {
+    this.resolveBlockedMcpServers = resolver;
   }
 
   setAppendSystemPrompt(prompt: string | null | undefined): void {
@@ -5306,10 +5311,13 @@ export class AgentManager {
     );
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
+    delete next.daemonBlockedMcpServers;
+    const blocked = this.resolveBlockedMcpServers();
 
     return {
       ...next,
       daemonAppendSystemPrompt,
+      ...(blocked.length > 0 ? { daemonBlockedMcpServers: [...blocked] } : {}),
     };
   }
 

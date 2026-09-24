@@ -610,6 +610,8 @@ export interface AgentSessionConfig {
    * persisted into agent config so daemon setting changes apply cleanly.
    */
   daemonAppendSystemPrompt?: string;
+  /** Daemon-level MCP servers the provider must not expose; never persisted. */
+  daemonBlockedMcpServers?: string[];
   modeId?: string;
   model?: string;
   thinkingOptionId?: string;

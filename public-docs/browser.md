@@ -86,7 +86,7 @@ The same System One setup also gives every supported coding agent the general `s
 
 ## Testing engine
 
-`paseo_test` is the tool agents use for every UI or end-to-end check. The daemon runs the steps itself and returns only the verdict: pass or fail, the checks, console and network error counts, and an evidence reference for the screenshots. The page never enters the agent's context, so a test costs a small fraction of the tokens of driving `browser_*` tools by hand.
+`browser_test` is the tool agents use for every UI or end-to-end check. The daemon runs the steps itself and returns only the verdict: pass or fail, the checks, console and network error counts, and an evidence reference for the screenshots. The page never enters the agent's context, so a test costs a small fraction of the tokens of driving `browser_*` tools by hand.
 
 Save recurring flows as recipes in the workspace's `paseo.json`:
 
@@ -111,7 +111,7 @@ Save recurring flows as recipes in the workspace's `paseo.json`:
 }
 ```
 
-Scripted steps (`navigate`, `click`, `fill`, `wait-text`, `assert-visible`, `assert-text`, `assert-console-errors`, `assert-failed-requests`, `screenshot`, `ensure-authenticated`) run without any model. A `goal` step hands the part you cannot script to Jev and passes only when its `verify` checks hold; it needs System One. Agents call `paseo_test` with no arguments to list recipes, with `recipe` to run one, or with `steps` for an ad-hoc run.
+Scripted steps (`navigate`, `click`, `fill`, `wait-text`, `assert-visible`, `assert-text`, `assert-console-errors`, `assert-failed-requests`, `screenshot`, `ensure-authenticated`) run without any model. A `goal` step hands the part you cannot script to Jev and passes only when its `verify` checks hold; it needs System One. Agents call `browser_test` with no arguments to list recipes, with `recipe` to run one, or with `steps` for an ad-hoc run. While browser tools are enabled, Paseo hides other browser MCP servers (Playwright, Puppeteer, Chrome DevTools, Browser MCP, Browser Use) from its Claude agents so every test goes through the engine.
 
 ## Architecture
 

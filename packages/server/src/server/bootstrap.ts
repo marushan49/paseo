@@ -155,7 +155,10 @@ import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
-import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
+import {
+  COMPETING_BROWSER_MCP_SERVERS,
+  DaemonConfigBrowserToolsPolicy,
+} from "./browser-tools/policy.js";
 import { EvidenceStore } from "./verify/evidence-store.js";
 import { VerifySession } from "./verify/verify-session.js";
 import { createConfiguredSystemOneDecisionSource } from "./system-one/tools.js";
@@ -1540,6 +1543,9 @@ export async function createPaseoDaemon(
     agentProviderRuntime.setPaseoToolCatalog(enabled ? createAgentToolCatalog({}) : null);
   };
   agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
+  agentManager.setBlockedMcpServers(() =>
+    browserToolsPolicy.isEnabled() ? COMPETING_BROWSER_MCP_SERVERS : [],
+  );
   agentManager.setPaseoToolsEnabled(config.mcpInjectIntoAgents !== false);
   setAgentProviderToolsEnabled(config.mcpEnabled !== false && config.mcpInjectIntoAgents !== false);
 

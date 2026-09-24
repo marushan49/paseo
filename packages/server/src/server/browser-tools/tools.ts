@@ -107,7 +107,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
   if (options.verify) {
     const verify = options.verify;
     options.registerTool(
-      "paseo_test",
+      "browser_test",
       {
         title: "Test in Paseo's testing engine",
         description:
@@ -183,7 +183,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Create browser tab",
       description:
-        "TESTING: for any test, E2E, or verification of a flow, call paseo_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed paseo_test run or non-test browsing. Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host, opened in the background without switching the user's view. Pass the final target URL here, with any token, query, or hash, so the page opens directly; opening a blank tab and navigating afterwards loses one-time tokens. http(s) and scheme-less host URLs (treated as http) are accepted; the returned browserId is used by tab-scoped tools.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host, opened in the background without switching the user's view. Pass the final target URL here, with any token, query, or hash, so the page opens directly; opening a blank tab and navigating afterwards loses one-time tokens. http(s) and scheme-less host URLs (treated as http) are accepted; the returned browserId is used by tab-scoped tools.",
       inputSchema: {
         url: BrowserHttpUrlInputSchema.optional(),
       },
@@ -248,7 +248,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Snapshot browser page",
       description:
-        "TESTING: for any test, E2E, or verification of a flow, call paseo_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed paseo_test run or non-test browsing. Return a model-readable snapshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Return a model-readable snapshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
       inputSchema: {
         browserId: BrowserAutomationBrowserIdSchema,
       },
@@ -276,7 +276,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Click browser element",
       description:
-        "TESTING: for any test, E2E, or verification of a flow, call paseo_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed paseo_test run or non-test browsing. Click an element in a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Click an element in a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
       inputSchema: {
         ref: BrowserRefInputSchema,
         browserId: BrowserAutomationBrowserIdSchema,
@@ -438,7 +438,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Navigate browser",
       description:
-        "TESTING: for any test, E2E, or verification of a flow, call paseo_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed paseo_test run or non-test browsing. Navigate a Paseo browser tab to a URL. Use browserId from browser_new_tab or browser_list_tabs; pass an http(s) URL or a scheme-less host URL, which is treated as http.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Navigate a Paseo browser tab to a URL. Use browserId from browser_new_tab or browser_list_tabs; pass an http(s) URL or a scheme-less host URL, which is treated as http.",
       inputSchema: { url: BrowserHttpUrlInputSchema, browserId: BrowserAutomationBrowserIdSchema },
     },
     async ({ url, browserId }) => {
@@ -1043,7 +1043,7 @@ function summarizeBrowserSuccess(
 
   if (payload.result.command === "new_tab") {
     return withDialogs(
-      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools. If you are testing, stop and use paseo_test with steps instead.`,
+      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools. If you are testing, stop and use browser_test with steps instead.`,
     );
   }
 

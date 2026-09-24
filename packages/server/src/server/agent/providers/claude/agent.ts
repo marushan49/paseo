@@ -3320,11 +3320,13 @@ class ClaudeAgentSession implements AgentSession {
     if (this.claudeSessionId && !this.pendingFreshSessionId) {
       base.resume = this.claudeSessionId;
     }
-    if (this.runtimeSettings?.disallowedTools?.length) {
-      base.disallowedTools = [
-        ...(base.disallowedTools ?? []),
-        ...this.runtimeSettings.disallowedTools,
-      ];
+    const disallowedTools = mergeDisallowedTools(
+      base.disallowedTools,
+      this.runtimeSettings?.disallowedTools,
+      this.config.daemonBlockedMcpServers,
+    );
+    if (disallowedTools.length > 0) {
+      base.disallowedTools = disallowedTools;
     }
     return base;
   }
@@ -6383,4 +6385,17 @@ function readClaudeCommandLifecycle(message: unknown): ClaudeCommandLifecycle | 
     commandUuid: record.command_uuid,
     state: record.state as ClaudeCommandLifecycle["state"],
   };
+}
+
+function mergeDisallowedTools(
+  configured: readonly string[] | undefined,
+  runtime: readonly string[] | undefined,
+  blockedMcpServers: readonly string[] | undefined,
+): string[] {
+  return [
+    ...(configured ?? []),
+    ...(runtime ?? []),
+    // A bare mcp__<server> rule covers every tool of that server.
+    ...(blockedMcpServers ?? []).map((server) => `mcp__${server}`),
+  ];
 }

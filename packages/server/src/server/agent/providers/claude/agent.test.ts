@@ -476,7 +476,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
         force: false,
       });
 
-      expect(models.find((model) => model.isDefault)?.id).toBe("claude-opus-5");
+      expect(models.find((model) => model.isDefault)?.id).toBe("claude-opus-5-5");
       expect(models.map((model) => model.id)).toContain("claude-fable-5");
     } finally {
       await fs.rm(emptyConfigDir, { recursive: true, force: true });
@@ -739,6 +739,27 @@ describe("ClaudeAgentSession features", () => {
 
     await session.setModel?.("claude-fable-5[1m]");
     expect(queryMock.setModel).toHaveBeenCalledWith("claude-fable-5[1m]");
+    await session.close();
+  });
+
+  test("hides competing browser MCP servers the daemon blocks", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      providerOptions: { disallowedTools: ["Bash"] },
+      daemonBlockedMcpServers: ["playwright", "puppeteer"],
+    });
+
+    await (session as unknown as { ensureQuery(): Promise<unknown> }).ensureQuery();
+    expect(queryFactory.mock.calls[0]?.[0].options.disallowedTools).toEqual(
+      expect.arrayContaining(["Bash", "mcp__playwright", "mcp__puppeteer"]),
+    );
     await session.close();
   });
 
