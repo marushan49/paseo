@@ -58,6 +58,20 @@ interface TypeSafeSystemOneClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+export class TypeSafeHttpError extends Error {
+  public readonly status: number;
+
+  public constructor(status: number) {
+    super(`TypeSafe returned HTTP ${status}; no browser action executed.`);
+    this.name = "TypeSafeHttpError";
+    this.status = status;
+  }
+}
+
+export function isTypeSafeAuthError(error: unknown): boolean {
+  return error instanceof TypeSafeHttpError && (error.status === 401 || error.status === 403);
+}
+
 export class TypeSafeSystemOneClient implements TypeSafeDecisionSource {
   private readonly options: TypeSafeSystemOneClientOptions;
 
@@ -89,7 +103,7 @@ export class TypeSafeSystemOneClient implements TypeSafeDecisionSource {
       });
 
       if (!response.ok) {
-        throw new Error(`TypeSafe returned HTTP ${response.status}; no browser action executed.`);
+        throw new TypeSafeHttpError(response.status);
       }
 
       const payload: unknown = await response.json();

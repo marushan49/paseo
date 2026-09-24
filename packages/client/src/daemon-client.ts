@@ -5285,7 +5285,7 @@ export class DaemonClient {
   async patchDaemonConfig(
     config: MutableDaemonConfigPatch,
     requestId?: string,
-  ): Promise<{ requestId: string; config: MutableDaemonConfig }> {
+  ): Promise<{ requestId: string; config: MutableDaemonConfig; error?: string }> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {

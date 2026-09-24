@@ -5271,6 +5271,8 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
+      /** Set when the daemon refused part of the patch, e.g. a rejected System One key. */
+      error: z.string().optional(),
     })
     .passthrough(),
 });

@@ -94,6 +94,7 @@ import {
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { ResourcePolicyRuntime } from "./resource-policy.js";
 import { SystemOneCredentialStore } from "./system-one/credential-store.js";
+import { isTypeSafeApiKeyAccepted } from "./system-one/tools.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -2859,10 +2860,29 @@ export class Session {
     }
   }
 
-  private handleSetDaemonConfigRequest(
+  private async handleSetDaemonConfigRequest(
     msg: Extract<SessionInboundMessage, { type: "set_daemon_config_request" }>,
-  ): undefined {
+  ): Promise<undefined> {
     const { systemOneApiKey, ...configPatch } = msg.config;
+    if (
+      typeof systemOneApiKey === "string" &&
+      !(await isTypeSafeApiKeyAccepted(
+        systemOneApiKey,
+        configPatch.systemOne?.model ??
+          this.daemonConfigStore.get().systemOne?.model ??
+          "jev-latest",
+      ))
+    ) {
+      this.emit({
+        type: "set_daemon_config_response",
+        payload: {
+          requestId: msg.requestId,
+          config: this.daemonConfigStore.get(),
+          error: "TypeSafe rejected this API key. Nothing was saved.",
+        },
+      });
+      return undefined;
+    }
     if (systemOneApiKey !== undefined) {
       const credentialStore = new SystemOneCredentialStore(this.paseoHome);
       const status =

@@ -39,6 +39,9 @@ export function useDaemonConfig(serverId: string | null): UseDaemonConfigResult 
       }
       const result = await client.patchDaemonConfig(patch);
       queryClient.setQueryData(queryKey, result.config);
+      if (result.error) {
+        throw new Error(result.error);
+      }
       return result.config;
     },
     [client, queryClient, queryKey],

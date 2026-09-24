@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
 import { ensureValidJson } from "../json-utils.js";
 import {
+  isTypeSafeAuthError,
   TypeSafeSystemOneClient,
   type TypeSafeDecisionRequest,
   type TypeSafeDecisionSource,
@@ -19,7 +20,8 @@ const SENSITIVE_FIELD_PATTERN =
 const ChoiceQuestionSchema = z
   .object({
     type: z.literal("choice"),
-    instructions: StructuredValueSchema,
+    // TypeSafe answers choice questions from criteria alone.
+    instructions: StructuredValueSchema.optional(),
     criteria: z.record(z.string().min(1), StructuredValueSchema),
   })
   .strict()
@@ -120,16 +122,43 @@ export function createConfiguredSystemOneDecisionSource(
       if (!config.enabled) {
         throw new Error("System One is disabled. Enable it in Paseo Settings → System One.");
       }
-      const credential = new SystemOneCredentialStore(paseoHome).resolve();
-      if (!credential) {
+      const credentials = new SystemOneCredentialStore(paseoHome).candidates();
+      if (credentials.length === 0) {
         throw new Error("TypeSafe API key is not configured in Paseo Settings → System One.");
       }
-      return new TypeSafeSystemOneClient({
-        apiKey: credential.apiKey,
-        model: config.model,
-      }).decide(request);
+      const rejected: string[] = [];
+      for (const credential of credentials) {
+        try {
+          return await new TypeSafeSystemOneClient({
+            apiKey: credential.apiKey,
+            model: config.model,
+          }).decide(request);
+        } catch (error) {
+          // A stale saved key must not hide a working key from the environment or env file.
+          if (!isTypeSafeAuthError(error)) throw error;
+          rejected.push(credential.source);
+        }
+      }
+      throw new Error(
+        `TypeSafe rejected every configured API key (${rejected.join(", ")}). Save a valid key in Paseo Settings → System One.`,
+      );
     },
   };
+}
+
+/** Returns false only when TypeSafe explicitly rejects the key; network trouble is not a verdict. */
+export async function isTypeSafeApiKeyAccepted(apiKey: string, model: string): Promise<boolean> {
+  try {
+    await new TypeSafeSystemOneClient({ apiKey, model, timeoutMs: 10_000 }).decide({
+      state: { check: "paseo-key-validation" },
+      questions: {
+        valid: { type: "choice", criteria: { yes: "This is a key check", no: "Anything else" } },
+      },
+    });
+    return true;
+  } catch (error) {
+    return !isTypeSafeAuthError(error);
+  }
 }
 
 export function registerSystemOneTools(options: RegisterSystemOneToolsOptions): void {

@@ -36,14 +36,24 @@ export class SystemOneCredentialStore {
   }
 
   public resolve(): ResolvedSystemOneCredential | null {
+    return this.candidates()[0] ?? null;
+  }
+
+  /** Every distinct configured key, in priority order. */
+  public candidates(): ResolvedSystemOneCredential[] {
+    const all: ResolvedSystemOneCredential[] = [];
     const stored = this.readStored();
-    if (stored) return { apiKey: stored.apiKey, source: "paseo" };
+    if (stored) all.push({ apiKey: stored.apiKey, source: "paseo" });
 
     const environmentKey = this.env.TYPESAFE_API_KEY?.trim();
-    if (environmentKey) return { apiKey: environmentKey, source: "environment" };
+    if (environmentKey) all.push({ apiKey: environmentKey, source: "environment" });
 
     const sharedKey = readApiKeyFromEnvFile(this.sharedEnvFile);
-    return sharedKey ? { apiKey: sharedKey, source: "env-file" } : null;
+    if (sharedKey) all.push({ apiKey: sharedKey, source: "env-file" });
+
+    return all.filter(
+      (credential, index) => all.findIndex((other) => other.apiKey === credential.apiKey) === index,
+    );
   }
 
   public getStatus(): SystemOneCredentialStatus {

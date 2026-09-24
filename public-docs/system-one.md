@@ -12,7 +12,7 @@ Paseo can give Claude Code, Codex, OpenCode, Pi, Copilot, and other supported to
 
 Enable it under **Settings → your host → System One**. Enter a TypeSafe API key, choose a model such as `jev-latest`, set the confidence threshold, and turn on **Use System One decisions**.
 
-The key is write-only from the app's point of view. Paseo stores it under the host's private data directory in a file readable only by that user. Daemon configuration responses contain only whether a key is configured and where it came from. Paseo can also use `TYPESAFE_API_KEY` or `~/.config/typesafe-ai/env` as a fallback.
+The key is write-only from the app's point of view. Paseo stores it under the host's private data directory in a file readable only by that user. Daemon configuration responses contain only whether a key is configured and where it came from. Paseo can also use `TYPESAFE_API_KEY` or `~/.config/typesafe-ai/env` as a fallback. Paseo checks a new key with TypeSafe before saving it and refuses one that TypeSafe rejects. If a saved key is rejected later, each request falls through to the next configured key.
 
 ## What agents receive
 

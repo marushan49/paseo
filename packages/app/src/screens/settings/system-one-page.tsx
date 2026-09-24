@@ -164,7 +164,9 @@ export function HostSystemOnePage({ serverId }: { serverId: string }) {
           ) : null}
         </SettingsCard>
         {mutation.error ? (
-          <Text style={settingsStyles.rowError}>{String(mutation.error)}</Text>
+          <Text style={settingsStyles.rowError}>
+            {mutation.error instanceof Error ? mutation.error.message : String(mutation.error)}
+          </Text>
         ) : null}
       </SettingsSection>
 
