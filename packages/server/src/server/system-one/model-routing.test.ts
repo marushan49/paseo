@@ -73,6 +73,7 @@ describe("createSystemOneTurnRouter", () => {
         model: "claude-opus-5-5",
         thinkingOptionId: "high",
         prompt: "What does git status say?",
+        isFirstTurn: true,
       }),
     ).resolves.toEqual({ model: "claude-haiku-4-5", thinkingOptionId: "medium" });
   });
@@ -88,6 +89,7 @@ describe("createSystemOneTurnRouter", () => {
         model: "claude-opus-5-5",
         thinkingOptionId: undefined,
         prompt: "Refactor the auth layer",
+        isFirstTurn: true,
       }),
     ).resolves.toBeNull();
   });
@@ -103,8 +105,48 @@ describe("createSystemOneTurnRouter", () => {
         model: "gpt-6-sol",
         thinkingOptionId: undefined,
         prompt: "Fix the test",
+        isFirstTurn: true,
       }),
     ).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("never steps down after the first turn, but still escalates", async () => {
+    const { router } = setup();
+    stubJev({ model: answer("tier1", 0.9), thinking: answer("tier1", 0.9) });
+    await expect(
+      router({
+        provider: "claude",
+        cwd: "/repo",
+        model: "claude-opus-5-5",
+        thinkingOptionId: "high",
+        prompt: "go on",
+        isFirstTurn: false,
+      }),
+    ).resolves.toBeNull();
+
+    stubJev({ model: answer("tier3", 0.9), thinking: answer("tier3", 0.9) });
+    await expect(
+      router({
+        provider: "claude",
+        cwd: "/repo",
+        model: "claude-sonnet-5",
+        thinkingOptionId: "low",
+        prompt: "Now redesign the storage layer for multi-region writes",
+        isFirstTurn: false,
+      }),
+    ).resolves.toEqual({ model: "claude-opus-5-5", thinkingOptionId: "high" });
+
+    stubJev({ model: answer("tier3", 0.9), thinking: answer("tier3", 0.9) });
+    await expect(
+      router({
+        provider: "claude",
+        cwd: "/repo",
+        model: "claude-opus-5",
+        thinkingOptionId: undefined,
+        prompt: "Continue",
+        isFirstTurn: false,
+      }),
+    ).resolves.toBeNull();
   });
 });

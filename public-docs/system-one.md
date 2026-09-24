@@ -41,7 +41,7 @@ Paseo can also let Jev pick the model and thinking depth for every turn, for any
 }
 ```
 
-Before each turn Jev picks the cheapest sufficient rung; when it is unsure, the current setting stays. A model you pick by hand during a session wins for the rest of that session, and Paseo's internal helper agents are never routed. Routing never blocks a turn: if Jev fails, the turn runs on the current model.
+On an agent's first turn Jev picks the cheapest sufficient rung for the task. Later turns only escalate: a short follow-up such as "go on" looks trivial on its own, so routing never steps a running session down, and it leaves a model that is not on the ladder alone. When Jev is unsure, the current setting stays. A model you pick by hand during a session wins for the rest of that session, and Paseo's internal helper agents are never routed. Routing never blocks a turn: if Jev fails, the turn runs on the current model.
 
 To keep a project's code away from TypeSafe entirely, list its directory in `daemon.systemOne.excludedPaths` in `$PASEO_HOME/config.json` (for example `["~/work/company"]`). Agents working below those paths get a refusal from `system_one_decide` and `browser_goal`, and `goal` steps in `browser_test` fail; scripted test steps still run. Paseo reads the list on every decision, so edits apply without a restart.
 

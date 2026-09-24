@@ -13,6 +13,11 @@ export interface TurnRouteInput {
   model: string | undefined;
   thinkingOptionId: string | undefined;
   prompt: AgentPromptInput;
+  /**
+   * Only the first turn carries the whole task. A follow-up such as "go on" looks
+   * trivial on its own, so later turns may escalate but never step down.
+   */
+  isFirstTurn: boolean;
 }
 
 export interface TurnRoute {
@@ -67,14 +72,21 @@ export function createSystemOneTurnRouter(options: {
 
     const route: TurnRoute = {};
     const model = pickTier(decision.answers.model, ladder.models, systemOne.minimumConfidence);
-    if (model) route.model = model;
+    if (model && allowedStep(ladder.models, input.model, model, input.isFirstTurn)) {
+      route.model = model;
+    }
     if (ladder.thinking) {
       const thinking = pickTier(
         decision.answers.thinking,
         ladder.thinking,
         systemOne.minimumConfidence,
       );
-      if (thinking) route.thinkingOptionId = thinking;
+      if (
+        thinking &&
+        allowedStep(ladder.thinking, input.thinkingOptionId, thinking, input.isFirstTurn)
+      ) {
+        route.thinkingOptionId = thinking;
+      }
     }
     return Object.keys(route).length > 0 ? route : null;
   };
@@ -120,6 +132,19 @@ function pickTier(answer: unknown, ladder: string[], minimumConfidence: number):
   const parsed = parseChoiceAnswer(answer, choices);
   if (parsed.confidence < minimumConfidence) return null;
   return ladder[choices.indexOf(parsed.choice)] ?? null;
+}
+
+// After the first turn only escalation is allowed, and a current setting outside
+// the ladder is the user's choice, so it is left alone.
+function allowedStep(
+  ladder: string[],
+  current: string | undefined,
+  next: string,
+  isFirstTurn: boolean,
+): boolean {
+  if (isFirstTurn) return true;
+  const currentIndex = current === undefined ? -1 : ladder.indexOf(current);
+  return currentIndex >= 0 && ladder.indexOf(next) > currentIndex;
 }
 
 function promptText(prompt: AgentPromptInput): string {

@@ -901,6 +901,7 @@ export class AgentManager {
         model: agent.config.model,
         thinkingOptionId: agent.config.thinkingOptionId,
         prompt,
+        isFirstTurn: agent.lastUserMessageAt === null,
       });
       if (route?.model && route.model !== agent.config.model) {
         await this.setAgentModel(agent.id, route.model);
