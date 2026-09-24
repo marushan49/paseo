@@ -747,6 +747,9 @@ export class AgentManager {
   private appendSystemPrompt: string;
   private resolveBlockedMcpServers: () => readonly string[] = () => [];
   private turnRouter: TurnRouter | null = null;
+  private streamObserver:
+    | ((agent: { id: string; provider: string; cwd: string }, event: AgentStreamEvent) => void)
+    | null = null;
   private readonly routedModels = new Map<string, string | null>();
   private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
@@ -877,6 +880,14 @@ export class AgentManager {
    */
   getMcpAuthToken(): string | null {
     return this.mcpAuthToken;
+  }
+
+  setStreamObserver(
+    observer:
+      | ((agent: { id: string; provider: string; cwd: string }, event: AgentStreamEvent) => void)
+      | null,
+  ): void {
+    this.streamObserver = observer;
   }
 
   setTurnRouter(router: TurnRouter | null): void {
@@ -5174,6 +5185,10 @@ export class AgentManager {
       "agent.manager.dispatch_stream",
     );
     this.dispatch({ type: "agent_stream", agentId, event, ...metadata });
+    // Live turns only: session replay would score steps that already happened.
+    if (this.streamObserver && agent && !agent.internal && agent.lifecycle === "running") {
+      this.streamObserver({ id: agentId, provider: agent.provider, cwd: agent.cwd }, event);
+    }
     if (this.pluginLifecycle && agent && !agent.internal && event.type !== "timeline") {
       publishAgentStream(
         this.pluginLifecycle,

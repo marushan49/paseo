@@ -258,6 +258,8 @@ export const PersistedConfigSchema = z
             model: z.string().trim().min(1).optional(),
             minimumConfidence: z.number().min(0).max(1).optional(),
             excludedPaths: z.array(z.string().trim().min(1)).optional(),
+            // Log Jev's prediction of every agent's next step against what it really did.
+            shadow: z.boolean().optional(),
             // Per provider, cheapest first; Jev picks a rung for every turn.
             routing: z
               .record(

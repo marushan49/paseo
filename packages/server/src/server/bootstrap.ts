@@ -1,4 +1,6 @@
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
+import { isShadowModeEnabled } from "./system-one/scope.js";
+import { ShadowPredictor } from "./system-one/shadow-predictor.js";
 import { createSystemOneTurnRouter } from "./system-one/model-routing.js";
 import { isSystemOneExcluded } from "./system-one/scope.js";
 import express from "express";
@@ -1546,6 +1548,13 @@ export async function createPaseoDaemon(
     agentProviderRuntime.setPaseoToolCatalog(enabled ? createAgentToolCatalog({}) : null);
   };
   agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
+  const shadowPredictor = new ShadowPredictor({
+    isEnabled: (cwd) => isShadowModeEnabled(config.paseoHome, daemonConfigStore, cwd),
+    decisionSource: (cwd) =>
+      createConfiguredSystemOneDecisionSource(config.paseoHome, daemonConfigStore, () => cwd),
+    logFile: path.join(config.paseoHome, "system-one", "shadow.jsonl"),
+  });
+  agentManager.setStreamObserver((agent, event) => shadowPredictor.observe(agent, event));
   agentManager.setTurnRouter(
     createSystemOneTurnRouter({ paseoHome: config.paseoHome, daemonConfigStore }),
   );
