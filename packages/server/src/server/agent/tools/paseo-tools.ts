@@ -1251,6 +1251,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       registerTool,
       paseoHome: options.paseoHome,
       daemonConfigStore: options.daemonConfigStore,
+      resolveCwd: () => resolveCallerAgent()?.cwd,
     });
   }
 
@@ -1262,6 +1263,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             decisionSource: createConfiguredSystemOneDecisionSource(
               options.paseoHome,
               options.daemonConfigStore,
+              () => resolveCallerAgent()?.cwd,
             ),
           })
         : null;

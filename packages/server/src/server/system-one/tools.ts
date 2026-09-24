@@ -13,6 +13,7 @@ import type {
   PaseoToolResult,
 } from "../agent/tools/types.js";
 import { SystemOneCredentialStore } from "./credential-store.js";
+import { isSystemOneExcluded, SYSTEM_ONE_EXCLUDED_MESSAGE } from "./scope.js";
 
 const StructuredValueSchema = z.json();
 const SENSITIVE_FIELD_PATTERN =
@@ -107,14 +108,19 @@ interface RegisterSystemOneToolsOptions {
   ) => void;
   paseoHome: string;
   daemonConfigStore: Pick<DaemonConfigStore, "get">;
+  resolveCwd?: () => string | undefined;
 }
 
 export function createConfiguredSystemOneDecisionSource(
   paseoHome: string,
   daemonConfigStore: Pick<DaemonConfigStore, "get">,
+  resolveCwd: () => string | undefined = () => undefined,
 ): TypeSafeDecisionSource {
   return {
     async decide(request) {
+      if (isSystemOneExcluded(paseoHome, resolveCwd())) {
+        throw new Error(SYSTEM_ONE_EXCLUDED_MESSAGE);
+      }
       const config = daemonConfigStore.get().systemOne;
       if (!config) {
         throw new Error("System One is unavailable on this host. Update the Paseo daemon.");
@@ -178,6 +184,7 @@ export function registerSystemOneTools(options: RegisterSystemOneToolsOptions): 
       const result = await createConfiguredSystemOneDecisionSource(
         options.paseoHome,
         options.daemonConfigStore,
+        options.resolveCwd,
       ).decide(input as TypeSafeDecisionRequest);
       const structuredContent = ensureValidJson({
         ...result,

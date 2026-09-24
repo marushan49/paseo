@@ -40,6 +40,8 @@ export interface VerifySessionOptions {
   isBrowserToolsEnabled: () => boolean;
   emit: (message: SessionOutboundMessage) => void;
   goal?: RecipeRunnerOptions["goal"];
+  /** False where System One is excluded for the workspace directory. */
+  isGoalAllowed?: (cwd: string) => boolean;
 }
 
 export type AgentVerifyResult =
@@ -49,6 +51,7 @@ export type AgentVerifyResult =
 const AD_HOC_RECIPE = "ad-hoc";
 
 interface RecipeConfig {
+  cwd: string;
   browser: PaseoBrowserConfig;
   verification: PaseoVerificationConfig;
 }
@@ -101,12 +104,14 @@ export class VerifySession {
   private readonly runner: RecipeRunner;
   private readonly evidence: EvidenceStore;
   private readonly isBrowserToolsEnabled: () => boolean;
+  private readonly isGoalAllowed: (cwd: string) => boolean;
   private readonly emit: (message: SessionOutboundMessage) => void;
 
   public constructor(options: VerifySessionOptions) {
     this.workspaceRegistry = options.workspaceRegistry;
     this.workspaceScripts = options.workspaceScripts;
     this.isBrowserToolsEnabled = options.isBrowserToolsEnabled;
+    this.isGoalAllowed = options.isGoalAllowed ?? (() => true);
     this.emit = options.emit;
     this.evidence = options.evidence;
     this.runner = new RecipeRunner({
@@ -151,6 +156,7 @@ export class VerifySession {
       verification,
       recipeName: input.steps ? AD_HOC_RECIPE : (input.recipe ?? AD_HOC_RECIPE),
       params: input.params,
+      allowGoal: this.isGoalAllowed(config.cwd),
     });
     if (input.steps && input.saveAs && result.status === "pass") {
       await this.saveRecipe(input.workspaceId, input.saveAs, input.steps);
@@ -238,6 +244,7 @@ export class VerifySession {
         verification: config.verification,
         recipeName: request.recipeName,
         params: request.params,
+        allowGoal: this.isGoalAllowed(config.cwd),
       });
       this.emit({
         type: "verify.recipe.run.response",
@@ -372,7 +379,7 @@ export class VerifySession {
         `Invalid verification config: ${verification.error.issues[0]?.message ?? "unknown"}`,
       );
     }
-    return { browser: browser.data, verification: verification.data };
+    return { cwd: workspace.cwd, browser: browser.data, verification: verification.data };
   }
 
   private async resolveServiceUrl(workspaceId: string, service: string): Promise<string | null> {

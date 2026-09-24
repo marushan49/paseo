@@ -22,6 +22,7 @@ import type { BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { interpolateRecipeParams } from "./recipe-params.js";
 import { JevBrowserGoalRunner } from "../browser-tools/jev-goal-runner.js";
 import type { TypeSafeDecisionSource } from "../browser-tools/jev-client.js";
+import { SYSTEM_ONE_EXCLUDED_MESSAGE } from "../system-one/scope.js";
 
 export interface RecipeCheckResult {
   name: string;
@@ -67,6 +68,8 @@ export interface RunRecipeInput {
   verification: PaseoVerificationConfig;
   recipeName: string;
   params?: Record<string, string>;
+  /** False for projects excluded from System One: goal steps then fail closed. */
+  allowGoal?: boolean;
 }
 
 interface RunContext {
@@ -82,6 +85,7 @@ interface RunContext {
   checks: RecipeCheckResult[];
   trace: RecipeStepTrace[];
   rawArtifactBytes: number;
+  allowGoal: boolean;
 }
 
 const DEFAULT_WAIT_TEXT_TIMEOUT_MS = 15_000;
@@ -179,6 +183,7 @@ export class RecipeRunner {
       checks: [],
       trace: [],
       rawArtifactBytes: 0,
+      allowGoal: input.allowGoal ?? true,
     };
     const startedAt = Date.now();
     let failedCheck: RecipeCheckResult | null = null;
@@ -358,6 +363,9 @@ export class RecipeRunner {
     const name = `goal "${step.goal}"`;
     if (!this.goal) {
       return fail(name, "Goal steps need System One enabled in Paseo Settings → System One.");
+    }
+    if (!context.allowGoal) {
+      return fail(name, SYSTEM_ONE_EXCLUDED_MESSAGE);
     }
     if (!context.browserId) {
       return fail(name, "Open a page with a navigate step before a goal step.");

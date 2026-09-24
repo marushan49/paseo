@@ -29,6 +29,8 @@ Good uses include routing a task, ranking a short candidate set, checking releva
 
 Never place API keys, passwords, tokens, private keys, or other secrets in the state or questions.
 
+To keep a project's code away from TypeSafe entirely, list its directory in `daemon.systemOne.excludedPaths` in `$PASEO_HOME/config.json` (for example `["~/work/company"]`). Agents working below those paths get a refusal from `system_one_decide` and `browser_goal`, and `goal` steps in `browser_test` fail; scripted test steps still run. Paseo reads the list on every decision, so edits apply without a restart.
+
 ## Browser goals
 
 The [`browser_goal` tool](/docs/browser) uses the same System One configuration. Paseo enriches Jev with the current URL, an accessibility summary, recent actions, and allowed value slots. Jev chooses the next bounded action; Paseo executes it locally and requires explicit text or URL checks before reporting success.

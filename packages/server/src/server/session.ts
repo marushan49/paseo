@@ -1,4 +1,5 @@
 import { searchTimeline } from "./agent/chat-search/index.js";
+import { isSystemOneExcluded } from "./system-one/scope.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { browserToolsFailure } from "./browser-tools/errors.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
@@ -3162,6 +3163,7 @@ export class Session {
       isBrowserToolsEnabled: () =>
         new DaemonConfigBrowserToolsPolicy(this.daemonConfigStore).isEnabled(),
       emit: (message) => this.emit(message),
+      isGoalAllowed: (cwd) => !isSystemOneExcluded(this.paseoHome, cwd),
       goal: {
         decisionSource: createConfiguredSystemOneDecisionSource(
           this.paseoHome,

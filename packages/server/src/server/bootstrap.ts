@@ -1,4 +1,5 @@
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
+import { isSystemOneExcluded } from "./system-one/scope.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
 import { constants, existsSync, unlinkSync } from "fs";
@@ -1527,6 +1528,7 @@ export async function createPaseoDaemon(
         evidence: verifyEvidence,
         isBrowserToolsEnabled: () => browserToolsPolicy.isEnabled(),
         emit: () => {},
+        isGoalAllowed: (cwd) => !isSystemOneExcluded(config.paseoHome, cwd),
         goal: {
           decisionSource: createConfiguredSystemOneDecisionSource(
             config.paseoHome,

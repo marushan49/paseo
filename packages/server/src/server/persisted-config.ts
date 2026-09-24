@@ -257,6 +257,7 @@ export const PersistedConfigSchema = z
             enabled: z.boolean().optional(),
             model: z.string().trim().min(1).optional(),
             minimumConfidence: z.number().min(0).max(1).optional(),
+            excludedPaths: z.array(z.string().trim().min(1)).optional(),
           })
           .strict()
           .optional(),
