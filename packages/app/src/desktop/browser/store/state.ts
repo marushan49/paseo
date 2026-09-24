@@ -24,6 +24,8 @@ export type BrowserRecordPatch = Partial<Omit<BrowserRecord, "browserId" | "crea
 
 export interface BrowserIndexState {
   browsersById: Record<string, BrowserRecord>;
+  /** Opened by new tabs that get no URL of their own. */
+  startUrl?: string | null;
 }
 
 const BrowserViewportSchema = z.discriminatedUnion("mode", [
@@ -51,6 +53,7 @@ const BrowserRecordSchema = z.strictObject({
 
 export const BrowserIndexStateSchema: z.ZodType<BrowserIndexState> = z.strictObject({
   browsersById: z.record(z.string(), BrowserRecordSchema),
+  startUrl: z.string().nullable().optional(),
 });
 
 export function createFixedBrowserViewport(width: number, height: number): BrowserViewport {
@@ -202,10 +205,9 @@ export function removeBrowserFromIndex<S extends BrowserIndexState>(
   return { ...state, browsersById: next };
 }
 
-export function sanitizeBrowsersForPersist(state: BrowserIndexState): {
-  browsersById: Record<string, BrowserRecord>;
-} {
+export function sanitizeBrowsersForPersist(state: BrowserIndexState): BrowserIndexState {
   return {
+    startUrl: state.startUrl ?? null,
     browsersById: Object.fromEntries(
       Object.entries(state.browsersById).map(([browserId, browser]) => [
         browserId,

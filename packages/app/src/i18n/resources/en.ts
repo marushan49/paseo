@@ -2194,6 +2194,13 @@ export const en = {
         label: "Safety boundary",
         hint: "Screenshots and secret values are not sent to TypeSafe. Low-confidence decisions stop, stale element references are observed again, and success requires explicit text or URL checks.",
       },
+      startPage: {
+        label: "Start page",
+        hint: "New browser tabs on this device open this URL. Agents always open the URL they pass directly.",
+        saveLabel: "Current start page",
+        unset: "Not set (example.com)",
+        save: "Save",
+      },
     },
     plugins: {
       title: "Plugins",

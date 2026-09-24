@@ -32,6 +32,7 @@ interface BrowserStoreState extends BrowserIndexState {
   updateBrowser: (browserId: string, patch: BrowserRecordPatch) => void;
   setBrowserViewport: (browserId: string, viewport: BrowserViewport) => void;
   removeBrowser: (browserId: string) => void;
+  setStartUrl: (url: string | null) => void;
 }
 
 function createBrowserId(): string {
@@ -47,13 +48,14 @@ function createBrowserId(): string {
 
 export const useBrowserStore = create<BrowserStoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       browsersById: {},
+      startUrl: null,
       createBrowser: (input) => {
         const browserId = createBrowserId();
         const record = createBrowserRecord({
           browserId,
-          initialUrl: input?.initialUrl,
+          initialUrl: input?.initialUrl ?? get().startUrl,
           now: Date.now(),
         });
 
@@ -87,6 +89,10 @@ export const useBrowserStore = create<BrowserStoreState>()(
       removeBrowser: (browserId) => {
         set((state) => removeBrowserFromIndex(state, browserId));
       },
+      setStartUrl: (url) => {
+        const trimmed = trimNonEmpty(url);
+        set({ startUrl: trimmed ? normalizeBrowserUrl(trimmed) : null });
+      },
     }),
     {
       name: "workspace-browser-store",
@@ -116,7 +122,8 @@ export function createWorkspaceBrowser(input?: { initialUrl?: string }): {
   const record = getBrowserRecord(browserId);
   return {
     browserId,
-    url: record?.url ?? normalizeBrowserUrl(input?.initialUrl),
+    url:
+      record?.url ?? normalizeBrowserUrl(input?.initialUrl ?? useBrowserStore.getState().startUrl),
   };
 }
 

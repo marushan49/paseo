@@ -190,3 +190,13 @@ describe("normalizeBrowserIndexState", () => {
     ).toEqual({ mode: "responsive" });
   });
 });
+
+describe("start page persistence", () => {
+  it("keeps the start page and still reads state persisted before it existed", () => {
+    expect(sanitizeBrowsersForPersist({ browsersById: {}, startUrl: "https://a.test" })).toEqual({
+      browsersById: {},
+      startUrl: "https://a.test",
+    });
+    expect(normalizeBrowserIndexState({ browsersById: {} })).toEqual({ browsersById: {} });
+  });
+});
