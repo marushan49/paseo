@@ -174,17 +174,8 @@ export class JevBrowserGoalRunner {
       const decision = await this.decisionSource.decide(request);
       lastModel = decision.model;
       const operation = parseChoiceAnswer(decision.answers.operation, plan.operations);
-      const operationProbability = operation.probabilities[operation.choice] ?? 0;
-      if (Math.min(operation.confidence, operationProbability) < minConfidence) {
-        return resultFor(
-          "uncertain",
-          page,
-          steps,
-          `Jev was not confident enough to execute ${operation.choice}.`,
-          lastModel,
-        );
-      }
-
+      // DONE mutates nothing and the verify checks decide it, so even an unsure DONE
+      // is checked instead of ending the run; the confidence gate guards actions.
       if (operation.choice === "DONE") {
         const verified = await this.verify(browserId, input.verify, context);
         if (verified) {
@@ -200,6 +191,17 @@ export class JevBrowserGoalRunner {
         });
         page = await this.observe(browserId, context);
         continue;
+      }
+
+      const operationProbability = operation.probabilities[operation.choice] ?? 0;
+      if (Math.min(operation.confidence, operationProbability) < minConfidence) {
+        return resultFor(
+          "uncertain",
+          page,
+          steps,
+          `Jev was not confident enough to execute ${operation.choice}.`,
+          lastModel,
+        );
       }
 
       if (operation.choice === "BLOCKED") {

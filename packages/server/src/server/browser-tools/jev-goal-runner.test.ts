@@ -104,6 +104,32 @@ describe("JevBrowserGoalRunner", () => {
     expect(broker.calls.at(-1)?.command.command).toBe("wait");
   });
 
+  it("verifies an unsure DONE instead of stopping as uncertain", async () => {
+    const broker = new GoalBroker();
+    broker.clicked = true;
+    const decisions: TypeSafeDecisionSource = {
+      decide: async (request) => ({
+        answers: { operation: answerFor(request, "operation", "DONE", 0.2) },
+        model: "jev-test",
+        latencyMs: 1,
+      }),
+    };
+    const runner = new JevBrowserGoalRunner({ broker, decisionSource: decisions });
+
+    const result = await runner.run(
+      {
+        goal: "Reach Welcome",
+        browserId: BROWSER_ID,
+        verify: [{ text: "Welcome" }],
+        minConfidence: 0.5,
+      },
+      CONTEXT,
+    );
+
+    expect(result.status).toBe("passed");
+    expect(broker.calls.at(-1)?.command.command).toBe("wait");
+  });
+
   it("resolves a value slot from the local environment without sending its value", async () => {
     const broker = new GoalBroker();
     const decisions = new ScriptedDecisions(["FILL", "BLOCKED"]);
