@@ -84,6 +84,35 @@ Low-confidence decisions stop without mutating the page. Stale refs trigger a ne
 
 The same System One setup also gives every supported coding agent the general `system_one_decide` tool. See [System One](/docs/system-one) for when agents use Jev outside the browser.
 
+## Testing engine
+
+`paseo_test` is the tool agents use for every UI or end-to-end check. The daemon runs the steps itself and returns only the verdict: pass or fail, the checks, console and network error counts, and an evidence reference for the screenshots. The page never enters the agent's context, so a test costs a small fraction of the tokens of driving `browser_*` tools by hand.
+
+Save recurring flows as recipes in the workspace's `paseo.json`:
+
+```json
+{
+  "verification": {
+    "recipes": {
+      "settings-smoke": {
+        "steps": [
+          { "action": "navigate", "service": "web", "path": "/settings" },
+          {
+            "action": "goal",
+            "goal": "Open the browser settings",
+            "verify": [{ "text": "Start page" }]
+          },
+          { "action": "assert-console-errors", "max": 0 },
+          { "action": "screenshot", "name": "settings" }
+        ]
+      }
+    }
+  }
+}
+```
+
+Scripted steps (`navigate`, `click`, `fill`, `wait-text`, `assert-visible`, `assert-text`, `assert-console-errors`, `assert-failed-requests`, `screenshot`, `ensure-authenticated`) run without any model. A `goal` step hands the part you cannot script to Jev and passes only when its `verify` checks hold; it needs System One. Agents call `paseo_test` with no arguments to list recipes, with `recipe` to run one, or with `steps` for an ad-hoc run.
+
 ## Architecture
 
 ```

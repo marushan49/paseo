@@ -102,6 +102,14 @@ function interpolateStep(
       return { ...step, text: interpolate(step.text) };
     case "screenshot":
       return { ...step, name: interpolate(step.name) };
+    case "goal":
+      return {
+        ...step,
+        goal: interpolate(step.goal),
+        verify: step.verify.map((check) =>
+          "text" in check ? { text: interpolate(check.text) } : { url: interpolate(check.url) },
+        ),
+      };
     case "assert-console-errors":
     case "assert-failed-requests":
       return step;

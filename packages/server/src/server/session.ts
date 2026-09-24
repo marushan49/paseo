@@ -98,7 +98,10 @@ import {
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { ResourcePolicyRuntime } from "./resource-policy.js";
 import { SystemOneCredentialStore } from "./system-one/credential-store.js";
-import { isTypeSafeApiKeyAccepted } from "./system-one/tools.js";
+import {
+  createConfiguredSystemOneDecisionSource,
+  isTypeSafeApiKeyAccepted,
+} from "./system-one/tools.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -3159,6 +3162,13 @@ export class Session {
       isBrowserToolsEnabled: () =>
         new DaemonConfigBrowserToolsPolicy(this.daemonConfigStore).isEnabled(),
       emit: (message) => this.emit(message),
+      goal: {
+        decisionSource: createConfiguredSystemOneDecisionSource(
+          this.paseoHome,
+          this.daemonConfigStore,
+        ),
+        minConfidence: () => this.daemonConfigStore.get().systemOne?.minimumConfidence ?? 0.5,
+      },
     });
   }
 

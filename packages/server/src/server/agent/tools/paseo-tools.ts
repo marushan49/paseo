@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { VerifySession } from "../../verify/verify-session.js";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -139,6 +140,8 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  /** Paseo's testing engine: saved recipes, ad-hoc steps, and Jev goal steps. */
+  verify?: Pick<VerifySession, "runForAgent">;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
@@ -1282,6 +1285,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             },
           }
         : {}),
+      verify: options.verify,
       callerAgentId,
       resolveCallerAgent,
     });

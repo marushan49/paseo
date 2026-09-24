@@ -50,6 +50,7 @@ class BrowserToolHarness {
     },
     private readonly callerAgentId: string | null = "agent-1",
     goalRunner?: RegisterBrowserToolsOptions["goalRunner"],
+    verify?: RegisterBrowserToolsOptions["verify"],
   ) {
     registerBrowserTools({
       registerTool: (name, config, handler) => {
@@ -57,6 +58,7 @@ class BrowserToolHarness {
       },
       broker: this.broker as Pick<BrowserToolsBroker, "execute">,
       ...(goalRunner ? { goalRunner } : {}),
+      ...(verify ? { verify } : {}),
       ...(this.callerAgentId ? { callerAgentId: this.callerAgentId } : {}),
       resolveCallerAgent: () => this.callerAgent,
     });
@@ -1120,5 +1122,48 @@ describe("registerBrowserTools", () => {
       result: snapshotPayload().result,
       context: { browserId: BROWSER_ID },
     });
+  });
+
+  it("runs paseo_test in the caller's workspace and flags a failed verdict", async () => {
+    const calls: unknown[] = [];
+    const harness = new BrowserToolHarness(undefined, "agent-1", undefined, {
+      runForAgent: async (input) => {
+        calls.push(input);
+        return input.steps
+          ? {
+              kind: "run",
+              result: {
+                status: "fail",
+                recipe: "ad-hoc",
+                workspaceId: input.workspaceId,
+                runId: "evr_1",
+                profile: "default",
+                authReused: null,
+                route: "http://localhost:3000/",
+                checks: [{ name: 'goal "Open settings"', ok: false, detail: "blocked" }],
+                consoleErrors: 0,
+                failedRequests: 0,
+                evidenceRef: "evidence://wks_workspace_a/evr_1",
+                rawBytes: 10,
+                agentBytes: 5,
+              },
+            }
+          : { kind: "list", recipes: [{ name: "smoke", params: [], stepCount: 2 }] };
+      },
+    });
+
+    const listed = await harness.execute("paseo_test", {});
+    expect(listed.structuredContent).toEqual({
+      recipes: [{ name: "smoke", params: [], stepCount: 2 }],
+    });
+
+    const steps = [
+      { action: "navigate", url: "http://localhost:3000" },
+      { action: "goal", goal: "Open settings", verify: [{ text: "Settings" }] },
+    ];
+    const run = await harness.execute("paseo_test", { steps });
+    expect(run.isError).toBe(true);
+    expect(calls.at(-1)).toEqual({ workspaceId: "wks_workspace_a", steps });
+    expect(harness.validate("paseo_test", { steps: [{ action: "teleport" }] }).success).toBe(false);
   });
 });

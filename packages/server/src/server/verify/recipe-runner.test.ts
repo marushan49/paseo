@@ -11,6 +11,7 @@ import type {
 import { EvidenceStore } from "./evidence-store.js";
 import { DaemonPlaywrightHost } from "./playwright-host.js";
 import { RecipeRunner } from "./recipe-runner.js";
+import type { TypeSafeDecisionRequest } from "../browser-tools/jev-client.js";
 import { resolveBrowserExecutable } from "./browser-capability.js";
 import {
   FIXTURE_PASSWORD,
@@ -135,6 +136,78 @@ describe.skipIf(!BROWSER_AVAILABLE)("RecipeRunner", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(FIXTURE_PASSWORD);
     expect(serialized).not.toContain(FIXTURE_USERNAME);
+  });
+
+  it("lets Jev drive a goal step and passes only on the goal's verify checks", async () => {
+    const requests: TypeSafeDecisionRequest[] = [];
+    const goalRunner = new RecipeRunner({
+      host,
+      evidence,
+      env,
+      resolveServiceUrl: async ({ service }) => (service === "frontend" ? app.url : null),
+      goal: {
+        decisionSource: {
+          decide: async (request) => {
+            requests.push(request);
+            const operations = Object.keys(request.questions.operation?.criteria ?? {});
+            if (!operations.includes("DONE")) throw new Error("DONE is not offered");
+            const probabilities = Object.fromEntries(
+              operations.map((operation) => [operation, operation === "DONE" ? 1 : 0]),
+            );
+            return {
+              answers: { operation: { choice: "DONE", confidence: 1, probabilities } },
+              model: "jev-test",
+              latencyMs: 1,
+            };
+          },
+        },
+        minConfidence: () => 0.5,
+      },
+    });
+    const result = await goalRunner.run({
+      workspaceId: WORKSPACE_ID,
+      browser: { defaultProfile: "goal-test", credentials: {} },
+      verification: {
+        recipes: {
+          "goal-slice": {
+            params: [],
+            steps: [
+              { action: "navigate", service: "frontend", path: "/login" },
+              { action: "goal", goal: "Show the sign-in form", verify: [{ text: "Sign in" }] },
+            ],
+          },
+        },
+      },
+      recipeName: "goal-slice",
+    });
+
+    expect(result.status).toBe("pass");
+    expect(requests).toHaveLength(1);
+    expect(result.checks).toEqual([
+      expect.objectContaining({ name: 'goal "Show the sign-in form"', ok: true }),
+    ]);
+  });
+
+  it("fails a goal step clearly when System One is not wired in", async () => {
+    const result = await runner.run({
+      workspaceId: WORKSPACE_ID,
+      browser: testConfig().browser,
+      verification: {
+        recipes: {
+          "goal-off": {
+            params: [],
+            steps: [
+              { action: "navigate", service: "frontend", path: "/login" },
+              { action: "goal", goal: "Anything", verify: [{ text: "Sign in" }] },
+            ],
+          },
+        },
+      },
+      recipeName: "goal-off",
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks.at(-1)?.detail).toContain("System One");
   });
 
   it("reuses the stored session on the second run", async () => {

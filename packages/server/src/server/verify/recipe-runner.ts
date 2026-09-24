@@ -20,6 +20,8 @@ import { findSnapshotRef } from "./page-snapshot.js";
 import type { DaemonPlaywrightHost } from "./playwright-host.js";
 import type { BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { interpolateRecipeParams } from "./recipe-params.js";
+import { JevBrowserGoalRunner } from "../browser-tools/jev-goal-runner.js";
+import type { TypeSafeDecisionSource } from "../browser-tools/jev-client.js";
 
 export interface RecipeCheckResult {
   name: string;
@@ -55,6 +57,8 @@ export interface RecipeRunnerOptions {
   evidence: EvidenceStore;
   resolveServiceUrl: (input: { workspaceId: string; service: string }) => Promise<string | null>;
   env?: NodeJS.ProcessEnv;
+  /** Enables `goal` steps; absent when System One is not available. */
+  goal?: { decisionSource: TypeSafeDecisionSource; minConfidence: () => number };
 }
 
 export interface RunRecipeInput {
@@ -130,8 +134,10 @@ export class RecipeRunner {
   private readonly evidence: EvidenceStore;
   private readonly resolveServiceUrl: RecipeRunnerOptions["resolveServiceUrl"];
   private readonly env: NodeJS.ProcessEnv;
+  private readonly goal: RecipeRunnerOptions["goal"];
 
   public constructor(options: RecipeRunnerOptions) {
+    this.goal = options.goal;
     this.host = options.host;
     this.evidence = options.evidence;
     this.resolveServiceUrl = options.resolveServiceUrl;
@@ -340,6 +346,43 @@ export class RecipeRunner {
         });
       case "screenshot":
         return this.runScreenshotStep(context, step);
+      case "goal":
+        return this.runGoalStep(context, step);
+    }
+  }
+
+  private async runGoalStep(
+    context: RunContext,
+    step: Extract<PaseoRecipeStep, { action: "goal" }>,
+  ): Promise<RecipeCheckResult> {
+    const name = `goal "${step.goal}"`;
+    if (!this.goal) {
+      return fail(name, "Goal steps need System One enabled in Paseo Settings → System One.");
+    }
+    if (!context.browserId) {
+      return fail(name, "Open a page with a navigate step before a goal step.");
+    }
+    const runner = new JevBrowserGoalRunner({
+      broker: { execute: ({ command }) => this.execute(context, command) },
+      decisionSource: this.goal.decisionSource,
+    });
+    try {
+      const result = await runner.run(
+        {
+          goal: step.goal,
+          browserId: context.browserId,
+          verify: step.verify,
+          ...(step.values ? { values: step.values } : {}),
+          ...(step.maxSteps ? { maxSteps: step.maxSteps } : {}),
+          minConfidence: this.goal.minConfidence(),
+        },
+        { workspaceId: context.workspaceId },
+      );
+      context.route = result.url;
+      const detail = `${result.status} after ${result.steps.length} Jev steps: ${result.message}`;
+      return result.status === "passed" ? { name, ok: true, detail } : fail(name, detail);
+    } catch (error) {
+      return fail(name, error instanceof Error ? error.message : String(error));
     }
   }
 

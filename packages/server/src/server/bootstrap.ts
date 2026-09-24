@@ -157,6 +157,8 @@ import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import { EvidenceStore } from "./verify/evidence-store.js";
+import { VerifySession } from "./verify/verify-session.js";
+import { createConfiguredSystemOneDecisionSource } from "./system-one/tools.js";
 import { DaemonPlaywrightHost } from "./verify/playwright-host.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 import { resolveWorkspaceIdForPath } from "./resolve-workspace-id-for-path.js";
@@ -1448,33 +1450,8 @@ export async function createPaseoDaemon(
 
   const createAgentToolHostDependencies = (
     runtime: PaseoToolRuntimeContext,
-  ): PaseoToolHostDependencies => ({
-    agentManager,
-    agentStorage,
-    terminalManager,
-    getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
-    scheduleService,
-    providerSnapshotManager,
-    daemonConfigStore,
-    resourcePolicyRuntime,
-    github,
-    workspaceGitService,
-    findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
-    listActiveWorkspaces: listActiveWorkspacesExternal,
-    archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
-    emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
-    workspaceRegistry,
-    projectRegistry,
-    createDirectoryWorkspace: async (cwd, title, projectId) => {
-      const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
-        cwd,
-        title,
-        projectId,
-      );
-      await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
-      return workspace;
-    },
-    workspaceScripts: createWorkspaceScriptsService({
+  ): PaseoToolHostDependencies => {
+    const workspaceScripts = createWorkspaceScriptsService({
       serviceProxy,
       scriptRuntimeStore,
       terminalManager,
@@ -1493,25 +1470,70 @@ export async function createPaseoDaemon(
       assertAutomationAllowed: (workspaceId) =>
         assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, workspaceId),
       globalServicePorts: loadPersistedConfig(config.paseoHome).worktrees?.servicePorts,
-    }),
-    markWorkspaceArchiving: markWorkspaceArchivingExternal,
-    clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
-    ensureWorkspaceForCreate: createAgentCommandDependencies.ensureWorkspaceForCreate,
-    createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
-    browserToolsEnabled: browserToolsPolicy.isEnabled(),
-    browserToolsBroker,
-    paseoToolPolicy:
-      runtime.paseoToolPolicy ??
-      (runtime.callerAgentId ? agentManager.getPaseoToolPolicy(runtime.callerAgentId) : undefined),
-    paseoHome: config.paseoHome,
-    worktreesRoot: config.worktreesRoot,
-    callerAgentId: runtime.callerAgentId,
-    enableVoiceTools: runtime.enableVoiceTools,
-    voiceOnly: runtime.voiceOnly,
-    resolveSpeakHandler: (agentId) => wsServer?.resolveVoiceSpeakHandler(agentId) ?? null,
-    resolveCallerContext: (agentId) => wsServer?.resolveVoiceCallerContext(agentId) ?? null,
-    logger,
-  });
+    });
+    return {
+      agentManager,
+      agentStorage,
+      terminalManager,
+      getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
+      scheduleService,
+      providerSnapshotManager,
+      daemonConfigStore,
+      resourcePolicyRuntime,
+      github,
+      workspaceGitService,
+      findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
+      listActiveWorkspaces: listActiveWorkspacesExternal,
+      archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
+      emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
+      workspaceRegistry,
+      projectRegistry,
+      createDirectoryWorkspace: async (cwd, title, projectId) => {
+        const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
+          cwd,
+          title,
+          projectId,
+        );
+        await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
+        return workspace;
+      },
+      workspaceScripts,
+      markWorkspaceArchiving: markWorkspaceArchivingExternal,
+      clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
+      ensureWorkspaceForCreate: createAgentCommandDependencies.ensureWorkspaceForCreate,
+      createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
+      browserToolsEnabled: browserToolsPolicy.isEnabled(),
+      browserToolsBroker,
+      paseoToolPolicy:
+        runtime.paseoToolPolicy ??
+        (runtime.callerAgentId
+          ? agentManager.getPaseoToolPolicy(runtime.callerAgentId)
+          : undefined),
+      paseoHome: config.paseoHome,
+      worktreesRoot: config.worktreesRoot,
+      callerAgentId: runtime.callerAgentId,
+      enableVoiceTools: runtime.enableVoiceTools,
+      voiceOnly: runtime.voiceOnly,
+      resolveSpeakHandler: (agentId) => wsServer?.resolveVoiceSpeakHandler(agentId) ?? null,
+      resolveCallerContext: (agentId) => wsServer?.resolveVoiceCallerContext(agentId) ?? null,
+      logger,
+      verify: new VerifySession({
+        workspaceRegistry,
+        workspaceScripts,
+        host: verifyHost,
+        evidence: verifyEvidence,
+        isBrowserToolsEnabled: () => browserToolsPolicy.isEnabled(),
+        emit: () => {},
+        goal: {
+          decisionSource: createConfiguredSystemOneDecisionSource(
+            config.paseoHome,
+            daemonConfigStore,
+          ),
+          minConfidence: () => daemonConfigStore.get().systemOne?.minimumConfidence ?? 0.5,
+        },
+      }),
+    };
+  };
   const createAgentToolCatalog = (runtime: PaseoToolRuntimeContext) =>
     createPaseoToolCatalog(createAgentToolHostDependencies(runtime));
   const setAgentProviderToolsEnabled = (enabled: boolean) => {

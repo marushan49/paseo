@@ -2,6 +2,7 @@ import {
   PaseoBrowserConfigRawSchema,
   PaseoVerificationConfigRawSchema,
   type PaseoBrowserConfig,
+  type PaseoRecipeStep,
   type PaseoVerificationConfig,
 } from "@getpaseo/protocol/paseo-config-schema";
 import type {
@@ -25,7 +26,7 @@ import { readPaseoConfigJson } from "../../utils/paseo-config-file.js";
 import type { EvidenceRunManifest, EvidenceStore } from "./evidence-store.js";
 import type { EvidenceArtifactEntry } from "./evidence-store.js";
 import type { DaemonPlaywrightHost } from "./playwright-host.js";
-import { RecipeRunner } from "./recipe-runner.js";
+import { RecipeRunner, type RecipeRunnerOptions, type VerifyRunResult } from "./recipe-runner.js";
 
 export interface VerifySessionOptions {
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
@@ -34,7 +35,14 @@ export interface VerifySessionOptions {
   evidence: EvidenceStore;
   isBrowserToolsEnabled: () => boolean;
   emit: (message: SessionOutboundMessage) => void;
+  goal?: RecipeRunnerOptions["goal"];
 }
+
+export type AgentVerifyResult =
+  | { kind: "run"; result: VerifyRunResult }
+  | { kind: "list"; recipes: VerifyRecipeSummary[] };
+
+const AD_HOC_RECIPE = "ad-hoc";
 
 interface RecipeConfig {
   browser: PaseoBrowserConfig;
@@ -101,7 +109,45 @@ export class VerifySession {
       host: options.host,
       evidence: options.evidence,
       resolveServiceUrl: ({ workspaceId, service }) => this.resolveServiceUrl(workspaceId, service),
+      ...(options.goal ? { goal: options.goal } : {}),
     });
+  }
+
+  /** Runs a saved recipe or ad-hoc steps for an agent; lists recipes when given neither. */
+  public async runForAgent(input: {
+    workspaceId: string;
+    recipe?: string;
+    steps?: PaseoRecipeStep[];
+    params?: Record<string, string>;
+  }): Promise<AgentVerifyResult> {
+    this.requireBrowserTools();
+    await assertWorkspaceAutomationAllowedForWorkspace(this.workspaceRegistry, input.workspaceId);
+    const config = await this.loadRecipeConfig(input.workspaceId);
+    if (!input.steps && !input.recipe) {
+      return {
+        kind: "list",
+        recipes: Object.entries(config.verification.recipes).map(([name, recipe]) =>
+          toRecipeSummary(name, recipe),
+        ),
+      };
+    }
+    const verification = input.steps
+      ? {
+          ...config.verification,
+          recipes: {
+            ...config.verification.recipes,
+            [AD_HOC_RECIPE]: { params: [], steps: input.steps },
+          },
+        }
+      : config.verification;
+    const result = await this.runner.run({
+      workspaceId: input.workspaceId,
+      browser: config.browser,
+      verification,
+      recipeName: input.steps ? AD_HOC_RECIPE : (input.recipe ?? AD_HOC_RECIPE),
+      params: input.params,
+    });
+    return { kind: "run", result };
   }
 
   public async handleListRequest(request: VerifyRecipeListRequest): Promise<void> {

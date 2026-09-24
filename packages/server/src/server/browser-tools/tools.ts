@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { BrowserAutomationBrowserIdSchema } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+import {
+  PaseoRecipeStepSchema,
+  type PaseoRecipeStep,
+} from "@getpaseo/protocol/paseo-config-schema";
 import type { BrowserToolsBroker } from "./broker.js";
+import { ensureValidJson } from "../json-utils.js";
+import type { VerifySession } from "../verify/verify-session.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
 import {
   JevBrowserGoalRunner,
@@ -31,6 +37,7 @@ export interface RegisterBrowserToolsOptions {
   ) => void;
   broker: Pick<BrowserToolsBroker, "execute">;
   goalRunner?: Pick<JevBrowserGoalRunner, "run">;
+  verify?: Pick<VerifySession, "runForAgent">;
   callerAgentId?: string;
   resolveCallerAgent: () => CallerAgentContext | null;
 }
@@ -97,6 +104,53 @@ const BrowserGoalInputSchema = z
   });
 
 export function registerBrowserTools(options: RegisterBrowserToolsOptions): void {
+  if (options.verify) {
+    const verify = options.verify;
+    options.registerTool(
+      "paseo_test",
+      {
+        title: "Test in Paseo's testing engine",
+        description:
+          "Paseo's testing engine. Use it first for every UI, end-to-end, or 'does it work in the browser' check instead of driving browser_* tools step by step. Call with no arguments to list the workspace's saved recipes; pass `recipe` to run one; or pass `steps` for an ad-hoc run. Steps run inside the daemon without model tokens: navigate (url, or service + path), click/fill/assert-visible (role + name), wait-text, assert-text, assert-console-errors, assert-failed-requests, screenshot, ensure-authenticated. Use a `goal` step ({ action: \"goal\", goal, verify: [{ text } | { url }] }) for parts you cannot script: Jev drives them in fast bounded steps. Returns only pass/fail, checks, log counts, and an evidence reference; open the browser_* tools only to debug a failed run. Save a passing ad-hoc run as a recipe under `verification.recipes` in paseo.json so the next run is fully scripted.",
+        inputSchema: {
+          recipe: z.string().trim().min(1).optional(),
+          steps: z.array(PaseoRecipeStepSchema).min(1).max(60).optional(),
+          params: z.record(z.string(), z.string()).optional(),
+        },
+      },
+      async (input: {
+        recipe?: string;
+        steps?: PaseoRecipeStep[];
+        params?: Record<string, string>;
+      }) => {
+        const context = resolveBrowserToolContext(options);
+        if (!context.workspaceId) {
+          return requireWorkspaceContext(context) as PaseoToolResult;
+        }
+        try {
+          const outcome = await verify.runForAgent({ workspaceId: context.workspaceId, ...input });
+          const structuredContent = ensureValidJson(
+            outcome.kind === "list" ? { recipes: outcome.recipes } : outcome.result,
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+            ...(outcome.kind === "run" && outcome.result.status === "fail"
+              ? { isError: true }
+              : {}),
+          };
+        } catch (error) {
+          return {
+            content: [
+              { type: "text", text: error instanceof Error ? error.message : "Test run failed." },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+  }
+
   options.registerTool(
     "browser_list_tabs",
     {

@@ -175,6 +175,33 @@ export const PaseoRecipeStepSchema = z.discriminatedUnion("action", [
       name: z.string().trim().min(1),
     })
     .strict(),
+  // Jev drives the unscripted part; the verify checks decide whether it passed.
+  z
+    .object({
+      action: z.literal("goal"),
+      goal: z.string().trim().min(1),
+      verify: z
+        .array(
+          z.union([
+            z.object({ text: z.string().min(1) }).strict(),
+            z.object({ url: z.string().min(1) }).strict(),
+          ]),
+        )
+        .min(1),
+      values: z
+        .record(
+          z.string().min(1),
+          z
+            .object({
+              env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+              description: z.string().min(1).optional(),
+            })
+            .strict(),
+        )
+        .optional(),
+      maxSteps: z.number().int().min(1).max(30).optional(),
+    })
+    .strict(),
 ]);
 
 export const PaseoVerificationRecipeSchema = z
