@@ -141,4 +141,5 @@ export async function expectBothConsecutiveTools(page: Page): Promise<void> {
   const grep = page.getByRole("heading", { name: "Tool grep complete", exact: true }).first();
   await grep.scrollIntoViewIfNeeded();
   await expect(grep).toBeVisible();
+  await expect(page.getByText("timeline-transform-e2e").first()).toBeVisible();
 }

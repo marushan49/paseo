@@ -16,6 +16,7 @@ function toolCall(
   options: {
     name?: string;
     status?: "running" | "completed" | "failed" | "canceled";
+    metadata?: Record<string, unknown>;
   } = {},
 ): ToolCallItem {
   return {
@@ -31,6 +32,7 @@ function toolCall(
         status: options.status ?? "completed",
         error: options.status === "failed" ? "boom" : null,
         detail,
+        ...(options.metadata ? { metadata: options.metadata } : {}),
       },
     },
   };
@@ -261,6 +263,7 @@ describe("tool call detail-level projection", () => {
         searchCount: 0,
         otherToolCount: 0,
         paseoCallCount: 0,
+        origins: [],
       },
     });
   });
@@ -330,6 +333,34 @@ describe("tool call detail-level projection", () => {
     expect(result.groupsByHostId.get("1")).toMatchObject({
       summary: { otherToolCount: 2, paseoCallCount: 2 },
     });
+  });
+
+  it("keeps source counts visible for collapsed groups", () => {
+    const unknownDetail = { type: "unknown" as const, input: null, output: null };
+    const calls = [
+      toolCall("1", unknownDetail, { name: "browser_click" }),
+      toolCall("2", unknownDetail, { name: "browser_snapshot" }),
+      toolCall("3", unknownDetail, { name: "system_one_decide" }),
+      toolCall("4", unknownDetail, { name: "inspect_report", metadata: { pluginId: "reports" } }),
+    ];
+
+    const result = project({ level: "overview", head: calls });
+
+    expect(result.groupsByHostId.get("1")?.summary.origins).toEqual([
+      { origin: { id: "browser", label: "Browser", colorName: "sky" }, count: 2 },
+      {
+        origin: { id: "system-one", label: "System One · Jev", colorName: "violet" },
+        count: 1,
+      },
+      {
+        origin: {
+          id: "plugin:reports",
+          label: "reports",
+          colorName: expect.any(String),
+        },
+        count: 1,
+      },
+    ]);
   });
 
   it("classifies direct Brave search and Paseo runtime tool names", () => {

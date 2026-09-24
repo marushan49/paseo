@@ -76,6 +76,21 @@ describe("tool-call presentation", () => {
     });
   });
 
+  it("keeps source identity beside the normal tool presentation", () => {
+    const presentation = buildToolCallPresentation({
+      toolName: "browser_click",
+      status: "running",
+      error: null,
+      detail: { type: "unknown", input: null, output: null },
+      resolveIcon: fakeResolveIcon,
+    });
+
+    expect(presentation).toMatchObject({
+      displayName: "Browser click",
+      origin: { id: "browser", label: "Browser", colorName: "sky" },
+    });
+  });
+
   it("keeps plan calls out of the expandable badge path", () => {
     const presentation = buildToolCallPresentation({
       toolName: "ExitPlanMode",

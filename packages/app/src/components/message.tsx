@@ -61,6 +61,8 @@ import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/type
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
+import { ToolCallOriginIndicator } from "@/tool-calls/origin-indicator";
+import type { ToolCallOrigin } from "@/tool-calls/origin";
 import { resolveToolCallIcon } from "@/utils/tool-call-icon";
 import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-list";
 import { markdownNodeContainsType } from "@/utils/markdown-ast";
@@ -2318,6 +2320,7 @@ export const TodoListCard = memo(function TodoListCard({
 interface ExpandableBadgeProps {
   label: string;
   secondaryLabel?: string;
+  originTags?: readonly ToolCallOrigin[];
   icon?: ComponentType<{ size?: number; color?: string }>;
   isExpanded: boolean;
   style?: StyleProp<ViewStyle>;
@@ -2694,6 +2697,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   disableOuterSpacing,
   borderlessWhenExpanded = false,
   testID,
+  originTags,
 }: ExpandableBadgeProps) {
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
   const [isHovered, setIsHovered] = useState(false);
@@ -2961,6 +2965,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
         style={pressableStyle}
       >
         <View style={expandableBadgeStylesheet.headerRow}>
+          {originTags ? <ToolCallOriginIndicator origins={originTags} /> : null}
           <View style={expandableBadgeStylesheet.iconBadge}>{iconSlotNode}</View>
           <ExpandableBadgeLabelRow
             label={label}
@@ -3006,6 +3011,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
 function areExpandableBadgePropsEqual(previous: ExpandableBadgeProps, next: ExpandableBadgeProps) {
   if (previous.label !== next.label) return false;
   if (previous.secondaryLabel !== next.secondaryLabel) return false;
+  if (previous.originTags !== next.originTags) return false;
   if (previous.icon !== next.icon) return false;
   if (previous.isExpanded !== next.isExpanded) return false;
   if (previous.style !== next.style) return false;
@@ -3091,6 +3097,10 @@ export const ToolCall = memo(function ToolCall({
         resolveIcon: resolveToolCallIcon,
       }),
     [toolName, status, error, effectiveDetail, metadata, cwd],
+  );
+  const originTags = useMemo(
+    () => (presentation.origin ? [presentation.origin] : undefined),
+    [presentation.origin],
   );
   const handleOpenFile = useMemo(() => {
     const openFilePath = presentation.openFilePath;
@@ -3190,6 +3200,7 @@ export const ToolCall = memo(function ToolCall({
       testID="tool-call-badge"
       label={presentation.displayName}
       secondaryLabel={presentation.summary}
+      originTags={originTags}
       icon={presentation.icon}
       isExpanded={shouldRenderInline && isExpanded}
       onToggle={presentation.canOpenDetails ? handleToggle : undefined}

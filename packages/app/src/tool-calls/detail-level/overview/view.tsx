@@ -63,6 +63,14 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
   const scrollRef = useRef<ScrollView>(null);
   const isCompact = useIsCompactFormFactor();
   const aggregateSummary = useOverviewSummary(group.summary);
+  const originTags = useMemo(
+    () =>
+      group.summary.origins.map(({ origin, count }) => ({
+        ...origin,
+        label: count > 1 ? `${origin.label} ×${count}` : origin.label,
+      })),
+    [group.summary.origins],
+  );
   const scrollToLatest = useCallback(() => {
     scrollRef.current?.scrollToEnd({ animated: false });
   }, []);
@@ -94,6 +102,7 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
         <ExpandableBadge
           testID="tool-call-group"
           label={aggregateSummary}
+          originTags={originTags}
           icon={Wrench}
           isLoading={group.isLoading}
           isExpanded={false}
@@ -111,6 +120,7 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
     <ExpandableBadge
       testID="tool-call-group"
       label={aggregateSummary}
+      originTags={originTags}
       icon={Wrench}
       isLoading={group.isLoading}
       isExpanded={expanded}

@@ -8,6 +8,7 @@ import {
   hasMeaningfulToolCallDetail,
   isPendingToolCallDetail,
 } from "@/utils/tool-call-detail-state";
+import { resolveToolCallOrigin, type ToolCallOrigin } from "./origin";
 
 type ToolCallStatus = "executing" | "running" | "completed" | "failed" | "canceled";
 export type ToolCallPresentationIcon = ComponentType<{ size?: number; color?: string }>;
@@ -33,6 +34,7 @@ export interface ToolCallPresentation {
   openFilePath: string | null;
   isPlan: boolean;
   planOutcome?: PlanOutcome;
+  origin?: ToolCallOrigin;
 }
 
 export type ToolCallIconResolver = (
@@ -52,6 +54,7 @@ export function buildToolCallPresentation(
   input: BuildToolCallPresentationInput,
 ): ToolCallPresentation {
   const detailForDisplay = displayDetail(input.detail);
+  const origin = resolveToolCallOrigin(input.toolName, input.metadata);
   const displayModel = buildToolCallDisplayModel({
     name: input.toolName,
     status: displayStatus(input.status),
@@ -78,6 +81,7 @@ export function buildToolCallPresentation(
     openFilePath: extractToolCallFilePath(input.detail),
     isPlan: input.detail?.type === "plan",
     planOutcome: input.detail?.type === "plan" ? resolvePlanOutcome(input) : undefined,
+    ...(origin ? { origin } : {}),
   };
 }
 

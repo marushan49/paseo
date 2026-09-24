@@ -133,6 +133,7 @@ describe("PluginTimelineItemView", () => {
         <PluginTimelineItemView serverId="host-1" agentId="agent-1" item={timelineItem} />,
       ),
     );
+    expect(container.textContent).toContain("reports");
     expect(container.textContent).toContain("Four tests passed");
   });
 

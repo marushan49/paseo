@@ -109,6 +109,76 @@ describe("MockLoadTestAgentClient", () => {
     expect(events.at(-1)).toMatchObject({ type: "turn_completed", provider: "mock" });
   });
 
+  test("emits deterministic tool origins for the chat UI acceptance run", async () => {
+    vi.useFakeTimers();
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "origin-marker-smoke",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    const resultPromise = session.run("Emit synthetic tool origin calls.");
+    await vi.runAllTimersAsync();
+
+    await expect(resultPromise).resolves.toMatchObject({
+      finalText: "Synthetic tool origin run complete",
+      canceled: false,
+    });
+    const toolCalls = events.flatMap((event) =>
+      event.type === "timeline" && event.item.type === "tool_call" ? [event.item] : [],
+    );
+    expect(
+      toolCalls.map((item) => [item.name, item.status, item.metadata?.pluginId ?? null]),
+    ).toEqual([
+      ["browser_click", "running", null],
+      ["browser_click", "completed", null],
+      ["browser_snapshot", "running", null],
+      ["browser_snapshot", "completed", null],
+      ["system_one_decide", "running", null],
+      ["system_one_decide", "completed", null],
+      ["create_report", "running", "origin-marker-plugin"],
+      ["create_report", "completed", "origin-marker-plugin"],
+    ]);
+  });
+
+  test("emits deterministic tool origins for the chat UI acceptance flow", async () => {
+    vi.useFakeTimers();
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "origin-marker-smoke",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    const resultPromise = session.run("Emit synthetic tool origin calls.");
+    await vi.runAllTimersAsync();
+
+    await expect(resultPromise).resolves.toMatchObject({
+      finalText: "Synthetic tool origin run complete",
+      canceled: false,
+    });
+    const toolCalls = events.flatMap((event) =>
+      event.type === "timeline" && event.item.type === "tool_call" ? [event.item] : [],
+    );
+    expect(
+      toolCalls.map((item) => [item.name, item.status, item.metadata?.pluginId ?? null]),
+    ).toEqual([
+      ["browser_click", "running", null],
+      ["browser_click", "completed", null],
+      ["browser_snapshot", "running", null],
+      ["browser_snapshot", "completed", null],
+      ["system_one_decide", "running", null],
+      ["system_one_decide", "completed", null],
+      ["create_report", "running", "origin-marker-plugin"],
+      ["create_report", "completed", "origin-marker-plugin"],
+    ]);
+  });
+
   test("can withhold the provider user-message echo until an immediate interrupt", async () => {
     vi.useFakeTimers();
     const client = new MockLoadTestAgentClient();

@@ -147,6 +147,16 @@ const MODELS: AgentModelDefinition[] = [
   },
   {
     provider: MOCK_LOAD_TEST_PROVIDER_ID,
+    id: "origin-marker-smoke",
+    label: "Origin marker smoke",
+    description: "Deterministic Browser, System One, and plugin tool calls for UI tests.",
+    metadata: {
+      durationMs: 10_000,
+      intervalMs: 200,
+    },
+  },
+  {
+    provider: MOCK_LOAD_TEST_PROVIDER_ID,
     id: "max-only-thinking-stream",
     label: "Max-only thinking stream",
     description: "Fast realistic stream with one supported thinking level.",
@@ -204,6 +214,7 @@ interface ActiveTurn {
   resolve: (result: AgentRunResult) => void;
   completed: Promise<AgentRunResult>;
   queue: CycleEvent[];
+  finishWhenQueueDrained: boolean;
   emittedTokens: number;
   turnStarted: boolean;
   burst: BurstProfile | null;
@@ -213,8 +224,13 @@ interface ActiveTurn {
 type CycleEvent =
   | { kind: "assistant_token"; text: string }
   | { kind: "reasoning_token"; text: string }
-  | { kind: "tool_running"; callId: string; name: string; detail: ToolCallDetail }
-  | { kind: "tool_completed"; callId: string; name: string; detail: ToolCallDetail }
+  | {
+      kind: "tool_running" | "tool_completed";
+      callId: string;
+      name: string;
+      detail: ToolCallDetail;
+      metadata?: Record<string, unknown>;
+    }
   | { kind: "usage" };
 
 interface LargeAgentStreamPayloadRequest {
@@ -255,6 +271,10 @@ function shouldEmitPlanApprovalPrompt(prompt: AgentPromptInput): boolean {
 
 function shouldEmitTurnFailure(prompt: AgentPromptInput): boolean {
   return /emit\s+(?:a\s+)?synthetic\s+turn\s+failure/i.test(promptToText(prompt));
+}
+
+function shouldEmitToolOriginCalls(prompt: AgentPromptInput): boolean {
+  return /emit\s+synthetic\s+tool\s+origin\s+calls/i.test(promptToText(prompt));
 }
 
 function parseSteeringReplayShape(prompt: AgentPromptInput): SteeringReplayShape | null {
@@ -638,6 +658,42 @@ function buildCycleQueue(turnId: string, cycle: number): CycleEvent[] {
   return queue;
 }
 
+function buildToolOriginQueue(turnId: string): CycleEvent[] {
+  const calls: Array<{
+    callId: string;
+    name: string;
+    detail: ToolCallDetail;
+    metadata?: Record<string, unknown>;
+  }> = [
+    {
+      callId: `${turnId}:browser-click`,
+      name: "browser_click",
+      detail: { type: "unknown", input: { ref: "@e1" }, output: "Clicked button" },
+    },
+    {
+      callId: `${turnId}:browser-snapshot`,
+      name: "browser_snapshot",
+      detail: { type: "unknown", input: { browserId: "test-browser" }, output: "Button" },
+    },
+    {
+      callId: `${turnId}:system-one`,
+      name: "system_one_decide",
+      detail: { type: "unknown", input: { question: "Which action next?" }, output: "wait" },
+    },
+    {
+      callId: `${turnId}:plugin-report`,
+      name: "create_report",
+      metadata: { pluginId: "origin-marker-plugin" },
+      detail: { type: "unknown", input: { title: "Smoke report" }, output: "Created" },
+    },
+  ];
+
+  return calls.flatMap((call): CycleEvent[] => [
+    { kind: "tool_running", ...call },
+    { kind: "tool_completed", ...call },
+  ]);
+}
+
 function buildBurstyStreamQueue(cycle: number): CycleEvent[] {
   return tokenize(
     [buildIntroParagraph(cycle), buildMidParagraph(), buildClosingParagraph()].join("\n\n"),
@@ -649,6 +705,7 @@ function createToolCall(input: {
   name: string;
   status: ToolCallTimelineItem["status"];
   detail: ToolCallDetail;
+  metadata?: Record<string, unknown>;
 }): ToolCallTimelineItem {
   return {
     type: "tool_call",
@@ -657,6 +714,7 @@ function createToolCall(input: {
     status: input.status,
     error: null,
     detail: input.detail,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
   };
 }
 
@@ -822,6 +880,7 @@ export class MockLoadTestAgentSession implements AgentSession {
       resolve,
       completed,
       queue: [],
+      finishWhenQueueDrained: false,
       emittedTokens: 0,
       turnStarted: false,
       burst: profile.burst,
@@ -849,6 +908,10 @@ export class MockLoadTestAgentSession implements AgentSession {
         this.scheduleSettledAssistantTurn(turn, settledAssistantImageMarkdown);
       } else if (shouldEmitPlanApprovalPrompt(prompt)) {
         this.schedulePlanApprovalTurn(turn);
+      } else if (shouldEmitToolOriginCalls(prompt)) {
+        turn.queue = buildToolOriginQueue(turn.turnId);
+        turn.finishWhenQueueDrained = true;
+        this.schedule(turn, 0);
       } else if (questionPrompt) {
         this.scheduleQuestionPromptTurn(turn, questionPrompt);
       } else if (largePayload) {
@@ -1500,6 +1563,11 @@ export class MockLoadTestAgentSession implements AgentSession {
       return;
     }
 
+    if (turn.finishWhenQueueDrained && turn.queue.length === 0) {
+      this.finishTurnWithText(turn, "Synthetic tool origin run complete");
+      return;
+    }
+
     const eventsThisTick = turn.burst ? nextBurstSize(turn.burst, turn.burstIndex) : 1;
     turn.burstIndex += 1;
 
@@ -1548,6 +1616,7 @@ export class MockLoadTestAgentSession implements AgentSession {
             name: event.name,
             status: event.kind === "tool_running" ? "running" : "completed",
             detail: event.detail,
+            metadata: event.metadata,
           }),
         );
         return;

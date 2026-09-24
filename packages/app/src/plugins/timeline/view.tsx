@@ -2,13 +2,15 @@ import { PluginClientStateProvider } from "@getpaseo/plugin/client/host";
 import type { PluginHostProps, PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import React, { type ComponentType, useMemo } from "react";
-import { Platform, Text } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import type { Theme } from "@/styles/theme";
 import type { PluginTimelineStreamItem } from "@/types/stream";
 import { createPluginClientStateSource } from "../client-state/source";
+import { ToolCallOriginIndicator } from "@/tool-calls/origin-indicator";
+import { createPluginOrigin } from "@/tool-calls/origin";
 import { useInstalledPlugin } from "../registry";
 import { PluginRuntimeBoundary } from "../runtime-boundary";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
@@ -65,9 +67,15 @@ function PluginTimelineItemBody({
   const host = useMemo(() => ({ id: serverId, label: hostLabel }), [hostLabel, serverId]);
   const layout = useMemo(() => ({ compact, platform: resolvePlatform() }), [compact]);
   const stateSource = useMemo(() => createPluginClientStateSource(serverId), [serverId]);
+  const origin = useMemo(() => createPluginOrigin(item.pluginId), [item.pluginId]);
 
   if (!plugin || !renderer || !parsed || !client) {
-    return <TimelineItemUnavailable />;
+    return (
+      <View style={styles.container}>
+        <ToolCallOriginIndicator origins={[origin]} />
+        <TimelineItemUnavailable />
+      </View>
+    );
   }
 
   const Component = renderer.Component as ComponentType<PluginTimelineItemProps>;
@@ -85,13 +93,16 @@ function PluginTimelineItemBody({
     },
   };
   return (
-    <SurfaceErrorBoundary installation={plugin} resetKey={item.data} Surface={Component}>
-      <PluginRuntimeBoundary plugin={plugin} client={client}>
-        <PluginClientStateProvider source={stateSource}>
-          <Component {...props} />
-        </PluginClientStateProvider>
-      </PluginRuntimeBoundary>
-    </SurfaceErrorBoundary>
+    <View style={styles.container}>
+      <ToolCallOriginIndicator origins={[origin]} />
+      <SurfaceErrorBoundary installation={plugin} resetKey={item.data} Surface={Component}>
+        <PluginRuntimeBoundary plugin={plugin} client={client}>
+          <PluginClientStateProvider source={stateSource}>
+            <Component {...props} />
+          </PluginClientStateProvider>
+        </PluginRuntimeBoundary>
+      </SurfaceErrorBoundary>
+    </View>
   );
 }
 
@@ -106,6 +117,9 @@ export function PluginTimelineItemView(props: {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  container: {
+    gap: theme.spacing[2],
+  },
   unavailable: {
     color: theme.colors.foregroundMuted,
     paddingVertical: theme.spacing[2],

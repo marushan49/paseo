@@ -28,6 +28,36 @@ import {
 const SCROLL_AWAY_MIN_SCROLLABLE_DISTANCE = 360;
 
 test.describe("Agent stream UI", () => {
+  test("shows Browser, Jev, and plugin origins in a collapsed tool run", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "@paseo:app-settings",
+        JSON.stringify({ toolCallDetailLevel: "overview" }),
+      );
+    });
+    const agent = await startRunningMockAgent(page, {
+      prefix: "tool-origin-markers-",
+      model: "origin-marker-smoke",
+      prompt: "Emit synthetic tool origin calls.",
+    });
+    try {
+      const toolGroup = page.getByTestId("tool-call-group").first();
+      await expect(toolGroup).toContainText("Browser ×2", { timeout: 30_000 });
+      await expect(toolGroup).toContainText("System One · Jev");
+      await expect(toolGroup).toContainText("origin-marker-plugin");
+      await agent.client.waitForFinish(agent.agentId, 30_000);
+      await testInfo.attach("tool-origin-markers", {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("keeps running agent chrome after page refresh", async ({ page }) => {
     const title = "Running agent refresh";
     const agent = await seedRunningMockAgentWorkspace({
