@@ -1,3 +1,4 @@
+const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 
 const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
@@ -9,6 +10,12 @@ exports.default = async function afterSign(context) {
   }
 
   const appPath = path.join(context.appOutDir, `${EXECUTABLE_NAME}.app`);
+  const signedBuild = Boolean((process.env.CSC_LINK ?? "").trim());
+  // Without a certificate electron-builder skips signing; x64 binaries then
+  // carry no signature at all, while arm64 only has per-binary linker stamps.
+  if (!signedBuild) {
+    execFileSync("codesign", ["--force", "--deep", "--sign", "-", appPath], { stdio: "inherit" });
+  }
   // Fail the build when the bundle would die at launch with DYLD
   // "different Team IDs" (mixed ad-hoc/Developer ID binaries from a merge or
   // a wrong cert). Local ad-hoc builds pass as long as both sides match.
@@ -16,7 +23,7 @@ exports.default = async function afterSign(context) {
     appPath,
     executableName: EXECUTABLE_NAME,
     expectedTeamId: (process.env.APPLE_TEAM_ID ?? "").trim(),
-    signedBuild: Boolean((process.env.CSC_LINK ?? "").trim()),
+    signedBuild,
   });
 
   if (process.env.PASEO_DESKTOP_SMOKE !== "1") {
