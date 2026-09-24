@@ -650,6 +650,7 @@ export const ru: TranslationResources = {
         closeOthers: "Закрыть другие вкладки",
         moveToMain: "Переместить на основную панель",
         reloadAgent: "Перезагрузить агента",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip: "Перезагрузите агента, чтобы обновить навыки, MCP или статус входа.",
         close: "Закрыть",
         renameTerminal: "Переименовать терминал",

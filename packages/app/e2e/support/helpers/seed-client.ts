@@ -153,9 +153,9 @@ export interface SeedDaemonClient {
   ): Promise<{ status: string; final?: { lastError?: string | null } | null }>;
   archiveAgent(agentId: string): Promise<{ archivedAt: string }>;
   refreshAgent(agentId: string): Promise<unknown>;
-  fetchAgent(options: {
-    agentId: string;
-  }): Promise<{ agent: { id: string; archivedAt?: string | null } } | null>;
+  fetchAgent(options: { agentId: string }): Promise<{
+    agent: { id: string; archivedAt?: string | null; workspaceId?: string | null; cwd: string };
+  } | null>;
   getLastServerInfoMessage(): {
     features?: {
       projectAdd?: boolean;

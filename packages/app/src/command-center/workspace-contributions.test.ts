@@ -26,7 +26,9 @@ function source(gitActions: GitActions): {
   copiedPaths: number;
   copiedBranchNames: number;
   toggledLabels: Array<{ name: string; assigned: boolean }>;
+  movedTo: string[];
 } {
+  const movedTo: string[] = [];
   const runGitActions: GitAction[] = [];
   const dispatched: KeyboardActionDefinition[] = [];
   const toggledLabels: Array<{ name: string; assigned: boolean }> = [];
@@ -75,6 +77,7 @@ function source(gitActions: GitActions): {
         unpin: "Unpin",
         showSetup: "Show setup",
         labelsGroup: "Labels",
+        moveAgentGroup: "Move to workspace",
       },
       icons: {},
       shortcuts: {},
@@ -102,7 +105,12 @@ function source(gitActions: GitActions): {
       toggleLabel: (name, assigned) => {
         toggledLabels.push({ name, assigned });
       },
+      moveTargets: [],
+      moveActiveAgent: (workspaceId) => {
+        movedTo.push(workspaceId);
+      },
     },
+    movedTo,
     runGitActions,
     dispatched,
     toggledLabels,
@@ -116,6 +124,28 @@ function source(gitActions: GitActions): {
 }
 
 describe("workspace command center contributions", () => {
+  it("offers every other workspace as a move target for an agent tab only", () => {
+    const fixture = source({ primary: null, secondary: [], menu: [] });
+    fixture.value.moveTargets = [{ workspaceId: "ws-2", name: "paseo / main" }];
+    fixture.value.activeTabKind = "terminal";
+    expect(
+      buildWorkspaceCommandCenterContributions(fixture.value).some((c) =>
+        c.id.startsWith("tab:move-agent:"),
+      ),
+    ).toBe(false);
+
+    fixture.value.activeTabKind = "agent";
+    const move = buildWorkspaceCommandCenterContributions(fixture.value).find(
+      (c) => c.id === "tab:move-agent:ws-2",
+    );
+    expect(move?.presentation).toMatchObject({
+      kind: "choice",
+      path: ["Move to workspace", "paseo / main"],
+    });
+    void move?.run();
+    expect(fixture.movedTo).toEqual(["ws-2"]);
+  });
+
   it("makes only the policy-selected primary Git action default-visible and runs it", () => {
     const primary = gitAction("commit", "Commit");
     const fixture = source({

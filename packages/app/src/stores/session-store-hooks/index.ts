@@ -15,9 +15,11 @@ import {
   selectWorkspaceExists,
   selectWorkspaceFields,
   selectWorkspaceKeys,
+  selectWorkspaceMoveTargets,
   selectWorkspaceOrderByScope,
   selectWorkspaceStatusesForBadges,
   workspaceEqualityFns,
+  type WorkspaceMoveTarget,
   type WorkspaceStructure,
 } from "./selectors";
 import { useSessionStore, type WorkspaceDescriptor } from "../session-store";
@@ -29,6 +31,7 @@ import type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 
 export type {
   DesktopBadgeWorkspaceStatus,
+  WorkspaceMoveTarget,
   WorkspaceStructure,
   WorkspaceStructureProject,
 } from "./selectors";
@@ -128,6 +131,17 @@ export function useWorkspaceStructure(serverIds: string[]): WorkspaceStructure {
         workspaceOrderByScope,
       }),
     [projectOrder, projects, workspaceOrderByScope],
+  );
+}
+
+export function useWorkspaceMoveTargets(
+  serverId: string | null,
+  excludeWorkspaceId: string | null,
+): WorkspaceMoveTarget[] {
+  return useStoreWithEqualityFn(
+    useSessionStore,
+    (state) => selectWorkspaceMoveTargets(state, serverId, excludeWorkspaceId),
+    workspaceEqualityFns.deep,
   );
 }
 

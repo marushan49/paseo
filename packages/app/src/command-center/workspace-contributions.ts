@@ -57,6 +57,7 @@ export interface WorkspaceCommandCenterLabels {
   unpin: string;
   showSetup: string;
   labelsGroup: string;
+  moveAgentGroup: string;
 }
 
 export interface WorkspaceCommandCenterIcons {
@@ -134,6 +135,9 @@ export interface WorkspaceCommandCenterSource {
   copyPath(): void;
   copyBranchName(): void;
   toggleLabel(name: string, assigned: boolean): void | Promise<void>;
+  /** Workspaces the active agent tab can move to; empty when the host cannot move agents. */
+  moveTargets: readonly { workspaceId: string; name: string }[];
+  moveActiveAgent(workspaceId: string): void | Promise<void>;
 }
 
 function buildGitContribution(
@@ -696,8 +700,31 @@ export function buildWorkspaceCommandCenterContributions(
   }
 
   contributions.push(...buildLabelContributions(source));
+  if (source.activeTabKind === "agent") {
+    contributions.push(...buildMoveAgentContributions(source));
+  }
 
   return contributions;
+}
+
+function buildMoveAgentContributions(
+  source: WorkspaceCommandCenterSource,
+): CommandCenterContribution[] {
+  return source.moveTargets.map((target, index) => ({
+    id: `tab:move-agent:${target.workspaceId}`,
+    group: "workspace",
+    groupRank: -1,
+    rank: 60 + index,
+    keywords: ["move", "session", "agent", "workspace", target.name],
+    visibility: "query" as const,
+    run: () => source.moveActiveAgent(target.workspaceId),
+    presentation: {
+      kind: "choice" as const,
+      path: [source.labels.moveAgentGroup, target.name] as const,
+      selected: false,
+      testId: `command-center-move-agent-${target.workspaceId}`,
+    },
+  }));
 }
 
 /**

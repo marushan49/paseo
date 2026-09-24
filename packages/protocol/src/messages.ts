@@ -2101,6 +2101,18 @@ export const AgentDetachResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+export const AgentWorkspaceMoveRequestMessageSchema = z.object({
+  type: z.literal("agent.workspace.move.request"),
+  agentId: z.string(),
+  workspaceId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentWorkspaceMoveResponseMessageSchema = z.object({
+  type: z.literal("agent.workspace.move.response"),
+  payload: AgentActionResponsePayloadSchema,
+});
+
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
 
 export const AgentRewindRequestMessageSchema = z.object({
@@ -3438,6 +3450,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentWorkspaceMoveRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -3736,6 +3749,7 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
         remoteBrowser: z.boolean().optional(),
+        moveAgentWorkspace: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -7091,6 +7105,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentWorkspaceMoveResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,

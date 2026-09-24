@@ -643,6 +643,7 @@ export const ar: TranslationResources = {
         closeOthers: "أغلق علامات التبويب الأخرى",
         moveToMain: "Move to main panel",
         reloadAgent: "إعادة تحميل الوكيل",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip: "قم بإعادة تحميل الوكيل لتحديث المهارات أو MCPs أو حالة تسجيل الدخول.",
         close: "يغلق",
         renameTerminal: "إعادة تسمية المحطة",

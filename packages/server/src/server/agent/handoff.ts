@@ -17,6 +17,8 @@ export interface AgentHandoffInput {
   /** The agent's title, which is usually the task in the person's words. */
   title: string | null;
   cwd: string;
+  /** Set when the session also changed directory. */
+  previousCwd?: string;
   previous: { provider: string; model: string | null };
   next: { provider: string; model: string | null };
   timeline: readonly AgentTimelineItem[];
@@ -38,15 +40,25 @@ export function buildAgentHandoffNote(input: AgentHandoffInput): string {
     (item) => item.type !== "user_message" || !isSystemInjectedEnvelope(item.text.trim()),
   );
   const lines: string[] = [];
+  const previousModel = describeModel(input.previous);
+  const nextModel = describeModel(input.next);
   lines.push(
-    `You are continuing a conversation that ran on ${describeModel(input.previous)} until a moment ago. ` +
-      `It now runs on ${describeModel(input.next)}, which means you cannot see anything that was said before this note. ` +
-      `Everything below is what carried over.`,
+    previousModel === nextModel
+      ? `You are continuing a conversation that ran in another ${nextModel} session until a moment ago, ` +
+          `so you cannot see anything that was said before this note. Everything below is what carried over.`
+      : `You are continuing a conversation that ran on ${previousModel} until a moment ago. ` +
+          `It now runs on ${nextModel}, which means you cannot see anything that was said before this note. ` +
+          `Everything below is what carried over.`,
   );
   if (input.title) {
     lines.push("", `Task: ${input.title}`);
   }
   lines.push("", `Working directory: ${input.cwd}`);
+  if (input.previousCwd && input.previousCwd !== input.cwd) {
+    lines.push(
+      `It was moved here from ${input.previousCwd}; files and branch there may differ from this directory.`,
+    );
+  }
 
   const asked = recentUserMessages(timeline);
   if (asked.length > 0) {

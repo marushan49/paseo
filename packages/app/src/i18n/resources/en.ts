@@ -640,6 +640,7 @@ export const en = {
         closeOthers: "Close other tabs",
         moveToMain: "Move to main panel",
         reloadAgent: "Reload agent",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip: "Reload agent to update skills, MCPs or login status.",
         close: "Close",
         renameTerminal: "Rename terminal",

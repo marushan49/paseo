@@ -644,6 +644,7 @@ export const ko: TranslationResources = {
         closeOthers: "다른 탭 닫기",
         moveToMain: "기본 패널로 이동",
         reloadAgent: "에이전트 다시 로드",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip:
           "스킬, MCP 또는 로그인 상태를 업데이트하려면 에이전트를 다시 로드하세요.",
         close: "닫기",

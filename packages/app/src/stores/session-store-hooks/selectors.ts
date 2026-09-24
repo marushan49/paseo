@@ -276,6 +276,31 @@ export function composeWorkspaceStructure(input: {
   return { projects: orderedProjects };
 }
 
+export interface WorkspaceMoveTarget {
+  workspaceId: string;
+  name: string;
+}
+
+/** Every live workspace on the host except one, labelled "project / workspace". */
+export function selectWorkspaceMoveTargets(
+  state: SessionsSnapshot,
+  serverId: string | null,
+  excludeWorkspaceId: string | null,
+): WorkspaceMoveTarget[] {
+  const workspaces = serverId ? state.sessions[serverId]?.workspaces : undefined;
+  if (!workspaces) return [];
+  const targets: WorkspaceMoveTarget[] = [];
+  for (const workspace of workspaces.values()) {
+    if (workspace.id === excludeWorkspaceId || workspace.archivingAt) continue;
+    const project = workspace.projectCustomName || workspace.projectDisplayName;
+    targets.push({
+      workspaceId: workspace.id,
+      name: `${project} / ${workspace.title || workspace.name}`,
+    });
+  }
+  return targets.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function selectWorkspaceKeys(state: SessionsSnapshot, serverId: string | null): string[] {
   if (!serverId) {
     return EMPTY_WORKSPACE_KEYS;

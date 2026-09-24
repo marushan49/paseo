@@ -643,6 +643,7 @@ export const zhCN: TranslationResources = {
         closeOthers: "关闭其他标签",
         moveToMain: "移至主面板",
         reloadAgent: "重新加载 Agent",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip: "重新加载 Agent 以更新 skills、MCPs 或登录状态。",
         close: "关闭",
         renameTerminal: "重命名 Terminal",

@@ -11467,6 +11467,62 @@ test("setAgentProvider leaves the agent closed on its old provider when the new 
   expect(record?.persistence?.sessionId).toBe(codexSessionId);
 });
 
+test("moveAgentToWorkspace keeps the session when the target shares the directory", async () => {
+  const { manager, storage, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000611",
+    target: new ProviderSwitchClient("claude"),
+  });
+  const sessionId = agent.persistence?.sessionId;
+
+  const moved = await manager.moveAgentToWorkspace(agent.id, {
+    workspaceId: "ws-other",
+    cwd: agent.cwd,
+  });
+  await manager.flush();
+  await storage.flush();
+
+  expect(moved.workspaceId).toBe("ws-other");
+  expect(moved.persistence?.sessionId).toBe(sessionId);
+  expect((await storage.get(agent.id))?.workspaceId).toBe("ws-other");
+});
+
+test("moveAgentToWorkspace restarts the same provider in the target directory", async () => {
+  const codex = new ProviderSwitchClient("codex");
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-move-"));
+  const targetDir = mkdtempSync(join(tmpdir(), "agent-manager-move-target-"));
+  const manager = new AgentManager({
+    clients: { codex },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000612",
+  });
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+    undefined,
+    { workspaceId: "ws-wrong" },
+  );
+  await manager.setAgentMode(agent.id, "plan");
+
+  const moved = await manager.moveAgentToWorkspace(agent.id, {
+    workspaceId: "ws-right",
+    cwd: targetDir,
+  });
+
+  expect(moved.id).toBe(agent.id);
+  expect(moved.provider).toBe("codex");
+  expect(moved.cwd).toBe(targetDir);
+  expect(moved.workspaceId).toBe("ws-right");
+  expect(codex.createdConfigs.at(-1)).toMatchObject({
+    cwd: targetDir,
+    model: "gpt-5.4",
+    modeId: "plan",
+  });
+  expect(manager.getTimeline(agent.id).at(-1)).toMatchObject({
+    type: "notification",
+    message: `Moved to ${targetDir}`,
+  });
+});
+
 test("setAgentProvider marks the provider cut in the timeline", async () => {
   const { manager, agent } = await createProviderSwitchFixture({
     agentId: "00000000-0000-4000-8000-000000000604",

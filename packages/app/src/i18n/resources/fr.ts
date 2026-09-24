@@ -649,6 +649,7 @@ export const fr: TranslationResources = {
         closeOthers: "Fermer les autres onglets",
         moveToMain: "Déplacer vers le panneau principal",
         reloadAgent: "Agent de rechargement",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip:
           "Rechargez l'agent pour mettre à jour les compétences, les MCP ou le statut de connexion.",
         close: "Fermer",

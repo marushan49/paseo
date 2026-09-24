@@ -35,7 +35,13 @@ import { type ShortcutOverrides } from "@/keyboard/keyboard-shortcuts";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import { useHostFeature } from "@/runtime/host-features";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
-import { useWorkspaceDirectory, useWorkspaceFields } from "@/stores/session-store-hooks";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import {
+  useWorkspaceDirectory,
+  useWorkspaceFields,
+  useWorkspaceMoveTargets,
+} from "@/stores/session-store-hooks";
 import {
   collectAllTabs,
   findPaneById,
@@ -115,6 +121,49 @@ function resolveWorkspaceShortcuts(overrides: ShortcutOverrides): WorkspaceComma
  * group is omitted rather than shown empty — the same rule `WorkspaceLabelPickerPage` follows for
  * the sidebar's own picker.
  */
+const NO_MOVE_TARGETS: readonly { workspaceId: string; name: string }[] = [];
+
+/** Moves the focused agent tab's session to another workspace and follows it there. */
+function useMoveActiveAgent(input: {
+  serverId: string | null;
+  workspaceId: string | null;
+  workspaceKey: string | null;
+  activeTab: { tabId: string; target: { kind: string; agentId?: string } } | undefined;
+}) {
+  const { serverId, workspaceId, workspaceKey, activeTab } = input;
+  const toast = useToast();
+  const client = useHostRuntimeClient(serverId ?? "");
+  const canMove = useHostFeature(serverId, "moveAgentWorkspace");
+  const targets = useWorkspaceMoveTargets(serverId, workspaceId);
+  const agentId = activeTab?.target.kind === "agent" ? (activeTab.target.agentId ?? null) : null;
+  const tabId = activeTab?.tabId ?? null;
+  const moveActiveAgent = useCallback(
+    async (targetWorkspaceId: string) => {
+      if (!client || !serverId || !agentId) return;
+      clearCommandCenterFocusRestoreElement();
+      try {
+        await client.moveAgentToWorkspace(agentId, targetWorkspaceId);
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : String(cause));
+        return;
+      }
+      if (workspaceKey && tabId) {
+        useWorkspaceLayoutStore.getState().closeTab(workspaceKey, tabId);
+      }
+      navigateToWorkspace({
+        serverId,
+        workspaceId: targetWorkspaceId,
+        target: { kind: "agent", agentId },
+      });
+    },
+    [agentId, client, serverId, tabId, toast, workspaceKey],
+  );
+  return {
+    moveTargets: canMove && agentId ? targets : NO_MOVE_TARGETS,
+    moveActiveAgent,
+  };
+}
+
 function useWorkspaceLabelCatalog(
   serverId: string | null,
   fields: { id: string; labels: readonly string[] } | null,
@@ -231,6 +280,12 @@ export function useWorkspaceCommandCenterActions(): void {
   }, [clipboard, fields]);
 
   const { labelCatalog, toggleLabel } = useWorkspaceLabelCatalog(serverId, fields);
+  const { moveTargets, moveActiveAgent } = useMoveActiveAgent({
+    serverId,
+    workspaceId,
+    workspaceKey,
+    activeTab: focusedTabs[activeTabIndex],
+  });
 
   const actions = useMemo(
     () =>
@@ -278,6 +333,7 @@ export function useWorkspaceCommandCenterActions(): void {
           unpin: t("sidebar.workspace.actions.unpin"),
           showSetup: t("workspace.header.actions.showSetup"),
           labelsGroup: t("workspaceLabels.title"),
+          moveAgentGroup: t("workspace.tabs.menu.moveToWorkspace"),
         },
         icons: {
           ...WORKSPACE_COMMAND_CENTER_ICONS,
@@ -305,8 +361,12 @@ export function useWorkspaceCommandCenterActions(): void {
         copyPath,
         copyBranchName,
         toggleLabel,
+        moveTargets,
+        moveActiveAgent,
       }),
     [
+      moveActiveAgent,
+      moveTargets,
       activeTabIndex,
       activeTabKind,
       canOpenRemoteBrowserTabs,

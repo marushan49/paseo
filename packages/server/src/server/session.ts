@@ -2683,6 +2683,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.workspace.move.request":
+        return this.handleMoveAgentWorkspaceRequest(msg);
       default:
         return undefined;
     }
@@ -3484,6 +3486,47 @@ export class Session {
     }
 
     return { agentId, archivedAt };
+  }
+
+  private async handleMoveAgentWorkspaceRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.workspace.move.request" }>,
+  ): Promise<void> {
+    const { agentId, workspaceId, requestId } = msg;
+    try {
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      if (!workspace || workspace.archivedAt) {
+        throw new Error(`Workspace not found: ${workspaceId}`);
+      }
+      const previous = await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const previousWorkspaceId = previous.workspaceId;
+      const moved = await this.agentManager.moveAgentToWorkspace(agentId, {
+        workspaceId,
+        cwd: workspace.cwd,
+      });
+      await this.agentUpdates.forwardLiveAgent(moved);
+      await this.emitWorkspaceUpdatesForWorkspaceIds(
+        [previousWorkspaceId, workspaceId].filter((id): id is string => Boolean(id)),
+      );
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: { requestId, agentId, accepted: true, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, agentId, workspaceId }, "Failed to move agent");
+      this.emit({
+        type: "agent.workspace.move.response",
+        payload: {
+          requestId,
+          agentId,
+          accepted: false,
+          error: getErrorMessageOr(error, "Failed to move agent"),
+        },
+      });
+    }
   }
 
   private async handleDetachAgentRequest(agentId: string, requestId: string): Promise<void> {

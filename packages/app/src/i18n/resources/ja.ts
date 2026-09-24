@@ -649,6 +649,7 @@ export const ja: TranslationResources = {
         closeOthers: "他のタブを閉じる",
         moveToMain: "メインパネルへ移動",
         reloadAgent: "エージェントを再読み込み",
+        moveToWorkspace: "Move to workspace",
         reloadAgentTooltip:
           "スキル、MCP、ログイン状態を更新するためにエージェントを再読み込みします。",
         close: "閉じる",

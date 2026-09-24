@@ -21,6 +21,12 @@ the agent runs through `ensureAgentLoaded()`, which resumes the durable provider
 same Paseo agent ID. Provider history is not appended again when the canonical timeline is already
 primed.
 
+Moving an agent to another workspace (`agent.workspace.move.request`) keeps its Paseo ID and
+timeline. When the target shares the agent's `cwd`, only `workspaceId` changes and the provider
+session keeps running. Otherwise the provider session cannot follow, since Claude files sessions per
+directory. A fresh session of the same provider starts in the target `cwd` with a handoff note, the same
+path a provider switch takes.
+
 Reload releases the old runtime before resuming its durable session: an idle provider process can
 still own an exclusive writer. A close failure retains that runtime for cleanup and blocks the
 replacement. Once closure succeeds, a failed resume leaves the durable agent closed and retryable.

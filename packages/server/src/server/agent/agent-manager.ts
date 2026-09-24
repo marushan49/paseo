@@ -1742,11 +1742,38 @@ export class AgentManager {
     provider: AgentProvider,
     modelId: string | null,
   ): Promise<ManagedAgent> {
-    this.assertAcceptingAgentRegistrations();
-    let existing = this.requireSessionAgent(agentId);
+    const existing = this.requireSessionAgent(agentId);
     if (existing.provider === provider) {
       throw new Error(`Agent ${agentId} already runs on provider '${provider}'`);
     }
+    return this.relaunchAgentSession(agentId, {
+      provider,
+      modelId,
+      cwd: existing.cwd,
+      workspaceId: existing.workspaceId,
+      notice: `Switched provider: ${existing.provider} → ${provider}`,
+    });
+  }
+
+  /**
+   * Hand an agent to a fresh provider session with a handoff note, keeping its
+   * Paseo id, labels, timestamps, and timeline. Used when the old session cannot
+   * follow: another provider, or another working directory.
+   */
+  private async relaunchAgentSession(
+    agentId: string,
+    next: {
+      provider: AgentProvider;
+      modelId: string | null;
+      cwd: string;
+      workspaceId: string | undefined;
+      notice: string;
+    },
+  ): Promise<ManagedAgent> {
+    const { provider, modelId } = next;
+    this.assertAcceptingAgentRegistrations();
+    let existing = this.requireSessionAgent(agentId);
+    const sameProvider = existing.provider === provider;
     this.requireEnabledProvider(provider);
     const client = await this.requireAvailableClient({ provider });
     const wasRunning = this.hasInFlightRun(agentId);
@@ -1755,22 +1782,27 @@ export class AgentManager {
       existing = this.requireSessionAgent(agentId);
     }
 
+    // Mode, thinking and features name things only one provider offers, so they
+    // carry over only when the provider stays.
     const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      {
-        provider,
-        cwd: existing.cwd,
-        model: modelId ?? undefined,
-        systemPrompt: existing.config.systemPrompt,
-        mcpServers: existing.config.mcpServers,
-        toolPolicy: existing.config.toolPolicy,
-      },
+      sameProvider
+        ? { ...existing.config, cwd: next.cwd }
+        : {
+            provider,
+            cwd: next.cwd,
+            model: modelId ?? undefined,
+            systemPrompt: existing.config.systemPrompt,
+            mcpServers: existing.config.mcpServers,
+            toolPolicy: existing.config.toolPolicy,
+          },
       agentId,
     );
 
     const persistedRecord = await this.registry?.get(agentId);
     const handoffNote = buildAgentHandoffNote({
       title: persistedRecord?.title ?? existing.config.title ?? null,
-      cwd: existing.cwd,
+      cwd: next.cwd,
+      previousCwd: existing.cwd,
       previous: { provider: existing.provider, model: existing.config.model ?? null },
       next: { provider, model: modelId },
       timeline: this.timelineStore.getItems(agentId),
@@ -1801,7 +1833,7 @@ export class AgentManager {
         storedConfig.cwd,
         paseoToolPolicy,
         undefined,
-        { reason: "create", purpose: "interactive", workspaceId: existing.workspaceId ?? null },
+        { reason: "create", purpose: "interactive", workspaceId: next.workspaceId ?? null },
       );
       const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
       session = await client.createSession(providerLaunchConfig, launchContext);
@@ -1811,7 +1843,7 @@ export class AgentManager {
       handedToRegistration = true;
       const switched = await this.registerSession(session, storedConfig, agentId, {
         labels: existing.labels,
-        workspaceId: existing.workspaceId,
+        workspaceId: next.workspaceId,
         owner: existing.owner,
         createdAt: existing.createdAt,
         updatedAt: existing.updatedAt,
@@ -1829,7 +1861,7 @@ export class AgentManager {
       await this.appendTimelineItem(agentId, {
         type: "notification",
         level: "info",
-        message: `Switched provider: ${existing.provider} → ${provider}`,
+        message: next.notice,
       });
       return switched;
     } catch (error) {
@@ -1849,6 +1881,44 @@ export class AgentManager {
         }
       }
     }
+  }
+
+  /**
+   * Give an agent to another workspace. Within the same directory only the owner
+   * changes and the session keeps running. Across directories the provider
+   * session cannot follow (Claude, for one, files sessions per directory), so a
+   * new one starts there with a handoff note, as a provider switch does.
+   */
+  moveAgentToWorkspace(
+    agentId: string,
+    target: { workspaceId: string; cwd: string },
+  ): Promise<ManagedAgent> {
+    return this.trackAgentRegistrationOperation(
+      this.runLifecycleMutation(agentId, () => this.moveAgentToWorkspaceInternal(agentId, target)),
+    );
+  }
+
+  private async moveAgentToWorkspaceInternal(
+    agentId: string,
+    target: { workspaceId: string; cwd: string },
+  ): Promise<ManagedAgent> {
+    const existing = this.requireSessionAgent(agentId);
+    if (existing.workspaceId === target.workspaceId) {
+      return existing;
+    }
+    if (existing.cwd === target.cwd) {
+      existing.workspaceId = target.workspaceId;
+      await this.persistSnapshot(existing);
+      this.notifyAgentState(agentId);
+      return existing;
+    }
+    return this.relaunchAgentSession(agentId, {
+      provider: existing.provider,
+      modelId: existing.config.model ?? null,
+      cwd: target.cwd,
+      workspaceId: target.workspaceId,
+      notice: `Moved to ${target.cwd}`,
+    });
   }
 
   private async closeReloadedSession(session: AgentSession, agentId: string): Promise<void> {

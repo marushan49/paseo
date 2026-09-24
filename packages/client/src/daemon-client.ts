@@ -2999,6 +2999,20 @@ export class DaemonClient {
     }
   }
 
+  async moveAgentToWorkspace(agentId: string, workspaceId: string): Promise<void> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.workspace.move.response">({
+        message: {
+          type: "agent.workspace.move.request",
+          agentId,
+          workspaceId,
+        },
+      });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "moveAgentToWorkspace rejected");
+    }
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string> },
