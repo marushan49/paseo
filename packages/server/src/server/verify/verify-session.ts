@@ -22,7 +22,11 @@ import { assertWorkspaceAutomationAllowedForWorkspace } from "../workspace-autom
 import type { WorkspaceRegistry } from "../workspace-registry.js";
 import type { WorkspaceScriptsService } from "../session/workspace-scripts/workspace-scripts-service.js";
 import type { WorkspaceScriptPayload } from "@getpaseo/protocol/messages";
-import { readPaseoConfigJson } from "../../utils/paseo-config-file.js";
+import {
+  readPaseoConfigForEdit,
+  readPaseoConfigJson,
+  writePaseoConfigForEdit,
+} from "../../utils/paseo-config-file.js";
 import type { EvidenceRunManifest, EvidenceStore } from "./evidence-store.js";
 import type { EvidenceArtifactEntry } from "./evidence-store.js";
 import type { DaemonPlaywrightHost } from "./playwright-host.js";
@@ -39,7 +43,7 @@ export interface VerifySessionOptions {
 }
 
 export type AgentVerifyResult =
-  | { kind: "run"; result: VerifyRunResult }
+  | { kind: "run"; result: VerifyRunResult; savedRecipe?: string }
   | { kind: "list"; recipes: VerifyRecipeSummary[] };
 
 const AD_HOC_RECIPE = "ad-hoc";
@@ -119,6 +123,7 @@ export class VerifySession {
     recipe?: string;
     steps?: PaseoRecipeStep[];
     params?: Record<string, string>;
+    saveAs?: string;
   }): Promise<AgentVerifyResult> {
     this.requireBrowserTools();
     await assertWorkspaceAutomationAllowedForWorkspace(this.workspaceRegistry, input.workspaceId);
@@ -147,7 +152,43 @@ export class VerifySession {
       recipeName: input.steps ? AD_HOC_RECIPE : (input.recipe ?? AD_HOC_RECIPE),
       params: input.params,
     });
+    if (input.steps && input.saveAs && result.status === "pass") {
+      await this.saveRecipe(input.workspaceId, input.saveAs, input.steps);
+      return { kind: "run", result, savedRecipe: input.saveAs };
+    }
     return { kind: "run", result };
+  }
+
+  // A passing ad-hoc run becomes a scripted recipe, so the next run needs no model.
+  private async saveRecipe(
+    workspaceId: string,
+    name: string,
+    steps: PaseoRecipeStep[],
+  ): Promise<void> {
+    const workspace = await this.workspaceRegistry.get(workspaceId);
+    if (!workspace) {
+      throw new Error(`Unknown workspace "${workspaceId}"`);
+    }
+    const current = readPaseoConfigForEdit(workspace.cwd);
+    if (!current.ok) {
+      throw new Error("paseo.json is invalid; the recipe was not saved.");
+    }
+    const config = current.config ?? {};
+    const verification = config.verification ?? { recipes: {} };
+    const written = writePaseoConfigForEdit({
+      repoRoot: workspace.cwd,
+      config: {
+        ...config,
+        verification: {
+          ...verification,
+          recipes: { ...verification.recipes, [name]: { params: [], steps } },
+        },
+      },
+      expectedRevision: current.revision,
+    });
+    if (!written.ok) {
+      throw new Error(`Saving recipe "${name}" failed: ${written.error.code}`);
+    }
   }
 
   public async handleListRequest(request: VerifyRecipeListRequest): Promise<void> {

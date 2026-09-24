@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
@@ -258,6 +258,57 @@ describe.skipIf(!isDaemonBrowserAvailable())("VerifySession with a browser", () 
     } finally {
       delete process.env.VERIFY_SESSION_EMAIL;
       delete process.env.VERIFY_SESSION_PASSWORD;
+      await app.close();
+    }
+  }, 60_000);
+});
+
+describe("VerifySession agent runs", () => {
+  it("saves a passing ad-hoc run as a recipe and keeps the rest of paseo.json", async () => {
+    const paseoHome = makeDir("paseo-verify-save-");
+    const workspaceDir = makeDir("paseo-verify-save-ws-");
+    writeFileSync(
+      join(workspaceDir, "paseo.json"),
+      JSON.stringify({ scripts: { app: { command: "x" } } }),
+    );
+    const app = await startVerifyFixtureApp();
+    const host = new DaemonPlaywrightHost({ paseoHome, logger: pino({ enabled: false }) });
+    try {
+      const session = new VerifySession({
+        workspaceRegistry: { get: async () => workspaceRecord(workspaceDir) },
+        workspaceScripts: { list: async () => [] },
+        host,
+        evidence: new EvidenceStore({ paseoHome }),
+        isBrowserToolsEnabled: () => true,
+        emit: () => {},
+      });
+      const steps = [
+        { action: "navigate" as const, url: `${app.url}/login` },
+        { action: "assert-text" as const, text: "Sign in" },
+      ];
+
+      const outcome = await session.runForAgent({ workspaceId: "wks_1", steps, saveAs: "login" });
+      expect(outcome).toMatchObject({
+        kind: "run",
+        result: { status: "pass" },
+        savedRecipe: "login",
+      });
+
+      const saved = JSON.parse(readFileSync(join(workspaceDir, "paseo.json"), "utf8"));
+      expect(saved.scripts.app.command).toBe("x");
+      expect(saved.verification.recipes.login.steps).toEqual(steps);
+
+      const failing = await session.runForAgent({
+        workspaceId: "wks_1",
+        steps: [steps[0], { action: "assert-text", text: "Nope" }],
+        saveAs: "broken",
+      });
+      expect(failing).toMatchObject({ kind: "run", result: { status: "fail" } });
+      expect(
+        JSON.parse(readFileSync(join(workspaceDir, "paseo.json"), "utf8")).verification.recipes,
+      ).not.toHaveProperty("broken");
+    } finally {
+      await host.close();
       await app.close();
     }
   }, 60_000);
