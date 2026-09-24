@@ -200,16 +200,25 @@ describe("PluginTimelineItemView", () => {
         <PluginTimelineItemView serverId="host-1" agentId="agent-1" item={failingTimelineItem} />,
       );
     });
-    expect(container.textContent).toBe("Plugin failed: transient renderer failure");
+    expect(surfaceText(container)).toBe("Plugin failed: transient renderer failure");
 
     await act(async () => {
       root.render(
         <PluginTimelineItemView serverId="host-1" agentId="agent-1" item={recoveredTimelineItem} />,
       );
     });
-    expect(container.textContent).toBe("Recovered");
+    expect(surfaceText(container)).toBe("Recovered");
   });
 });
+
+// The origin indicator labels every plugin row; these checks are about the surface itself.
+function surfaceText(container: HTMLElement): string {
+  const copy = container.cloneNode(true) as HTMLElement;
+  copy
+    .querySelectorAll('[data-testid="tool-call-origin-indicator"]')
+    .forEach((node) => node.remove());
+  return copy.textContent ?? "";
+}
 
 it("releases a crashed renderer's observations and recovers a fresh scope in StrictMode", async () => {
   let receive: Parameters<DaemonTransport["onMessage"]>[0] = () => {};
