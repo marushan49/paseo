@@ -5,11 +5,13 @@ import {
   DEFAULT_MONO_FONT_STACK,
   DEFAULT_DISPLAY_FONT_STACK,
   FONT_SIZE,
+  PLUGIN_THEME_NAMES,
   REGISTERED_THEMES,
   type Theme,
 } from "@/styles/theme";
 import { applyRootUiFont } from "./apply-root-font";
 
+const PLUGIN_THEME_KEYS: ReadonlySet<string> = new Set(Object.values(PLUGIN_THEME_NAMES));
 const ALL_THEME_KEYS = Object.keys(REGISTERED_THEMES) as (keyof typeof REGISTERED_THEMES)[];
 
 export interface AppearanceInput {
@@ -20,6 +22,7 @@ export interface AppearanceInput {
   contentFontSize: number; // already clamped
   codeFontSize: number; // already clamped
   syntaxTheme: SyntaxThemeId;
+  accentColor: string; // "" -> the theme's own accent
 }
 
 /**
@@ -61,6 +64,16 @@ function scaleFontSize(
  * `updateTheme` replaces the stored theme rather than merging, so we spread
  * `...t` first.
  */
+function mixHex(from: string, to: string, amount: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const mixed = [0, 1, 2].map((i) =>
+    Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * amount)
+      .toString(16)
+      .padStart(2, "0"),
+  );
+  return `#${mixed.join("")}`;
+}
+
 export function applyAppearance(input: AppearanceInput): void {
   const ui = input.uiFontFamily.trim() || DEFAULT_UI_FONT_STACK;
   const mono = input.monoFontFamily.trim() || DEFAULT_MONO_FONT_STACK;
@@ -83,22 +96,32 @@ export function applyAppearance(input: AppearanceInput): void {
         input.codeFontSize,
       );
       const lineHeight = { ...t.lineHeight, diff: diffLineHeight };
+      // Built-in themes reset to their authored accent; a plugin theme was just replaced
+      // wholesale by applyTheme, so its current accent is already the authored one.
+      const base = PLUGIN_THEME_KEYS.has(key) ? t.colors : REGISTERED_THEMES[key].colors;
+      const accent: { accent: string; accentBright: string; ring: string } = input.accentColor
+        ? {
+            accent: input.accentColor,
+            accentBright: mixHex(
+              input.accentColor,
+              "#ffffff",
+              t.colorScheme === "dark" ? 0.35 : 0.12,
+            ),
+            ring: input.accentColor,
+          }
+        : { accent: base.accent, accentBright: base.accentBright, ring: base.ring };
+      const syntax = resolveSyntaxColors(input.syntaxTheme, t.colorScheme);
+      // Narrowed per scheme so the spread keeps each palette's literal terminal colors.
       if (t.colorScheme === "light") {
         return {
           ...t,
           fontFamily,
           fontSize,
           lineHeight,
-          colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
+          colors: { ...t.colors, ...accent, syntax },
         };
       }
-      return {
-        ...t,
-        fontFamily,
-        fontSize,
-        lineHeight,
-        colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
-      };
+      return { ...t, fontFamily, fontSize, lineHeight, colors: { ...t.colors, ...accent, syntax } };
     });
   }
 

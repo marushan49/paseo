@@ -37,7 +37,7 @@ interface FakeTheme {
     "4xl": number;
   };
   lineHeight: { diff: number };
-  colors: { foreground: string; syntax: Record<string, string> };
+  colors: { foreground: string; syntax: Record<string, string>; accent?: string; ring?: string };
 }
 
 function makeFakeTheme(): FakeTheme {
@@ -69,6 +69,7 @@ function makeInput(overrides: Partial<AppearanceInput> = {}): AppearanceInput {
     contentFontSize: 15,
     codeFontSize: 12,
     syntaxTheme: "one",
+    accentColor: "",
     ...overrides,
   };
 }
@@ -194,5 +195,17 @@ describe("applyAppearance", () => {
     // makeFakeTheme().colorScheme === "dark" -> github resolves to the dark palette.
     expect(runCapturedUpdater().colors.syntax).toEqual(darkHighlightColors);
     expect(runCapturedUpdater().colors.syntax).toEqual(resolveSyntaxColors("github", "dark"));
+  });
+
+  it("applies a picked accent and restores the theme's own accent when cleared", () => {
+    applyAppearance(makeInput({ accentColor: "#e0508f" }));
+    const picked = runCapturedUpdater();
+    expect(picked.colors.accent).toBe("#e0508f");
+    expect(picked.colors.ring).toBe("#e0508f");
+
+    updateTheme.mockClear();
+    applyAppearance(makeInput({ accentColor: "" }));
+    const key = updateTheme.mock.calls[0]?.[0] as keyof typeof REGISTERED_THEMES;
+    expect(runCapturedUpdater().colors.accent).toBe(REGISTERED_THEMES[key].colors.accent);
   });
 });

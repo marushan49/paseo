@@ -2282,7 +2282,21 @@ export const fr: TranslationResources = {
           claude: "Claude",
           ghostty: "Fantôme",
           pureBlack: "Noir pur",
+          forest: "Forest",
           auto: "Système",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {

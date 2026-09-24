@@ -30,6 +30,7 @@ describe("Theme catalog", () => {
       "light",
       "dark",
       "auto",
+      "forest",
       "zinc",
       "midnight",
       "claude",
@@ -70,7 +71,7 @@ describe("Pure black theme", () => {
 describe("Sidebar interaction surfaces", () => {
   it("keeps Light selection distinct from the sidebar surface", () => {
     expect(lightTheme.colors.surfaceSidebarHover).toBe(lightTheme.colors.surface1);
-    expect(lightTheme.colors.surfaceSidebarSelected).toBe(lightTheme.colors.surface3);
+    expect(lightTheme.colors.surfaceSidebarSelected).toBe(lightTheme.colors.border);
     expect(lightTheme.colors.surfaceSidebarSelected).not.toBe(lightTheme.colors.surfaceSidebar);
   });
 
@@ -83,13 +84,13 @@ describe("Sidebar interaction surfaces", () => {
 describe("Built-in light theme", () => {
   it("preserves its authored aliases and terminal contrast through the semantic builder", () => {
     expect(lightTheme.colors).toMatchObject({
-      primary: "#18181b",
-      primaryForeground: "#fafafa",
+      primary: "#0f1115",
+      primaryForeground: "#ffffff",
       destructiveForeground: "#ffffff",
       successForeground: "#ffffff",
       terminal: {
-        black: "#1a1a1e",
-        brightBlack: "#3f3f46",
+        black: "#0f1115",
+        brightBlack: "#43454a",
       },
     });
   });

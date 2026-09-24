@@ -2265,7 +2265,21 @@ export const ru: TranslationResources = {
           claude: "Claude",
           ghostty: "Ghostty",
           pureBlack: "Абсолютно чёрная",
+          forest: "Forest",
           auto: "Системная",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Text, View, type PressableStateCallbackType } from "react-native";
+import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, Monitor, Moon, Sun } from "lucide-react-native";
 import {
@@ -116,6 +116,72 @@ interface ThemeSwatchProps {
 function ThemeSwatch({ color }: ThemeSwatchProps) {
   const swatchStyle = useMemo(() => [styles.swatch, { backgroundColor: color }], [color]);
   return <View style={swatchStyle} />;
+}
+
+const ACCENT_OPTIONS = [
+  { id: "theme", color: "" },
+  { id: "blue", color: "#4176e6" },
+  { id: "violet", color: "#6d5dfc" },
+  { id: "green", color: "#1f9d62" },
+  { id: "teal", color: "#0e9f9a" },
+  { id: "orange", color: "#e8743b" },
+  { id: "pink", color: "#e0508f" },
+] as const;
+
+interface AccentSwatchProps {
+  option: (typeof ACCENT_OPTIONS)[number];
+  selected: boolean;
+  onChange: (color: string) => void;
+}
+
+function AccentSwatch({ option, selected, onChange }: AccentSwatchProps) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => onChange(option.color), [onChange, option.color]);
+  const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const fillStyle = useMemo(
+    () =>
+      option.color ? [styles.accentFill, { backgroundColor: option.color }] : styles.accentAuto,
+    [option.color],
+  );
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={selected ? styles.accentRingSelected : styles.accentRing}
+      accessibilityRole="radio"
+      accessibilityState={accessibilityState}
+      accessibilityLabel={t(`settings.appearance.accent.options.${option.id}`)}
+      testID={`accent-swatch-${option.id}`}
+    >
+      <View style={fillStyle} />
+    </Pressable>
+  );
+}
+
+interface AccentRowProps {
+  value: string;
+  onChange: (color: string) => void;
+}
+
+function AccentRow({ value, onChange }: AccentRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.rowWithBorder}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.appearance.accent.title")}</Text>
+        <Text style={settingsStyles.rowHint}>{t("settings.appearance.accent.hint")}</Text>
+      </View>
+      <View style={styles.accentSwatches} accessibilityRole="radiogroup">
+        {ACCENT_OPTIONS.map((option) => (
+          <AccentSwatch
+            key={option.id}
+            option={option}
+            selected={value === option.color}
+            onChange={onChange}
+          />
+        ))}
+      </View>
+    </View>
+  );
 }
 
 interface ThemeMenuItemProps {
@@ -598,6 +664,12 @@ export function AppearanceSection() {
     setCodeSizeDraft(String(settings.codeFontSize));
   }, [settings.codeFontSize]);
 
+  const handleAccentChange = useCallback(
+    (accentColor: string) => {
+      void updateSettings({ accentColor });
+    },
+    [updateSettings],
+  );
   const handleThemeChange = useCallback(
     (theme: BuiltInThemePreference) => {
       void updateSettings({ theme });
@@ -764,6 +836,7 @@ export function AppearanceSection() {
             onChange={handleThemeChange}
             onSelectPluginTheme={handlePluginThemeChange}
           />
+          <AccentRow value={settings.accentColor} onChange={handleAccentChange} />
         </View>
       </SettingsSection>
       <SettingsSection title={t("settings.appearance.detailLevel.title")}>
@@ -898,6 +971,36 @@ const styles = StyleSheet.create((theme) => ({
   triggerText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
+  },
+  accentSwatches: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
+  },
+  accentRing: {
+    padding: 2,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  accentRingSelected: {
+    padding: 2,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 2,
+    borderColor: theme.colors.foreground,
+  },
+  accentFill: {
+    width: 20,
+    height: 20,
+    borderRadius: theme.borderRadius.full,
+  },
+  accentAuto: {
+    width: 20,
+    height: 20,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[2],
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.surface2,
   },
   swatch: {
     width: ICON_SIZE.md,

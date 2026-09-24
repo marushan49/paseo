@@ -2200,7 +2200,21 @@ export const zhCN: TranslationResources = {
           claude: "Claude",
           ghostty: "Ghostty",
           pureBlack: "纯黑",
+          forest: "Forest",
           auto: "系统",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {

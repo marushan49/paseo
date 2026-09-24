@@ -254,9 +254,9 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
     surfaceDiffEmpty: tint.surfaceDiffEmpty,
     surfaceSidebar: tint.surfaceSidebar,
     surfaceSidebarHover: tint.surface1,
-    surfaceSidebarSelected: tint.surface3,
+    surfaceSidebarSelected: tint.border,
     surfaceWorkspace: tint.surface0,
-    interactionHighlight: "rgba(0, 0, 0, 0.06)",
+    interactionHighlight: "rgba(15, 17, 21, 0.05)",
 
     foreground: tint.foreground,
     foregroundMuted: tint.foregroundMuted,
@@ -271,8 +271,8 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
 
     destructive: tint.destructive,
     destructiveForeground: tint.surface0,
-    success: tint.accent,
-    successForeground: tint.surface0,
+    success: "#1f9d62",
+    successForeground: "#ffffff",
 
     background: tint.surface0,
     popover: tint.surface0,
@@ -305,28 +305,29 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
   };
 }
 
+// Bright surfaces with bluish neutrals and a calm blue accent.
 const lightSemanticColors = buildLightSemanticColors({
   surface0: "#ffffff",
-  surface1: "#fafafa",
-  surface2: "#f4f4f5",
-  surface3: "#e4e4e7",
-  surface4: "#d4d4d8",
-  surfaceDiffEmpty: "#f6f6f6",
-  surfaceSidebar: "#f4f4f5",
-  foreground: "#1a1a1e",
-  foregroundMuted: "#71717a",
-  foregroundExtraMuted: "#a1a1aa",
-  border: "#e4e4e7",
-  borderAccent: "#ececf1",
-  accent: "#20744A",
-  accentBright: "#239956",
+  surface1: "#f9fafb",
+  surface2: "#f1f3f5",
+  surface3: "#e1e5ee",
+  surface4: "#cfd3d6",
+  surfaceDiffEmpty: "#f5f6f7",
+  surfaceSidebar: "#f5f6f7",
+  foreground: "#0f1115",
+  foregroundMuted: "#61666b",
+  foregroundExtraMuted: "#979da6",
+  border: "#e9ecf2",
+  borderAccent: "#f1f3f5",
+  accent: "#4176e6",
+  accentBright: "#5686fe",
   accentForeground: "#ffffff",
-  primary: "#18181b",
-  primaryForeground: "#fafafa",
-  destructive: "#b04138",
-  terminalBlack: "#1a1a1e",
-  terminalBrightBlack: "#3f3f46",
-  ring: "#18181b",
+  primary: "#0f1115",
+  primaryForeground: "#ffffff",
+  destructive: "#d0453a",
+  terminalBlack: "#0f1115",
+  terminalBrightBlack: "#43454a",
+  ring: "#4176e6",
 });
 
 // ---------------------------------------------------------------------------
@@ -401,7 +402,7 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 
     destructive: tint.destructive,
     destructiveForeground: "#ffffff",
-    success: tint.accent,
+    success: "#2fb574",
     successForeground: "#ffffff",
 
     // Legacy aliases (for gradual migration)
@@ -440,8 +441,28 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Paseo — subtle teal-green tint (default)
 const paseoDarkColors = buildDarkSemanticColors({
+  surface0: "#151517",
+  surface1: "#1b1b1c",
+  surface2: "#232324",
+  surface3: "#353638",
+  surface4: "#43454a",
+  surfaceDiffEmpty: "#1f1f21",
+  surfaceSidebar: "#101012",
+  foreground: "#f5f6f7",
+  foregroundMuted: "#adb2b8",
+  foregroundExtraMuted: "#81858c",
+  border: "#2c2c2e",
+  borderAccent: "#353638",
+  accent: "#4176e6",
+  accentBright: "#7aaaff",
+  destructive: "#e0584c",
+  terminalBlack: "#101012",
+  terminalBrightBlack: "#43454a",
+  ring: "#5686fe",
+});
+
+const forestDarkColors = buildDarkSemanticColors({
   surface0: "#181B1A",
   surface1: "#1E2120",
   surface2: "#272A29",
@@ -590,12 +611,12 @@ export const FONT_WEIGHT = {
 
 export const BORDER_RADIUS = {
   none: 0,
-  sm: 2,
-  base: 4,
-  md: 6,
-  lg: 8,
-  xl: 12,
-  "2xl": 16,
+  sm: 4,
+  base: 6,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  "2xl": 20,
   full: 9999,
 } as const;
 
@@ -700,6 +721,7 @@ export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemant
 }
 
 export const darkTheme = buildDarkTheme(paseoDarkColors);
+export const darkForestTheme = buildDarkTheme(forestDarkColors);
 export const darkZincTheme = buildDarkTheme(zincDarkColors);
 export const darkMidnightTheme = buildDarkTheme(midnightDarkColors);
 export const darkClaudeTheme = buildDarkTheme(claudeDarkColors);
@@ -729,13 +751,13 @@ export const darkPureBlackTheme = buildDarkTheme(pureBlackDarkColors);
 
 const lightShadow = {
   sm: {
-    shadowColor: "rgba(0, 0, 0, 0.02)",
+    shadowColor: "rgba(15, 17, 21, 0.05)",
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
   },
   md: {
-    shadowColor: "rgba(0, 0, 0, 0.04)",
+    shadowColor: "rgba(15, 17, 21, 0.08)",
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 16,
     elevation: 4,
@@ -779,9 +801,16 @@ export const THEME_OPTIONS = [
     group: "primary",
     unistylesName: "dark",
     theme: darkTheme,
-    swatch: "#2D8B62",
+    swatch: "#4176e6",
   },
   { name: "auto", group: "primary" },
+  {
+    name: "forest",
+    group: "variant",
+    unistylesName: "darkForest",
+    theme: darkForestTheme,
+    swatch: "#2D8B62",
+  },
   {
     name: "zinc",
     group: "variant",

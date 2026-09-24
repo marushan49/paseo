@@ -2224,7 +2224,21 @@ export const ar: TranslationResources = {
           claude: "كلود",
           ghostty: "شبحي",
           pureBlack: "أسود خالص",
+          forest: "Forest",
           auto: "نظام",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {

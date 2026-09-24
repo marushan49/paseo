@@ -2235,7 +2235,21 @@ export const ko: TranslationResources = {
           claude: "Claude",
           ghostty: "Ghostty",
           pureBlack: "순수 검정",
+          forest: "Forest",
           auto: "시스템",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {

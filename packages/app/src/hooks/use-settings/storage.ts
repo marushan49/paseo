@@ -82,6 +82,7 @@ export interface AppSettings {
   contentFontSize: number; // clamped px, platform default 15 or 16
   codeFontSize: number; // clamped px, default 12
   syntaxTheme: SyntaxThemeId; // default "one"
+  accentColor: string; // "" = the theme's own accent, else "#rrggbb"
   workspaceTitleSource: WorkspaceTitleSource;
   sidebarWorkspaceTrailing: SidebarWorkspaceTrailing;
   sidebarRowItems: SidebarRowItems;
@@ -138,6 +139,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   syntaxTheme: "one",
+  accentColor: "",
   workspaceTitleSource: "title",
   sidebarWorkspaceTrailing: "diff",
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,
@@ -226,6 +228,10 @@ const StoredAppSettingsSchema = z
       DEFAULT_CODE_FONT_SIZE,
     ),
     syntaxTheme: z.string().refine(isSyntaxThemeId).catch("one"),
+    accentColor: z
+      .string()
+      .regex(/^(#[0-9a-fA-F]{6})?$/)
+      .catch(""),
     workspaceTitleSource: z.enum(["title", "branch"]).catch("title"),
     sidebarWorkspaceTrailing: z.enum(["diff", "timestamp", "none"]).catch("diff"),
     sidebarRowItems: SidebarRowItemsSchema,

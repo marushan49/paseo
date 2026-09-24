@@ -2277,7 +2277,21 @@ export const es: TranslationResources = {
           claude: "claudio",
           ghostty: "fantasmal",
           pureBlack: "Negro puro",
+          forest: "Forest",
           auto: "Sistema",
+        },
+      },
+      accent: {
+        title: "Accent color",
+        hint: "Buttons, links, and highlights",
+        options: {
+          theme: "Theme default",
+          blue: "Blue",
+          violet: "Violet",
+          green: "Green",
+          teal: "Teal",
+          orange: "Orange",
+          pink: "Pink",
         },
       },
       detailLevel: {
