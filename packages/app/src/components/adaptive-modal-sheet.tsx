@@ -471,6 +471,8 @@ export interface AdaptiveModalSheetProps {
   contentStyle?: StyleProp<ViewStyle>;
   /** Size compact sheet content to the live snap height instead of its largest snap point. */
   sizeContentToCurrentSnapPoint?: boolean;
+  /** How the compact sheet moves when the keyboard opens. */
+  keyboardBehavior?: "extend" | "fillParent" | "interactive";
   /** Re-establishes caller-owned contexts inside the compact bottom-sheet portal. */
   contextBridge?: ContextBridge | null;
 }
@@ -492,6 +494,7 @@ export function AdaptiveModalSheet({
   contentStyle,
   bodyStyle,
   sizeContentToCurrentSnapPoint = true,
+  keyboardBehavior = "extend",
   contextBridge = null,
 }: AdaptiveModalSheetProps) {
   const { theme } = useUnistyles();
@@ -662,7 +665,7 @@ export function AdaptiveModalSheet({
         enablePanDownToClose
         backgroundComponent={SheetBackground}
         handleIndicatorStyle={handleIndicatorStyle}
-        keyboardBehavior="extend"
+        keyboardBehavior={keyboardBehavior}
         keyboardBlurBehavior="restore"
         accessible={false}
         presentation={presentation}
