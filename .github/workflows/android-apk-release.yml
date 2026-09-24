@@ -5,6 +5,18 @@ on:
     tags:
       - "v*"
       - "android-v*"
+    # Rolling APK for the fixed download link; only app-relevant changes.
+    branches:
+      - main
+    paths:
+      - "packages/app/**"
+      - "packages/client/**"
+      - "packages/protocol/**"
+      - "packages/highlight/**"
+      - "packages/plugin/**"
+      - "packages/expo-two-way-audio/**"
+      - "package-lock.json"
+      - ".github/workflows/android-apk-release.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -14,7 +26,7 @@ on:
 
 concurrency:
   group: android-apk-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
   SOURCE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
@@ -32,7 +44,12 @@ jobs:
 
       - name: Resolve release tag
         shell: bash
-        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            printf 'RELEASE_TAG=android-latest\nIS_PRERELEASE=true\n' >> "$GITHUB_ENV"
+          else
+            node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+          fi
 
       - name: Ensure GitHub release exists
         env:
@@ -40,6 +57,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ "$RELEASE_TAG" == "android-latest" ]]; then
+            git push --force origin "$GITHUB_SHA:refs/tags/android-latest"
+            gh release view android-latest --repo "${{ github.repository }}" >/dev/null 2>&1 ||
+              gh release create android-latest --repo "${{ github.repository }}" --prerelease \
+                --title "Paseo Android (latest main)" \
+                --notes "Rolling arm64 APK from main: https://github.com/${{ github.repository }}/releases/download/android-latest/paseo-android-latest.apk"
+            exit 0
+          fi
 
           if node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
             exit 0
@@ -80,7 +106,12 @@ jobs:
 
       - name: Resolve release tag
         shell: bash
-        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            printf 'RELEASE_TAG=android-latest\nIS_PRERELEASE=true\n' >> "$GITHUB_ENV"
+          else
+            node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -172,6 +203,7 @@ jobs:
         run: |
           set -euo pipefail
           asset_name="paseo-${RELEASE_TAG}-android.apk"
+          [[ "$RELEASE_TAG" == "android-latest" ]] && asset_name="paseo-android-latest.apk"
           asset_path="$RUNNER_TEMP/$asset_name"
           cp packages/app/android/app/build/outputs/apk/release/app-release.apk "$asset_path"
 
