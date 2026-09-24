@@ -34,21 +34,17 @@ export const CLAUDE_DEFAULT_THINKING_OPTION_ID = "high";
 export const CLAUDE_DISABLED_THINKING_OPTION_ID = "off";
 export const CLAUDE_ULTRACODE_THINKING_OPTION_ID = "ultracode";
 
-function resolveDefaultThinkingOptionId(model: ClaudeModelManifestEntry): ClaudeEffortLevel {
-  return model.defaultThinkingOptionId ?? CLAUDE_DEFAULT_THINKING_OPTION_ID;
-}
-
 export const CLAUDE_MODEL_MANIFEST = [
   {
     id: "claude-opus-5-5",
     label: "Opus 5.5",
     description: "Opus 5.5 · Latest release",
     defaultPriority: 3,
-    // Verified floor: 2.1.261 rejects the ID as unknown, 2.1.281 runs it.
-    minimumClaudeCodeVersion: "2.1.281",
-    contextWindowMaxTokens: 1_000_000,
-    effortLevels: CLAUDE_EFFORT_LEVELS.standard,
+    minimumClaudeCodeVersion: "2.1.280",
     defaultThinkingOptionId: "medium",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsFastMode: true,
   },
   {
     id: "claude-opus-5",
@@ -173,10 +169,14 @@ export const CLAUDE_MODEL_MANIFEST = [
   },
 ] as const satisfies readonly ClaudeModelManifestEntry[];
 
+function getDefaultThinkingOptionId(model: ClaudeModelManifestEntry): ClaudeEffortLevel {
+  return model.defaultThinkingOptionId ?? CLAUDE_DEFAULT_THINKING_OPTION_ID;
+}
+
 function buildThinkingOptions(
   effortLevels: readonly ClaudeEffortLevel[] | undefined,
   supportsThinkingDisabled: boolean,
-  defaultThinkingOptionId: ClaudeEffortLevel = CLAUDE_DEFAULT_THINKING_OPTION_ID,
+  defaultThinkingOptionId: ClaudeEffortLevel,
 ): AgentSelectOption[] | undefined {
   if (!effortLevels) {
     return undefined;
@@ -210,11 +210,10 @@ export function getClaudeManifestModels(claudeCodeVersion?: string): AgentModelD
 
   const definitions: AgentModelDefinition[] = [];
   for (const model of availableModels) {
-    const defaultThinkingOptionId = resolveDefaultThinkingOptionId(model);
     const thinkingOptions = buildThinkingOptions(
       model.effortLevels,
       model.supportsThinkingDisabled === true,
-      defaultThinkingOptionId,
+      getDefaultThinkingOptionId(model),
     );
     const definition: AgentModelDefinition = {
       provider: "claude",
@@ -233,7 +232,7 @@ export function getClaudeManifestModels(claudeCodeVersion?: string): AgentModelD
     }
     if (thinkingOptions) {
       definition.thinkingOptions = thinkingOptions;
-      definition.defaultThinkingOptionId = defaultThinkingOptionId;
+      definition.defaultThinkingOptionId = getDefaultThinkingOptionId(model);
     }
     definitions.push(definition);
     if (!("aliases" in model) || !model.aliases) {
@@ -305,7 +304,7 @@ export function resolveClaudeDisabledThinkingForModel(
     supported:
       !!model && "supportsThinkingDisabled" in model && model.supportsThinkingDisabled === true,
     fallbackThinkingOptionId:
-      model && "effortLevels" in model ? resolveDefaultThinkingOptionId(model) : undefined,
+      model && "effortLevels" in model ? getDefaultThinkingOptionId(model) : undefined,
   };
 }
 
@@ -369,7 +368,9 @@ export function normalizeClaudeManifestModelId(value: string | null | undefined)
 /**
  * Normalize a Claude Code runtime/config model string to a known manifest ID.
  * Runtime metadata may include provider prefixes such as Bedrock model IDs; feature
- * gates should use normalizeClaudeManifestModelId instead.
+ * gates should use normalizeClaudeManifestModelId instead. The prefixed matches are
+ * unanchored, so major-minor runs first: "claude-opus-5-5" would otherwise stop at the
+ * "claude-opus-5" entry.
  */
 export function normalizeClaudeRuntimeModelId(value: string | null | undefined): string | null {
   const normalizedManifestModelId = normalizeClaudeManifestModelId(value);
@@ -382,13 +383,14 @@ export function normalizeClaudeRuntimeModelId(value: string | null | undefined):
     return null;
   }
 
-  const singleSegmentMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
+  const runtimeMatch = trimmed.match(
+    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
   );
-  if (singleSegmentMatch) {
-    const normalizedModelId = normalizeSingleSegmentClaudeModelId(
-      singleSegmentMatch[1],
-      singleSegmentMatch[2],
+  if (runtimeMatch) {
+    const normalizedModelId = normalizeMajorMinorClaudeModelId(
+      runtimeMatch[1],
+      runtimeMatch[2],
+      runtimeMatch[3],
       trimmed.toLowerCase().includes("[1m]"),
     );
     if (normalizedModelId) {
@@ -396,17 +398,16 @@ export function normalizeClaudeRuntimeModelId(value: string | null | undefined):
     }
   }
 
-  const runtimeMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
+  const singleSegmentMatch = trimmed.match(
+    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
   );
-  if (!runtimeMatch) {
+  if (!singleSegmentMatch) {
     return null;
   }
 
-  return normalizeMajorMinorClaudeModelId(
-    runtimeMatch[1],
-    runtimeMatch[2],
-    runtimeMatch[3],
+  return normalizeSingleSegmentClaudeModelId(
+    singleSegmentMatch[1],
+    singleSegmentMatch[2],
     trimmed.toLowerCase().includes("[1m]"),
   );
 }
