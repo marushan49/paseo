@@ -44,7 +44,7 @@ import type { Logger } from "pino";
 
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { Dirent } from "node:fs";
+import { Dirent, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -553,6 +553,17 @@ async function checkCodexLaunchAvailable(launch: ResolvedProviderLaunch) {
 
 function resolveCodexHomeDir(): string {
   return process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex");
+}
+
+function readConfiguredCodexMcpServerNames(): Set<string> {
+  let text: string;
+  try {
+    text = readFileSync(path.join(resolveCodexHomeDir(), "config.toml"), "utf8");
+  } catch {
+    return new Set();
+  }
+  const headers = text.matchAll(/^\s*\[mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))\]\s*$/gm);
+  return new Set(Array.from(headers, (match) => match[1] ?? match[2] ?? ""));
 }
 
 function decodeEscapedChar(next: string): string {
@@ -5162,11 +5173,19 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (this.deps.customCodexConfig) {
       Object.assign(innerConfig, this.deps.customCodexConfig);
     }
-    if (this.config.mcpServers) {
-      const mcpServers: Record<string, CodexMcpServerConfig> = {};
-      for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
-        mcpServers[name] = toCodexMcpConfig(serverConfig);
+    const mcpServers: Record<string, CodexMcpServerConfig | { enabled: false }> = {};
+    for (const [name, serverConfig] of Object.entries(this.config.mcpServers ?? {})) {
+      mcpServers[name] = toCodexMcpConfig(serverConfig);
+    }
+    // Only servers the user configured: a bare `enabled = false` entry for an
+    // unknown server has no command and would break the thread start.
+    const configuredServers = readConfiguredCodexMcpServerNames();
+    for (const name of this.config.daemonBlockedMcpServers ?? []) {
+      if (!mcpServers[name] && configuredServers.has(name)) {
+        mcpServers[name] = { enabled: false };
       }
+    }
+    if (Object.keys(mcpServers).length > 0) {
       innerConfig.mcp_servers = mcpServers;
     }
     const configured = applyCodexToolPolicy(innerConfig, this.config.toolPolicy);

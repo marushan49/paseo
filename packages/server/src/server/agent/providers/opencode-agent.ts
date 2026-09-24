@@ -4991,14 +4991,15 @@ class OpenCodeAgentSession implements AgentSession {
       return;
     }
 
-    const mcpServers = this.config.mcpServers;
-    if (!mcpServers || Object.keys(mcpServers).length === 0) {
+    const mcpServers = this.config.mcpServers ?? {};
+    const blockedServers = this.config.daemonBlockedMcpServers ?? [];
+    if (Object.keys(mcpServers).length === 0 && blockedServers.length === 0) {
       this.mcpConfigured = true;
       return;
     }
 
     if (!this.mcpSetupPromise) {
-      this.mcpSetupPromise = this.configureMcpServers(mcpServers);
+      this.mcpSetupPromise = this.configureMcpServers(mcpServers, blockedServers);
     }
 
     try {
@@ -5010,11 +5011,23 @@ class OpenCodeAgentSession implements AgentSession {
     }
   }
 
-  private async configureMcpServers(mcpServers: Record<string, McpServerConfig>): Promise<void> {
+  private async configureMcpServers(
+    mcpServers: Record<string, McpServerConfig>,
+    blockedServers: readonly string[],
+  ): Promise<void> {
     await Promise.all(
       Object.entries(mcpServers).map(([name, serverConfig]) =>
         this.registerMcpServer(name, toOpenCodeMcpConfig(serverConfig)),
       ),
+    );
+    // Scoped to this directory's instance of Paseo's OpenCode server; the user's
+    // own OpenCode sessions keep their servers. Unknown names are not an error.
+    await Promise.all(
+      blockedServers
+        .filter((name) => !(name in mcpServers))
+        .map((name) =>
+          this.client.mcp.disconnect({ name, directory: this.config.cwd }).catch(() => undefined),
+        ),
     );
   }
 
