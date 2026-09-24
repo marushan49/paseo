@@ -41,10 +41,24 @@ export function classifyToolCall(item: ToolCallItem): ShadowStep {
   if (detailType === "edit" || detailType === "write") return "edit";
   if (detailType === "fetch") return "fetch";
   if (detailType === "sub_agent") return "sub_agent";
-  if (detailType === "shell") {
-    return VERIFY_COMMAND.test(item.detail?.command ?? "") ? "verify" : "shell";
-  }
+  if (detailType === "shell") return classifyShellCommand(item.detail?.command ?? "");
   return "mcp";
+}
+
+const SEARCH_COMMANDS = new Set(["rg", "grep", "ag", "ack", "fd", "find", "ls", "tree"]);
+const READ_COMMANDS = new Set(["cat", "sed", "head", "tail", "nl", "less", "bat", "wc"]);
+
+// Codex and others do most work through the shell, so a command counts as what it does.
+function classifyShellCommand(command: string): ShadowStep {
+  if (VERIFY_COMMAND.test(command)) return "verify";
+  const words = command
+    .replace(/^\s*cd\s+\S+\s*&&\s*/, "")
+    .trim()
+    .split(/\s+/);
+  const program = words[0] === "rtk" ? words[1] : words[0];
+  if (program && SEARCH_COMMANDS.has(program)) return "search";
+  if (program && READ_COMMANDS.has(program)) return "read";
+  return "shell";
 }
 
 export interface ShadowRecord {
@@ -70,10 +84,8 @@ interface PendingPrediction {
 }
 
 interface OpenCall {
-  step: ShadowStep;
   startedAt: number;
-  endedAt: number | null;
-  record: Omit<ShadowRecord, "stepMs"> | null;
+  prediction: Promise<PendingPrediction | null> | null;
 }
 
 interface AgentShadowState {
@@ -107,7 +119,9 @@ export class ShadowPredictor {
     if (event.type === "timeline") {
       this.observeItem(agent, state, event.item);
     } else if (event.type === "turn_completed") {
-      void this.score(agent, state, "end_turn", null);
+      const prediction = state.pending;
+      state.pending = null;
+      void this.record(agent, prediction, "end_turn", this.now(), null);
     }
   }
 
@@ -119,41 +133,31 @@ export class ShadowPredictor {
     }
     if (item.type !== "tool_call") return;
     const call = item as unknown as ToolCallItem;
-    const open = state.openCalls.get(call.callId);
+    let open = state.openCalls.get(call.callId);
     if (!open) {
-      const step = classifyToolCall(call);
-      const entry: OpenCall = { step, startedAt: this.now(), endedAt: null, record: null };
-      state.openCalls.set(call.callId, entry);
-      void this.score(agent, state, step, entry);
-      if (call.status === "running") return;
+      open = { startedAt: this.now(), prediction: state.pending };
+      state.pending = null;
+      state.openCalls.set(call.callId, open);
     }
     if (call.status === "running") return;
-    const finished = state.openCalls.get(call.callId);
-    if (!finished) return;
     state.openCalls.delete(call.callId);
-    state.recent = [
-      ...state.recent,
-      { step: finished.step, ok: call.status === "completed" },
-    ].slice(-MAX_RECENT);
-    finished.endedAt = this.now();
-    // The score may still be waiting for Jev; whichever side finishes last writes.
-    if (finished.record) void this.writeCall(finished);
+    // The finished event carries the full detail; the running one may not.
+    const step = classifyToolCall(call);
+    state.recent = [...state.recent, { step, ok: call.status === "completed" }].slice(-MAX_RECENT);
     state.pending = this.predict(agent, state);
+    void this.record(agent, open.prediction, step, open.startedAt, this.now() - open.startedAt);
   }
 
-  private async score(
+  private async record(
     agent: ShadowAgent,
-    state: AgentShadowState,
+    pending: Promise<PendingPrediction | null> | null,
     actual: ShadowStep,
-    call: OpenCall | null,
+    startedAt: number,
+    stepMs: number | null,
   ): Promise<void> {
-    const pendingPromise = state.pending;
-    state.pending = null;
-    if (!pendingPromise) return;
-    const startedAt = call?.startedAt ?? this.now();
-    const prediction = await pendingPromise;
+    const prediction = await pending;
     if (!prediction) return;
-    const record: Omit<ShadowRecord, "stepMs"> = {
+    await this.write({
       ts: new Date().toISOString(),
       agentId: agent.id,
       provider: agent.provider,
@@ -163,20 +167,8 @@ export class ShadowPredictor {
       hit: prediction.predicted === actual,
       jevMs: prediction.jevMs,
       leadMs: startedAt - prediction.readyAt,
-    };
-    if (!call) {
-      await this.write({ ...record, stepMs: null });
-      return;
-    }
-    call.record = record;
-    if (call.endedAt !== null) await this.writeCall(call);
-  }
-
-  private async writeCall(call: OpenCall): Promise<void> {
-    if (!call.record || call.endedAt === null) return;
-    const record = call.record;
-    call.record = null;
-    await this.write({ ...record, stepMs: call.endedAt - call.startedAt });
+      stepMs,
+    });
   }
 
   private async predict(

@@ -118,6 +118,9 @@ describe("ShadowPredictor", () => {
     expect(call({ type: "write" })).toBe("edit");
     expect(call({ type: "shell", command: "npm run typecheck" })).toBe("verify");
     expect(call({ type: "shell", command: "git status" })).toBe("shell");
+    expect(call({ type: "shell", command: "rg -n SHADOW_STEPS ." })).toBe("search");
+    expect(call({ type: "shell", command: "rtk grep -r foo" })).toBe("search");
+    expect(call({ type: "shell", command: "sed -n '1,40p' a.ts && git status" })).toBe("read");
     expect(call({ type: "unknown" })).toBe("mcp");
   });
 });

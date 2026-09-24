@@ -5186,7 +5186,8 @@ export class AgentManager {
     );
     this.dispatch({ type: "agent_stream", agentId, event, ...metadata });
     // Live turns only: session replay would score steps that already happened.
-    if (this.streamObserver && agent && !agent.internal && agent.lifecycle === "running") {
+    const liveTurnEvent = agent?.lifecycle === "running" || event.type === "turn_completed";
+    if (this.streamObserver && agent && !agent.internal && liveTurnEvent) {
       this.streamObserver({ id: agentId, provider: agent.provider, cwd: agent.cwd }, event);
     }
     if (this.pluginLifecycle && agent && !agent.internal && event.type !== "timeline") {
