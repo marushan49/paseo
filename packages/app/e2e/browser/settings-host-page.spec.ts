@@ -175,5 +175,10 @@ test.describe("Settings host page", () => {
     await expectSettingsHeader(page, "Browser");
     await expect(page.getByTestId("host-page-browser-tools-card")).toBeVisible();
     await expect(page.getByText("Jev browser goals", { exact: true })).toBeVisible();
+    await expect(page.getByText("Start page", { exact: true })).toBeVisible();
+    await expect(page.getByText("Import from browser", { exact: true })).toBeVisible();
+    if (process.env.E2E_BROWSER_SETTINGS_SCREENSHOT) {
+      await page.screenshot({ path: process.env.E2E_BROWSER_SETTINGS_SCREENSHOT, fullPage: true });
+    }
   });
 });
