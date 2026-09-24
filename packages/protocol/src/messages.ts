@@ -25,6 +25,7 @@ import { AgentProviderSchema } from "./provider-manifest.js";
 import { ProviderPaseoToolsPolicySchema } from "./provider-config.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
+import { ResourcePolicySchema } from "./resource-policy.js";
 import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
@@ -75,10 +76,28 @@ import {
 } from "./loop/rpc-schemas.js";
 import {
   BROWSER_AUTOMATION_COMMAND_NAMES,
+  BrowserAutomationCommandSchema,
   BrowserAutomationExecuteRequestSchema,
   BrowserAutomationExecuteResponseSchema,
+  BrowserAutomationResponsePayloadSchema,
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
+import {
+  VerifyEvidenceArtifactGetRequestSchema,
+  VerifyEvidenceRunListRequestSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
+  VerifyEvidenceRunListResponseSchema,
+  VerifyRecipeListRequestSchema,
+  VerifyRecipeListResponseSchema,
+  VerifyRecipeRunRequestSchema,
+  VerifyRecipeRunResponseSchema,
+} from "./verify/rpc-schemas.js";
+import {
+  BrowserImportCookiesRequestSchema,
+  BrowserImportCookiesResponseSchema,
+  BrowserImportListSourcesRequestSchema,
+  BrowserImportListSourcesResponseSchema,
+} from "./browser-import/rpc-schemas.js";
 import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -163,12 +182,29 @@ const MutableBrowserToolsConfigSchema = z
     enabled: z.boolean().default(false),
   })
   .passthrough();
+const MutableSystemOneConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    model: z.string().trim().min(1).default("jev-latest"),
+    minimumConfidence: z.number().min(0).max(1).default(0.5),
+    configured: z.boolean().default(false),
+    credentialSource: z.enum(["paseo", "environment", "env-file"]).nullable().default(null),
+  })
+  .strip();
+const MutableSystemOnePatchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    model: z.string().trim().min(1).optional(),
+    minimumConfidence: z.number().min(0).max(1).optional(),
+  })
+  .strict();
 const MutableRelayConfigSchema = z
   .object({
     enabled: z.boolean(),
   })
   .passthrough();
 
+export { ResourcePolicySchema, type ResourcePolicy } from "./resource-policy.js";
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -196,11 +232,16 @@ export const MutableDaemonConfigSchema = z
     app: z.object({ baseUrl: z.string() }).optional(),
     catalogRefreshTimeoutMs: z.number().int().positive().optional(),
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
+    // COMPAT(systemOne): added in v0.9, keep optional while older daemons are supported.
+    systemOne: MutableSystemOneConfigSchema.optional(),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
+    resourcePolicy: ResourcePolicySchema.default("balanced"),
+    // COMPAT(allowScheduledAutomation): added in v0.8.1, remove optional after 2027-06-30.
+    allowScheduledAutomation: z.boolean().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
@@ -214,6 +255,8 @@ export const MutableDaemonConfigPatchSchema = z
     relay: MutableRelayConfigSchema.partial().optional(),
     mcp: z.object({ injectIntoAgents: z.boolean().optional() }).passthrough().optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
+    systemOne: MutableSystemOnePatchSchema.optional(),
+    systemOneApiKey: z.string().trim().min(1).nullable().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
@@ -222,6 +265,8 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
+    resourcePolicy: ResourcePolicySchema.optional(),
+    allowScheduledAutomation: z.boolean().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
@@ -975,6 +1020,60 @@ export const WorkspacePinSetRequestSchema = z.object({
   type: z.literal("workspace.pin.set.request"),
   workspaceId: z.string(),
   pinned: z.boolean(),
+  requestId: z.string(),
+});
+
+// COMPAT(workspaceForgeAccount): added in v0.8.1. Gate on
+// server_info.features.workspaceForgeAccount.
+// An empty string clears the pin and returns the workspace to the machine's
+// default account, so the RPC needs no separate "unset" verb.
+export const PullRequestCurationSchema = z.object({
+  added: z.array(z.number().int().positive()),
+  removed: z.array(z.number().int().positive()),
+});
+
+// COMPAT(curatedPullRequestFacts): added in v0.8.1, remove optional after
+// 2027-06-30. What the client resolved for the numbers it added. The daemon
+// stores decisions, and a number alone cannot be drawn: without the title, url
+// and state, a set someone assembled comes back empty after a restart. The
+// client already looked these up to show them, so it hands them over rather
+// than making the daemon repeat the lookup.
+export const CuratedPullRequestFactsSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.string(),
+  title: z.string().optional(),
+  state: z.enum(["open", "merged", "closed"]),
+  isDraft: z.boolean().optional(),
+  headRefName: z.string().optional(),
+  baseRefName: z.string().optional(),
+});
+
+export const WorkspacePullRequestsCurateRequestSchema = z.object({
+  type: z.literal("workspace.pull_requests.curate.request"),
+  workspaceId: z.string(),
+  curation: PullRequestCurationSchema,
+  facts: z.array(CuratedPullRequestFactsSchema).optional(),
+  requestId: z.string(),
+});
+
+export const ForgeAccountScopeSchema = z.enum(["workspace", "project"]);
+
+export const WorkspaceForgeAccountSetRequestSchema = z.object({
+  type: z.literal("workspace.forge_account.set.request"),
+  workspaceId: z.string(),
+  forgeConfigDir: z.string(),
+  // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+  // "project" stores the account on the workspace's project so every worktree
+  // cut from that repository inherits it, which is how someone actually thinks
+  // about a work checkout. Omitted means "workspace", the old behaviour.
+  scope: ForgeAccountScopeSchema.optional(),
+  requestId: z.string(),
+});
+
+// COMPAT(forgeAccountList): added in v0.8.1. A client that does not ask still
+// works; it just cannot offer the picker.
+export const ForgeAccountListRequestSchema = z.object({
+  type: z.literal("forge.accounts.list.request"),
   requestId: z.string(),
 });
 
@@ -1916,6 +2015,24 @@ export const SetAgentModelResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+/**
+ * Moves an existing agent to another provider. `modelId` names a model of the
+ * target provider, not the current one; the provider's own mode and thinking
+ * selections do not survive the move, so they are not part of the request.
+ */
+export const SetAgentProviderRequestMessageSchema = z.object({
+  type: z.literal("set_agent_provider_request"),
+  agentId: z.string(),
+  provider: z.string(),
+  modelId: z.string().nullable(),
+  requestId: z.string(),
+});
+
+export const SetAgentProviderResponseMessageSchema = z.object({
+  type: z.literal("set_agent_provider_response"),
+  payload: AgentActionResponsePayloadSchema,
+});
+
 export const SetAgentThinkingRequestMessageSchema = z.object({
   type: z.literal("set_agent_thinking_request"),
   agentId: z.string(),
@@ -2069,6 +2186,58 @@ export const WorkspacePinSetResponsePayloadSchema = z.object({
 export const WorkspacePinSetResponseSchema = z.object({
   type: z.literal("workspace.pin.set.response"),
   payload: WorkspacePinSetResponsePayloadSchema,
+});
+
+export const WorkspacePullRequestsCurateResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  workspaceId: z.string(),
+  accepted: z.boolean(),
+  // The stored decisions after normalization, which is what the daemon will
+  // merge into every later set for this workspace.
+  curation: PullRequestCurationSchema.nullable(),
+  error: z.string().nullable(),
+});
+
+export const WorkspacePullRequestsCurateResponseSchema = z.object({
+  type: z.literal("workspace.pull_requests.curate.response"),
+  payload: WorkspacePullRequestsCurateResponsePayloadSchema,
+});
+
+export const WorkspaceForgeAccountSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  workspaceId: z.string(),
+  accepted: z.boolean(),
+  // The stored value after normalization, which is what later gh calls will
+  // use. Null means the workspace fell back to the machine's default account.
+  forgeConfigDir: z.string().nullable(),
+  // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+  // Where the value was stored, which is not always what was asked for: an
+  // agent with no project to speak of gets its workspace written instead.
+  scope: ForgeAccountScopeSchema.optional(),
+  error: z.string().nullable(),
+});
+
+export const WorkspaceForgeAccountSetResponseSchema = z.object({
+  type: z.literal("workspace.forge_account.set.response"),
+  payload: WorkspaceForgeAccountSetResponsePayloadSchema,
+});
+
+/** One login this host can hand to `gh`, named the way its owner thinks of it. */
+export const ForgeAccountSchema = z.object({
+  configDir: z.string(),
+  username: z.string(),
+  host: z.string(),
+});
+
+export const ForgeAccountListResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  accounts: z.array(ForgeAccountSchema),
+  error: z.string().nullable(),
+});
+
+export const ForgeAccountListResponseSchema = z.object({
+  type: z.literal("forge.accounts.list.response"),
+  payload: ForgeAccountListResponsePayloadSchema,
 });
 
 export const WorkspaceRecoveryStateSchema = z.discriminatedUnion("kind", [
@@ -3140,6 +3309,18 @@ export const BrowserHostRegisterResponseSchema = z.object({
   payload: z.object({ requestId: z.string(), subscriptionId: z.string() }),
 });
 
+export const BrowserRemoteExecuteRequestSchema = z.object({
+  type: z.literal("browser.remote.execute.request"),
+  requestId: z.string(),
+  workspaceId: z.string().min(1),
+  command: BrowserAutomationCommandSchema,
+});
+
+export const BrowserRemoteExecuteResponseSchema = z.object({
+  type: z.literal("browser.remote.execute.response"),
+  payload: BrowserAutomationResponsePayloadSchema,
+});
+
 export const SubscriptionReleaseRequestSchema = z.object({
   type: z.literal("subscription.release.request"),
   requestId: z.string(),
@@ -3158,6 +3339,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
   BrowserAutomationExecuteResponseSchema,
+  BrowserRemoteExecuteRequestSchema,
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
   AudioPlayedMessageSchema,
@@ -3176,6 +3358,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectRemoveRequestSchema,
   WorkspaceTitleSetRequestSchema,
   WorkspacePinSetRequestSchema,
+  WorkspaceForgeAccountSetRequestSchema,
+  ForgeAccountListRequestSchema,
+  WorkspacePullRequestsCurateRequestSchema,
   WorkspaceLabelListRequestSchema,
   WorkspaceLabelAssignmentSetRequestSchema,
   WorkspaceLabelUpdateRequestSchema,
@@ -3248,6 +3433,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentForkContextRequestMessageSchema,
   SetAgentModeRequestMessageSchema,
   SetAgentModelRequestMessageSchema,
+  SetAgentProviderRequestMessageSchema,
   SetAgentThinkingRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
@@ -3330,6 +3516,12 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListRequestSchema,
   WorkspaceScriptStartRequestSchema,
   WorkspaceScriptStopRequestSchema,
+  VerifyEvidenceArtifactGetRequestSchema,
+  VerifyEvidenceRunListRequestSchema,
+  VerifyRecipeListRequestSchema,
+  VerifyRecipeRunRequestSchema,
+  BrowserImportListSourcesRequestSchema,
+  BrowserImportCookiesRequestSchema,
   SubscribeTerminalRequestSchema,
   UnsubscribeTerminalRequestSchema,
   TerminalInputSchema,
@@ -3543,6 +3735,7 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
+        remoteBrowser: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -3589,6 +3782,9 @@ export const ServerInfoStatusPayloadSchema = z
         pluginThemes: z.boolean().optional(),
         pluginSettings: z.boolean().optional(),
         pluginTimelineItems: z.boolean().optional(),
+        verifyRecipes: z.boolean().optional(),
+        // COMPAT(browserCookieImport): added in v0.9.0, remove gate after 2027-03-24.
+        browserCookieImport: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
@@ -3635,12 +3831,17 @@ export const ServerInfoStatusPayloadSchema = z
         providerSubagents: z.boolean().optional(),
         // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove gates after 2027-03-14; retain wire field.
         projectedSubagentTimeline: z.boolean().optional(),
+        // COMPAT(relatedPullRequests): added in v0.8.1, remove gates once the daemon
+        // floor ships githubRuntime.relatedPullRequests; retain wire field.
+        relatedPullRequests: z.boolean().optional(),
         // COMPAT(providerSubagentNesting): added in v0.7, remove gate after 2027-03-04.
         providerSubagentNesting: z.boolean().optional(),
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
         workspacePinning: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
+        // COMPAT(workspaceForgeAccount): added in v0.8.1, remove gate after 2027-06-30.
+        workspaceForgeAccount: z.boolean().optional(),
         // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
         hubRelationship: z.boolean().optional(),
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
@@ -3953,6 +4154,32 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
       })
       .nullable()
       .optional(),
+    // COMPAT(relatedPullRequests): added in v0.8.1. Gate consumers on
+    // server_info.features.relatedPullRequests; remove that gate once the supported
+    // daemon floor ships this field. A workspace whose change requests form a GitHub
+    // stack, or whose session opened several, reports every one of them here. The
+    // singular `pullRequest` above stays authoritative for the checked-out branch.
+    relatedPullRequests: z
+      .array(
+        z.object({
+          number: z.number(),
+          url: z.string(),
+          title: z.string().optional(),
+          state: z.enum(["open", "merged", "closed"]),
+          isDraft: z.boolean().optional(),
+          headRefName: z.string().optional(),
+          baseRefName: z.string().optional(),
+          additions: z.number().optional(),
+          deletions: z.number().optional(),
+          checksStatus: z.enum(["none", "pending", "success", "failure"]).optional(),
+          // How this change request entered the set. Kept on the wire so the row can
+          // explain itself and so a later curation step can tell derived from chosen.
+          origin: z.enum(["stack", "branch", "current", "manual"]),
+          // Position in the GitHub stack, bottom first. Absent for unstacked entries.
+          stackIndex: z.number().optional(),
+        }),
+      )
+      .optional(),
     error: z
       .object({
         message: z.string(),
@@ -3996,6 +4223,20 @@ export const WorkspaceDescriptorPayloadSchema = z
     pinnedAt: z.string().nullable().optional(),
     // COMPAT(workspaceLabels): added in v0.5.0, remove optional after 2027-08-14.
     labels: z.array(z.string()).optional(),
+    // COMPAT(workspaceForgeAccount): added in v0.8.1, remove optional after 2027-06-30.
+    // Config directory of the forge CLI account this workspace speaks to, so a
+    // work and a private GitHub account can live on one machine. Null means the
+    // machine's default account.
+    forgeConfigDir: z.string().nullable().optional(),
+    // COMPAT(forgeAccountScope): added in v0.8.1, remove optional after 2027-06-30.
+    // The account this workspace's project sets, which applies whenever
+    // forgeConfigDir is null. Sent so the picker can show what a workspace
+    // inherits instead of claiming it uses the machine default.
+    projectForgeConfigDir: z.string().nullable().optional(),
+    // COMPAT(workspacePullRequestCuration): added in v0.8.1, remove optional after 2027-06-30.
+    // Which change requests this workspace was told to keep in its set and
+    // which to drop, so the set survives an app restart.
+    pullRequestCuration: PullRequestCurationSchema.nullable().optional(),
     archivingAt: z.string().nullable().optional().default(null),
     status: WorkspaceStateBucketSchema,
     // Best-effort workspace status entry timestamp. Old daemons omit the
@@ -5040,6 +5281,8 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
+      /** Set when the daemon refused part of the patch, e.g. a rejected System One key. */
+      error: z.string().optional(),
     })
     .passthrough(),
 });
@@ -6732,6 +6975,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HubExecutionAgentUpdateSchema,
   HubExecutionAgentStreamSchema,
   BrowserAutomationExecuteRequestSchema,
+  BrowserRemoteExecuteResponseSchema,
   PluginCatalogGetResponseSchema,
   PluginListResponseSchema,
   PluginLogsGetResponseSchema,
@@ -6797,6 +7041,12 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceScriptListResponseMessageSchema,
   WorkspaceScriptStartResponseMessageSchema,
   WorkspaceScriptStopResponseMessageSchema,
+  VerifyEvidenceArtifactGetResponseSchema,
+  VerifyEvidenceRunListResponseSchema,
+  VerifyRecipeListResponseSchema,
+  VerifyRecipeRunResponseSchema,
+  BrowserImportListSourcesResponseSchema,
+  BrowserImportCookiesResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
@@ -6836,6 +7086,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WriteProjectConfigResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
   SetAgentModelResponseMessageSchema,
+  SetAgentProviderResponseMessageSchema,
   SetAgentThinkingResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
@@ -6847,6 +7098,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectRemoveResponseSchema,
   WorkspaceTitleSetResponseSchema,
   WorkspacePinSetResponseSchema,
+  WorkspaceForgeAccountSetResponseSchema,
+  ForgeAccountListResponseSchema,
+  WorkspacePullRequestsCurateResponseSchema,
   WorkspaceRecoveryInspectResponseSchema,
   WorkspaceRecoveryRestoreResponseSchema,
   WaitForFinishResponseMessageSchema,
@@ -7006,6 +7260,25 @@ export type StartWorkspaceScriptResponseMessage = z.infer<
 export type WorkspaceScriptListRequest = z.infer<typeof WorkspaceScriptListRequestSchema>;
 export type WorkspaceScriptStartRequest = z.infer<typeof WorkspaceScriptStartRequestSchema>;
 export type WorkspaceScriptStopRequest = z.infer<typeof WorkspaceScriptStopRequestSchema>;
+export type {
+  VerifyCheckResult,
+  VerifyRecipeSummary,
+  VerifyRunResult,
+} from "./verify/rpc-schemas.js";
+export type VerifyRecipeListRequest = z.infer<typeof VerifyRecipeListRequestSchema>;
+export type VerifyRecipeRunRequest = z.infer<typeof VerifyRecipeRunRequestSchema>;
+export type VerifyEvidenceRunListRequest = z.infer<typeof VerifyEvidenceRunListRequestSchema>;
+export type VerifyEvidenceArtifactGetRequest = z.infer<
+  typeof VerifyEvidenceArtifactGetRequestSchema
+>;
+export type VerifyRecipeListResponseMessage = z.infer<typeof VerifyRecipeListResponseSchema>;
+export type VerifyRecipeRunResponseMessage = z.infer<typeof VerifyRecipeRunResponseSchema>;
+export type VerifyEvidenceRunListResponseMessage = z.infer<
+  typeof VerifyEvidenceRunListResponseSchema
+>;
+export type VerifyEvidenceArtifactGetResponseMessage = z.infer<
+  typeof VerifyEvidenceArtifactGetResponseSchema
+>;
 export type WorkspaceScriptListResponseMessage = z.infer<
   typeof WorkspaceScriptListResponseMessageSchema
 >;
@@ -7035,6 +7308,7 @@ export type SendAgentMessageResponseMessage = z.infer<typeof SendAgentMessageRes
 export type SetVoiceModeResponseMessage = z.infer<typeof SetVoiceModeResponseMessageSchema>;
 export type SetAgentModeResponseMessage = z.infer<typeof SetAgentModeResponseMessageSchema>;
 export type SetAgentModelResponseMessage = z.infer<typeof SetAgentModelResponseMessageSchema>;
+export type SetAgentProviderResponseMessage = z.infer<typeof SetAgentProviderResponseMessageSchema>;
 export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
@@ -7049,6 +7323,16 @@ export type WorkspaceTitleSetResponsePayload = z.infer<
   typeof WorkspaceTitleSetResponsePayloadSchema
 >;
 export type WorkspacePinSetResponse = z.infer<typeof WorkspacePinSetResponseSchema>;
+export type WorkspacePullRequestsCurateRequest = z.infer<
+  typeof WorkspacePullRequestsCurateRequestSchema
+>;
+export type WorkspacePullRequestsCurateResponse = z.infer<
+  typeof WorkspacePullRequestsCurateResponseSchema
+>;
+export type PullRequestCuration = z.infer<typeof PullRequestCurationSchema>;
+export type WorkspaceForgeAccountSetResponse = z.infer<
+  typeof WorkspaceForgeAccountSetResponseSchema
+>;
 export type WorkspacePinSetResponsePayload = z.infer<typeof WorkspacePinSetResponsePayloadSchema>;
 export type WorkspaceRecoveryState = z.infer<typeof WorkspaceRecoveryStateSchema>;
 export type WorkspaceRecoveryInspectResponse = z.infer<
@@ -7196,10 +7480,16 @@ export type ProjectIconSetRequest = z.infer<typeof ProjectIconSetRequestSchema>;
 export type ProjectRemoveRequest = z.infer<typeof ProjectRemoveRequestSchema>;
 export type WorkspaceTitleSetRequest = z.infer<typeof WorkspaceTitleSetRequestSchema>;
 export type WorkspacePinSetRequest = z.infer<typeof WorkspacePinSetRequestSchema>;
+export type WorkspaceForgeAccountSetRequest = z.infer<typeof WorkspaceForgeAccountSetRequestSchema>;
+export type ForgeAccount = z.infer<typeof ForgeAccountSchema>;
+export type ForgeAccountScope = z.infer<typeof ForgeAccountScopeSchema>;
+export type ForgeAccountListRequest = z.infer<typeof ForgeAccountListRequestSchema>;
+export type ForgeAccountListResponse = z.infer<typeof ForgeAccountListResponseSchema>;
 export type WorkspaceRecoveryInspectRequest = z.infer<typeof WorkspaceRecoveryInspectRequestSchema>;
 export type WorkspaceRecoveryRestoreRequest = z.infer<typeof WorkspaceRecoveryRestoreRequestSchema>;
 export type SetAgentModeRequestMessage = z.infer<typeof SetAgentModeRequestMessageSchema>;
 export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMessageSchema>;
+export type SetAgentProviderRequestMessage = z.infer<typeof SetAgentProviderRequestMessageSchema>;
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;

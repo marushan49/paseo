@@ -1,5 +1,15 @@
 import { searchTimeline } from "./agent/chat-search/index.js";
+import { isSystemOneExcluded } from "./system-one/scope.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import { browserToolsFailure } from "./browser-tools/errors.js";
+import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
+import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
+import type { EvidenceStore } from "./verify/evidence-store.js";
+import { VerifySession } from "./verify/verify-session.js";
+import {
+  handleBrowserImportCookies,
+  handleBrowserImportListSources,
+} from "./browser-import/browser-import-session.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import { relative } from "node:path";
@@ -9,6 +19,18 @@ import type { CreationSnapshot, AgentCreateRequest } from "@getpaseo/protocol/me
 import type { MessageReceipts } from "./message-receipts/index.js";
 import equal from "fast-deep-equal";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
+import type { ForgeAccount, ForgeAccountScope } from "@getpaseo/protocol/messages";
+import { discoverForgeAccounts } from "./forge-account-discovery.js";
+import { readGhAuthStatus } from "../services/github-service.js";
+import { normalizePullRequestCuration } from "./workspace-pull-request-curation.js";
+import {
+  buildCuratedOnlyGitHubRuntime,
+  mergeCuratedPullRequestFacts,
+  resolveWorkspacePullRequestSet,
+  selectCuratedPullRequestFacts,
+  type CuratedPullRequestFacts,
+} from "./workspace-pull-request-set.js";
+import { normalizeForgeConfigDir } from "./workspace-forge-account.js";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import { basename, resolve, sep } from "path";
@@ -27,6 +49,10 @@ import {
   type WorkspaceScriptListRequest,
   type WorkspaceScriptStartRequest,
   type WorkspaceScriptStopRequest,
+  type VerifyEvidenceArtifactGetRequest,
+  type VerifyEvidenceRunListRequest,
+  type VerifyRecipeListRequest,
+  type VerifyRecipeRunRequest,
   type CloseItemsRequest,
   type DirectorySuggestionsRequest,
   type ProjectPlacementPayload,
@@ -71,6 +97,12 @@ import {
   type WorkspaceScriptsService,
 } from "./session/workspace-scripts/workspace-scripts-service.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
+import { ResourcePolicyRuntime } from "./resource-policy.js";
+import { SystemOneCredentialStore } from "./system-one/credential-store.js";
+import {
+  createConfiguredSystemOneDecisionSource,
+  isTypeSafeApiKeyAccepted,
+} from "./system-one/tools.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
@@ -435,6 +467,8 @@ type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
   browserToolsBroker?: BrowserToolsBroker | null;
+  verifyHost?: DaemonPlaywrightHost | null;
+  verifyEvidence?: EvidenceStore | null;
   clientId: string;
   permissions: readonly DaemonPermission[];
   appVersion?: string | null;
@@ -470,6 +504,7 @@ export interface SessionOptions {
   workspaceGitService: WorkspaceGitService;
   workspaceAutoName: WorkspaceAutoName;
   daemonConfigStore: DaemonConfigStore;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   pluginRuntime?: {
     before: import("./plugins/lifecycle/index.js").PluginLifecycle["before"];
     emit: import("./plugins/lifecycle/index.js").PluginLifecycle["emit"];
@@ -660,6 +695,18 @@ interface ClientActivity {
   appVisibilityChangedAt: Date;
 }
 
+function resolveResourcePolicyRuntime(
+  daemonConfigStore: DaemonConfigStore,
+  resourcePolicyRuntime: SessionOptions["resourcePolicyRuntime"],
+): Pick<ResourcePolicyRuntime, "checkStatusRead"> {
+  return (
+    resourcePolicyRuntime ??
+    new ResourcePolicyRuntime({
+      getPolicy: () => daemonConfigStore.get().resourcePolicy ?? "balanced",
+    })
+  );
+}
+
 export class Session {
   readonly delivery = new SessionDelivery(
     (source, message) => {
@@ -686,6 +733,8 @@ export class Session {
       ),
   );
   private readonly browserToolsBroker: SessionOptions["browserToolsBroker"];
+  private readonly verifySession: VerifySession | null;
+  private readonly verifyHost: DaemonPlaywrightHost | null | undefined;
   private readonly clientId: string;
   private readonly authorization: SessionAuthorization;
   private appVersion: string | null;
@@ -711,6 +760,7 @@ export class Session {
   private readonly rewindInitiators = new Map<string, object | undefined>();
 
   private agentManager: AgentManager;
+  private readonly scheduleService: ScheduleService;
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -724,6 +774,7 @@ export class Session {
   private readonly workspaceProvisioning: WorkspaceProvisioningService;
   private readonly workspaceRecovery: WorkspaceRecoveryService;
   private readonly daemonConfigStore: DaemonConfigStore;
+  private readonly resourcePolicyRuntime: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
@@ -882,6 +933,7 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.agentManager = agentManager;
+    this.scheduleService = scheduleService;
     this.agentStorage = agentStorage;
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
@@ -1002,6 +1054,9 @@ export class Session {
         setMode: async (agentId, modeId) =>
           (await setAgentModeCommand({ agentManager }, { agentId, modeId })).notice,
         setModel: (agentId, modelId) => agentManager.setAgentModel(agentId, modelId),
+        setProvider: async (agentId, provider, modelId) => {
+          await agentManager.setAgentProvider(agentId, provider, modelId);
+        },
         setFeature: (agentId, featureId, value) =>
           agentManager.setAgentFeature(agentId, featureId, value),
         setThinking: (agentId, thinkingOptionId) =>
@@ -1060,6 +1115,10 @@ export class Session {
         })
       : null;
     this.daemonConfigStore = daemonConfigStore;
+    this.resourcePolicyRuntime = resolveResourcePolicyRuntime(
+      daemonConfigStore,
+      options.resourcePolicyRuntime,
+    );
     this.terminalManager = terminalManager;
     this.terminalController = new TerminalSessionController({
       terminalManager,
@@ -1152,6 +1211,8 @@ export class Session {
       isProviderVisibleToClient: (provider) => this.isProviderVisibleToClient(provider),
       buildWorkspaceDescriptor: (input) => this.buildWorkspaceDescriptor(input),
     });
+    this.verifySession = this.createVerifySession(options);
+    this.verifyHost = options.verifyHost;
 
     this.voiceSessions = new VoiceSessions(
       {
@@ -1250,9 +1311,13 @@ export class Session {
   private subscribeAgentTimelines(agentIds: string[]): OwnedSubscription {
     const owner = this.delivery.begin("timelines", undefined, (id) => {
       this.timelineSubscriptions.delete(id);
+      // The client subscribes to the timelines it renders, so releasing them is
+      // the moment nobody is reading these agents any more.
+      this.scheduleService.releaseViewedAgents(id);
       this.refreshObservationProducers();
     });
     this.timelineSubscriptions.set(owner.id, { owner, agentIds: new Set(agentIds) });
+    this.scheduleService.markAgentsViewed(owner.id, agentIds);
     this.refreshObservationProducers();
     return owner;
   }
@@ -2248,6 +2313,7 @@ export class Session {
     msg: SessionInboundMessage,
     source?: object,
   ): Promise<void> | undefined {
+    if (msg.type === "browser.remote.execute.request") return this.executeRemoteBrowser(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
       if (source)
@@ -2269,6 +2335,23 @@ export class Session {
     return undefined;
   }
 
+  private async executeRemoteBrowser(
+    request: Extract<SessionInboundMessage, { type: "browser.remote.execute.request" }>,
+  ): Promise<void> {
+    const payload = this.browserToolsBroker
+      ? await this.browserToolsBroker.execute({
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          command: request.command,
+        })
+      : browserToolsFailure({
+          requestId: request.requestId,
+          code: "browser_unsupported",
+          message: "Remote browser hosting is unavailable.",
+        });
+    this.emit({ type: "browser.remote.execute.response", payload });
+  }
+
   private async dispatchInboundMessage(msg: SessionInboundMessage, source?: object): Promise<void> {
     const promise =
       this.dispatchSubscriptionMessage(msg, source) ??
@@ -2288,7 +2371,7 @@ export class Session {
       this.dispatchPluginDirectoryMessage(msg) ??
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
-      this.dispatchScheduleMessage(msg) ??
+      this.dispatchAutomationMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -2747,6 +2830,8 @@ export class Session {
         return this.agentConfigSession.handleSetAgentModeRequest(msg);
       case "set_agent_model_request":
         return this.agentConfigSession.handleSetAgentModelRequest(msg);
+      case "set_agent_provider_request":
+        return this.agentConfigSession.handleSetAgentProviderRequest(msg);
       case "set_agent_feature_request":
         return this.agentConfigSession.handleSetAgentFeatureRequest(msg);
       case "set_agent_thinking_request":
@@ -2776,14 +2861,7 @@ export class Session {
       case "daemon.update.request":
         return this.daemonSession.handleUpdateRequest(msg);
       case "set_daemon_config_request":
-        this.emit({
-          type: "set_daemon_config_response",
-          payload: {
-            requestId: msg.requestId,
-            config: this.daemonConfigStore.patch(msg.config),
-          },
-        });
-        return undefined;
+        return this.handleSetDaemonConfigRequest(msg);
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
@@ -2791,6 +2869,45 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private async handleSetDaemonConfigRequest(
+    msg: Extract<SessionInboundMessage, { type: "set_daemon_config_request" }>,
+  ): Promise<undefined> {
+    const { systemOneApiKey, ...configPatch } = msg.config;
+    if (
+      typeof systemOneApiKey === "string" &&
+      !(await isTypeSafeApiKeyAccepted(
+        systemOneApiKey,
+        configPatch.systemOne?.model ??
+          this.daemonConfigStore.get().systemOne?.model ??
+          "jev-latest",
+      ))
+    ) {
+      this.emit({
+        type: "set_daemon_config_response",
+        payload: {
+          requestId: msg.requestId,
+          config: this.daemonConfigStore.get(),
+          error: "TypeSafe rejected this API key. Nothing was saved.",
+        },
+      });
+      return undefined;
+    }
+    if (systemOneApiKey !== undefined) {
+      const credentialStore = new SystemOneCredentialStore(this.paseoHome);
+      const status =
+        systemOneApiKey === null ? credentialStore.clear() : credentialStore.set(systemOneApiKey);
+      this.daemonConfigStore.setSystemOneCredentialStatus(status);
+    }
+    this.emit({
+      type: "set_daemon_config_response",
+      payload: {
+        requestId: msg.requestId,
+        config: this.daemonConfigStore.patch(configPatch),
+      },
+    });
+    return undefined;
   }
 
   // eslint-disable-next-line complexity
@@ -2897,6 +3014,22 @@ export class Session {
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
         return this.handleWorkspacePinSetRequest(msg.workspaceId, msg.pinned, msg.requestId);
+      case "workspace.forge_account.set.request":
+        return this.handleWorkspaceForgeAccountSetRequest(
+          msg.workspaceId,
+          msg.forgeConfigDir,
+          msg.scope,
+          msg.requestId,
+        );
+      case "forge.accounts.list.request":
+        return this.handleForgeAccountListRequest(msg.requestId);
+      case "workspace.pull_requests.curate.request":
+        return this.handleWorkspacePullRequestsCurateRequest(
+          msg.workspaceId,
+          { added: [...msg.curation.added], removed: [...msg.curation.removed] },
+          msg.facts,
+          msg.requestId,
+        );
       default:
         return undefined;
     }
@@ -3015,6 +3148,138 @@ export class Session {
       default:
         return this.terminalController.dispatch(msg, this.delivery);
     }
+  }
+
+  private createVerifySession(options: SessionOptions): VerifySession | null {
+    if (!options.verifyHost || !options.verifyEvidence) {
+      return null;
+    }
+    const host = options.verifyHost;
+    const evidence = options.verifyEvidence;
+    return new VerifySession({
+      workspaceRegistry: this.workspaceRegistry,
+      workspaceScripts: this.workspaceScripts,
+      host,
+      evidence,
+      isBrowserToolsEnabled: () =>
+        new DaemonConfigBrowserToolsPolicy(this.daemonConfigStore).isEnabled(),
+      emit: (message) => this.emit(message),
+      isGoalAllowed: (cwd) => !isSystemOneExcluded(this.paseoHome, cwd),
+      goal: {
+        decisionSource: createConfiguredSystemOneDecisionSource(
+          this.paseoHome,
+          this.daemonConfigStore,
+        ),
+        minConfidence: () => this.daemonConfigStore.get().systemOne?.minimumConfidence ?? 0.5,
+      },
+    });
+  }
+
+  private dispatchVerifyMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "verify.recipe.list.request":
+        return this.handleVerifyRecipeListRequest(msg);
+      case "verify.recipe.run.request":
+        return this.handleVerifyRecipeRunRequest(msg);
+      case "verify.evidence.run.list.request":
+        return this.handleVerifyEvidenceRunListRequest(msg);
+      case "verify.evidence.artifact.get.request":
+        return this.handleVerifyEvidenceArtifactGetRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchAutomationMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return (
+      this.dispatchVerifyMessage(msg) ??
+      this.dispatchBrowserImportMessage(msg) ??
+      this.dispatchScheduleMessage(msg)
+    );
+  }
+
+  private dispatchBrowserImportMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    const deps = {
+      host: this.verifyHost,
+      emit: (message: SessionOutboundMessage) => this.emit(message),
+    };
+    switch (msg.type) {
+      case "browser.import.list_sources.request":
+        return handleBrowserImportListSources(msg, deps);
+      case "browser.import.import_cookies.request":
+        return handleBrowserImportCookies(msg, deps);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleVerifyRecipeListRequest(request: VerifyRecipeListRequest): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.recipe.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          recipes: [],
+          error: "Verification recipes are unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleListRequest(request);
+  }
+
+  private async handleVerifyRecipeRunRequest(request: VerifyRecipeRunRequest): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.recipe.run.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          result: null,
+          error: "Verification recipes are unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleRunRequest(request);
+  }
+
+  private async handleVerifyEvidenceRunListRequest(
+    request: VerifyEvidenceRunListRequest,
+  ): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.evidence.run.list.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          runs: [],
+          error: "Verification evidence is unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleEvidenceRunListRequest(request);
+  }
+
+  private async handleVerifyEvidenceArtifactGetRequest(
+    request: VerifyEvidenceArtifactGetRequest,
+  ): Promise<void> {
+    if (!this.verifySession) {
+      this.emit({
+        type: "verify.evidence.artifact.get.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          artifact: null,
+          dataBase64: null,
+          error: "Verification evidence is unavailable on this daemon.",
+        },
+      });
+      return;
+    }
+    await this.verifySession.handleEvidenceArtifactGetRequest(request);
   }
 
   private dispatchScheduleMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -3772,6 +4037,182 @@ export class Session {
         },
       });
       emitResponse(false, null, getErrorMessageOr(error, "Failed to pin workspace"));
+    }
+  }
+
+  private async handleWorkspacePullRequestsCurateRequest(
+    workspaceId: string,
+    curation: { added: number[]; removed: number[] },
+    facts: readonly CuratedPullRequestFacts[] | undefined,
+    requestId: string,
+  ): Promise<void> {
+    const logContext = { workspaceId, requestId };
+    this.sessionLogger.info(logContext, "session: workspace.pull_requests.curate.request");
+    const emitResponse = (
+      accepted: boolean,
+      stored: { added: number[]; removed: number[] } | null,
+      error: string | null,
+    ) => {
+      this.emit({
+        type: "workspace.pull_requests.curate.response",
+        payload: { requestId, workspaceId, accepted, curation: stored, error },
+      });
+    };
+
+    const normalized = normalizePullRequestCuration(curation);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      // The facts travel with the decision. A number the daemon cannot draw is
+      // a decision nobody can see, which is what made an attached pull request
+      // vanish on the way back from the record.
+      const storedFacts = selectCuratedPullRequestFacts(normalized, facts);
+      const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
+        ...existing,
+        pullRequestCuration: normalized,
+        pullRequestFacts: mergeCuratedPullRequestFacts(
+          existing.pullRequestFacts,
+          storedFacts,
+          normalized,
+        ),
+        updatedAt,
+      }));
+      if (!updated) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+      emitResponse(true, normalized, null);
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: workspace.pull_requests.curate.request error",
+      );
+      emitResponse(
+        false,
+        null,
+        getErrorMessageOr(error, "Failed to store the workspace's pull requests"),
+      );
+    }
+  }
+
+  /**
+   * The logins this host can offer a workspace. Directories already pinned by a
+   * workspace are probed too, so one that lives outside `~/.config` still shows
+   * up as the current choice instead of silently vanishing from the picker.
+   */
+  private async handleForgeAccountListRequest(requestId: string): Promise<void> {
+    const emit = (accounts: ForgeAccount[], error: string | null) => {
+      this.emit({ type: "forge.accounts.list.response", payload: { requestId, accounts, error } });
+    };
+    try {
+      const workspaces = await this.workspaceRegistry.list();
+      const accounts = await discoverForgeAccounts({
+        readAuthStatus: readGhAuthStatus,
+        extraCandidates: workspaces.map((workspace) => workspace.forgeConfigDir),
+      });
+      emit(accounts, null);
+    } catch (error) {
+      this.sessionLogger.error({ err: error, requestId }, "session: forge.accounts.list error");
+      emit([], getErrorMessageOr(error, "Failed to list forge accounts"));
+    }
+  }
+
+  private async handleWorkspaceForgeAccountSetRequest(
+    workspaceId: string,
+    forgeConfigDir: string,
+    requestedScope: ForgeAccountScope | undefined,
+    requestId: string,
+  ): Promise<void> {
+    const scope: ForgeAccountScope = requestedScope ?? "workspace";
+    const logContext = { workspaceId, requestId, scope };
+    this.sessionLogger.info(logContext, "session: workspace.forge_account.set.request");
+    const emitResponse = (
+      accepted: boolean,
+      storedConfigDir: string | null,
+      error: string | null,
+      storedScope: ForgeAccountScope = scope,
+    ) => {
+      this.emit({
+        type: "workspace.forge_account.set.response",
+        payload: {
+          requestId,
+          workspaceId,
+          accepted,
+          forgeConfigDir: storedConfigDir,
+          scope: storedScope,
+          error,
+        },
+      });
+    };
+
+    // Normalize before storing so every later reader gets the same directory,
+    // and so a path we would silently ignore is rejected while the user is
+    // still looking at the field.
+    const normalized = normalizeForgeConfigDir(forgeConfigDir);
+    if (forgeConfigDir.trim().length > 0 && normalized === null) {
+      emitResponse(false, null, "Enter an absolute directory, for example ~/.config/gh-work");
+      return;
+    }
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      if (!workspace) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+
+      if (scope === "project") {
+        const project = await this.projectRegistry.update(workspace.projectId, (existing) => ({
+          ...existing,
+          forgeConfigDir: normalized,
+          updatedAt,
+        }));
+        if (!project) {
+          emitResponse(false, null, "Project not found");
+          return;
+        }
+        // A workspace override would mask the project choice the user just
+        // made, which reads as the setting having done nothing. Choosing for
+        // the project is choosing for its workspaces.
+        const affected = (await this.workspaceRegistry.list())
+          .filter((record) => record.projectId === workspace.projectId)
+          .filter((record) => record.forgeConfigDir !== null)
+          .map((record) => record.workspaceId);
+        for (const affectedId of affected) {
+          await this.workspaceRegistry.update(affectedId, (existing) => ({
+            ...existing,
+            forgeConfigDir: null,
+            updatedAt,
+          }));
+        }
+        emitResponse(true, normalized, null);
+        await this.emitWorkspaceUpdatesForWorkspaceIds([...new Set([workspaceId, ...affected])]);
+        return;
+      }
+
+      const updated = await this.workspaceRegistry.update(workspaceId, (existing) => ({
+        ...existing,
+        forgeConfigDir: normalized,
+        updatedAt,
+      }));
+      if (!updated) {
+        emitResponse(false, null, "Workspace not found");
+        return;
+      }
+      emitResponse(true, normalized, null);
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+    } catch (error) {
+      this.sessionLogger.error(
+        { ...logContext, err: error },
+        "session: workspace.forge_account.set.request error",
+      );
+      emitResponse(
+        false,
+        null,
+        getErrorMessageOr(error, "Failed to set the workspace's GitHub account"),
+      );
     }
   }
 
@@ -5516,6 +5957,7 @@ export class Session {
         : workspace.projectId,
       projectCustomName: resolvedProjectRecord?.customName ?? null,
       projectCustomIconRevision: resolvedProjectRecord?.customIconRevision ?? null,
+      projectForgeConfigDir: projectForgeConfigDirOf(resolvedProjectRecord),
       projectRootPath: resolvedProjectRecord?.rootPath ?? workspace.cwd,
       workspaceDirectory: workspace.cwd,
       worktreeSlug,
@@ -5524,6 +5966,8 @@ export class Session {
       name: resolveWorkspaceDisplayName(workspace),
       title: workspace.title,
       pinnedAt: workspace.pinnedAt,
+      forgeConfigDir: workspace.forgeConfigDir,
+      pullRequestCuration: workspace.pullRequestCuration,
       ...(workspace.labels && workspace.labels.length > 0 ? { labels: workspace.labels } : {}),
       archivingAt: null,
       status: "done",
@@ -5531,6 +5975,10 @@ export class Session {
       activityAt: null,
       diffStat,
       scripts: this.buildWorkspaceScriptPayloadSnapshot(workspace, resolvedProjectRecord),
+      // A workspace sitting on a plain directory gets no derived set, but what
+      // someone attached to it by hand is still its set. Leaving this out is
+      // what made an attached pull request invisible on exactly those rows.
+      ...buildCuratedOnlyGitHubRuntime(workspace),
       ...(resolvedProjectRecord
         ? {
             project: await this.buildProjectPlacementForWorkspace(workspace, resolvedProjectRecord),
@@ -5557,12 +6005,23 @@ export class Session {
     };
   }
 
+  /**
+   * The set a row draws, which is the derived one with the workspace's own
+   * decisions applied. Applying them here rather than in each client is what
+   * makes a set assembled on one machine show up on the next.
+   */
   private buildWorkspaceGitHubRuntimePayload(
     snapshot: WorkspaceGitRuntimeSnapshot,
+    workspace: PersistedWorkspaceRecord,
   ): NonNullable<WorkspaceDescriptorPayload["githubRuntime"]> {
+    const relatedPullRequests = resolveWorkspacePullRequestSet(
+      snapshot.forge.relatedPullRequests,
+      workspace,
+    );
     return {
       featuresEnabled: snapshot.forge.featuresEnabled,
       pullRequest: snapshot.forge.pullRequest,
+      ...(relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
       error: snapshot.forge.error,
     };
   }
@@ -5585,7 +6044,7 @@ export class Session {
       name: resolveWorkspaceName({ title: workspace.title, derivedDisplayName: displayName }),
       diffStat: snapshot.git.diffStat ?? null,
       gitRuntime: this.buildWorkspaceGitRuntimePayload(snapshot) ?? undefined,
-      githubRuntime: this.buildWorkspaceGitHubRuntimePayload(snapshot),
+      githubRuntime: this.buildWorkspaceGitHubRuntimePayload(snapshot, workspace),
       // Reuse the forge already resolved on the snapshot (probe-aware; GitHub-only
       // resolves to "github") so the sidebar/hover-card brand mark matches the
       // status projection without a second resolve.
@@ -5605,6 +6064,7 @@ export class Session {
         : result.workspace.projectId,
       projectCustomName: projectRecord?.customName ?? null,
       projectCustomIconRevision: projectRecord?.customIconRevision ?? null,
+      projectForgeConfigDir: projectForgeConfigDirOf(projectRecord),
       projectRootPath: projectRecord?.rootPath ?? result.repoRoot,
       workspaceDirectory: result.workspace.cwd,
       worktreeSlug: basename(result.worktree.worktreePath),
@@ -5616,6 +6076,8 @@ export class Session {
       }),
       title: result.workspace.title,
       pinnedAt: result.workspace.pinnedAt,
+      forgeConfigDir: result.workspace.forgeConfigDir,
+      pullRequestCuration: result.workspace.pullRequestCuration,
       ...(result.workspace.labels && result.workspace.labels.length > 0
         ? { labels: result.workspace.labels }
         : {}),
@@ -6089,26 +6551,52 @@ export class Session {
     await this.emitWorkspaceUpdatesForWorkspaceIds(workspaceIds, options);
   }
 
+  private assertResourcePolicyStatusReadAllowed(
+    request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
+  ): void {
+    const statusRead = this.resourcePolicyRuntime.checkStatusRead({
+      consumerId: this.clientId,
+      requestKey: JSON.stringify({
+        scope: request.scope ?? null,
+        filter: request.filter ?? null,
+        sort: request.sort ?? null,
+        sync: request.sync ?? null,
+      }),
+    });
+    if (!statusRead.allowed) {
+      throw new SessionRequestError(
+        "resource_policy_status_limit",
+        statusRead.reason ?? "The resource policy limits status reads.",
+      );
+    }
+  }
+
   private async handleFetchAgents(
     request: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>,
   ): Promise<void> {
-    const owner = request.subscribe
-      ? this.delivery.begin("agents", request.subscribe.subscriptionId, (id) => {
-          this.agentUpdates.clearSubscription(id);
-          this.refreshObservationProducers();
-        })
-      : null;
-    const subscriptionId = owner?.responseId;
+    let owner: ReturnType<SessionDelivery["begin"]> | null = null;
+    let subscriptionId: string | undefined;
     try {
+      this.assertResourcePolicyStatusReadAllowed(request);
+      owner = request.subscribe
+        ? this.delivery.begin("agents", request.subscribe.subscriptionId, (id) => {
+            this.agentUpdates.clearSubscription(id);
+            this.refreshObservationProducers();
+          })
+        : null;
+      subscriptionId = owner?.responseId;
       if (owner) {
+        const subscriptionOwner = owner;
         this.agentUpdates.beginSubscription({
-          subscriptionId: owner.id,
+          subscriptionId: subscriptionOwner.id,
           isProviderVisible: (provider) =>
-            this.delivery.forSource(owner.source, () => this.isProviderVisibleToClient(provider)),
+            this.delivery.forSource(subscriptionOwner.source, () =>
+              this.isProviderVisibleToClient(provider),
+            ),
           filter: request.filter,
           syncEnabled: Boolean(request.sync),
           emit: (message) => {
-            if (message.type === "agent_update") owner.emit(message);
+            if (message.type === "agent_update") subscriptionOwner.emit(message);
           },
         });
         this.refreshObservationProducers();
@@ -6134,8 +6622,8 @@ export class Session {
         },
       });
 
-      if (subscriptionId) {
-        this.agentUpdates.flushBootstrapped(owner!.id, { snapshotUpdatedAtByAgentId });
+      if (subscriptionId && owner) {
+        this.agentUpdates.flushBootstrapped(owner.id, { snapshotUpdatedAtByAgentId });
       }
     } catch (error) {
       if (subscriptionId) {
@@ -8539,4 +9027,11 @@ function legacyWantsEvent(
     default:
       return true;
   }
+}
+
+/** The account a project lends its workspaces; null means it lends none. */
+function projectForgeConfigDirOf(
+  project: { forgeConfigDir: string | null } | null | undefined,
+): string | null {
+  return project?.forgeConfigDir ?? null;
 }

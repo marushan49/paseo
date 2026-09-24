@@ -12,6 +12,8 @@ import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.j
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protocol/agent-profile";
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
+import { ResourcePolicySchema } from "@getpaseo/protocol/resource-policy";
+import type { ResourcePolicy } from "@getpaseo/protocol/resource-policy";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -250,6 +252,29 @@ export const PersistedConfigSchema = z
           })
           .passthrough()
           .optional(),
+        systemOne: z
+          .object({
+            enabled: z.boolean().optional(),
+            model: z.string().trim().min(1).optional(),
+            minimumConfidence: z.number().min(0).max(1).optional(),
+            excludedPaths: z.array(z.string().trim().min(1)).optional(),
+            // Log Jev's prediction of every agent's next step against what it really did.
+            shadow: z.boolean().optional(),
+            // Per provider, cheapest first; Jev picks a rung for every turn.
+            routing: z
+              .record(
+                z.string().min(1),
+                z
+                  .object({
+                    models: z.array(z.string().trim().min(1)).min(2),
+                    thinking: z.array(z.string().trim().min(1)).min(2).optional(),
+                  })
+                  .strict(),
+              )
+              .optional(),
+          })
+          .strict()
+          .optional(),
         git: z
           .object({
             maxProcessesPerSecond: z.number().int().positive().optional(),
@@ -260,6 +285,11 @@ export const PersistedConfigSchema = z
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
+        resourcePolicy: ResourcePolicySchema.default("balanced"),
+        // COMPAT(allowScheduledAutomation): added in v0.8.1, remove optional after
+        // 2027-06-30. Has the final word on schedules in both directions;
+        // undefined follows resourcePolicy. See schedule/automation-gate.ts.
+        allowScheduledAutomation: z.boolean().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z
@@ -333,7 +363,12 @@ export const PersistedConfigSchema = z
 
 type PersistedConfigSchemaOutput = z.infer<typeof PersistedConfigSchema>;
 
-export type PersistedConfig = Omit<PersistedConfigSchemaOutput, "agents"> & {
+type PersistedDaemonConfig = NonNullable<PersistedConfigSchemaOutput["daemon"]>;
+
+export type PersistedConfig = Omit<PersistedConfigSchemaOutput, "agents" | "daemon"> & {
+  daemon?: Omit<PersistedDaemonConfig, "resourcePolicy"> & {
+    resourcePolicy?: ResourcePolicy;
+  };
   agents?: Omit<NonNullable<PersistedConfigSchemaOutput["agents"]>, "providers"> & {
     providers?: AgentProviderRuntimeSettingsMap;
   };
@@ -350,6 +385,7 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
     relay: {
       enabled: false,
     },
+    resourcePolicy: "balanced",
   },
   app: {
     baseUrl: "https://app.paseo.sh",

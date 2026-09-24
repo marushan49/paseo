@@ -1,3 +1,4 @@
+import { DAEMON_BROWSER_HOST_ID } from "./host-preference.js";
 import { randomUUID } from "node:crypto";
 import {
   BrowserAutomationExecuteRequestSchema,
@@ -204,7 +205,7 @@ export class BrowserToolsBroker {
     request: BrowserAutomationExecuteRequest;
     timeoutMs: number;
   }): Promise<BrowserToolsResponsePayload> {
-    const hosts = Array.from(this.clients.values());
+    const hosts = this.selectBrowserHosts();
     if (hosts.length === 0) {
       return this.noBrowserHostFailure(params.request.requestId);
     }
@@ -271,7 +272,7 @@ export class BrowserToolsBroker {
     | { ok: true; value: RegisteredBrowserHost }
     | { ok: false; payload: BrowserToolsResponsePayload } {
     if (command.command === "new_tab") {
-      const host = this.selectMostRecentlyRegisteredHost();
+      const host = this.selectDaemonHost() ?? this.selectMostRecentlyRegisteredHost();
       return host
         ? { ok: true, value: host }
         : { ok: false, payload: this.noBrowserHostFailure(requestId) };
@@ -330,6 +331,21 @@ export class BrowserToolsBroker {
         message: `Browser tab ${browserId} is not associated with a connected browser automation host. Call browser_list_tabs and use one of the returned browserId values.`,
       }),
     };
+  }
+
+  /** The host that runs where the code does, when one is registered. */
+  private selectDaemonHost(): RegisteredBrowserHost | null {
+    for (const [id, host] of this.clients) {
+      if (id === DAEMON_BROWSER_HOST_ID) {
+        return host;
+      }
+    }
+    return null;
+  }
+
+  private selectBrowserHosts(): RegisteredBrowserHost[] {
+    const daemonHost = this.selectDaemonHost();
+    return daemonHost ? [daemonHost] : Array.from(this.clients.values());
   }
 
   private selectMostRecentlyRegisteredHost(): RegisteredBrowserHost | null {

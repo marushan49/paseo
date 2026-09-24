@@ -28,6 +28,13 @@ async function openProviderSettingsFromModelSelector(page: Page) {
   const modelBrowser = page.getByTestId("agent-controls-model-browser-sheet");
   await expect(modelBrowser).toBeVisible({ timeout: 10_000 });
 
+  // With several enabled providers the sheet opens at the cross-provider
+  // root, which has no per-provider settings action. Drill into the mock
+  // provider first; a sole provider would already be showing it. The rows
+  // render outside the sheet's own subtree, so target them page-wide.
+  if ((await page.getByRole("button", { name: /Open .* settings/ }).count()) === 0) {
+    await page.getByTestId("model-provider-mock").first().click();
+  }
   await page.getByRole("button", { name: /Open .* settings/ }).click();
   await expect(page.getByTestId("provider-settings-sheet")).toBeVisible({ timeout: 10_000 });
 }
@@ -175,7 +182,10 @@ test.describe("provider settings overlay stack", () => {
       await page.keyboard.press("Escape");
       await expect(settings).not.toBeVisible({ timeout: 10_000 });
       await expect(selector).toBeVisible();
-      await expect(settingsButton).toBeFocused();
+      // The settings sheet returns focus into the still-open selector. Which
+      // control takes it depends on the picker's provider offering, so assert
+      // containment rather than the exact trigger.
+      await expect.poll(() => hasFocusWithin(selector)).toBe(true);
     } finally {
       await session.cleanup();
     }

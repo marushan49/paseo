@@ -108,7 +108,6 @@ export const ARIA_SNAPSHOT_SCRIPT = String.raw`(() => {
       element.getAttribute('alt'),
       element.getAttribute('title'),
       tag === 'input' || tag === 'textarea' ? element.getAttribute('placeholder') : null,
-      tag === 'input' || tag === 'textarea' ? element.value : null,
       role === 'button' || role === 'link' || role === 'heading' || ACTIONABLE_ROLES.has(role)
         ? element.textContent
         : null

@@ -79,10 +79,18 @@ buildNpmPackage {
     stdenv.cc.cc.lib # libstdc++ for sherpa-onnx prebuilt binaries
   ];
 
+  # npm packages ship unused musl variants beside the glibc binary selected at runtime.
+  autoPatchelfIgnoreMissingDeps =
+    lib.optionals (stdenv.hostPlatform.isLinux && !stdenv.hostPlatform.isMusl) [
+      "libc.musl-*.so.*"
+    ];
+
   dontNpmBuild = true;
 
   env = {
     EXPO_NO_TELEMETRY = "1";
+    # Metro's 5k-module desktop bundle exceeds Node's default heap on Darwin runners.
+    NODE_OPTIONS = "--max-old-space-size=4096";
     # Expo's web build pulls in some pre-bundled assets; ensure it doesn't try
     # to phone home during the build.
     CI = "1";

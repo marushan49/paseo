@@ -1,4 +1,11 @@
+import { homedir } from "node:os";
 import { z } from "zod";
+import {
+  parseGhPullRequestList,
+  parseGitHubStackResponse,
+  RELATED_PULL_REQUEST_JSON_FIELDS,
+  type RelatedPullRequestFacts,
+} from "../utils/related-pull-requests.js";
 import {
   isGitHubHost,
   parseGitHubRemoteUrl,
@@ -8,6 +15,7 @@ import { findExecutable } from "../executable-resolution/executable-resolution.j
 import { runGitCommand } from "../utils/run-git-command.js";
 import { execCommand } from "../utils/spawn.js";
 import { resolveSshHostname } from "../utils/ssh-hostname.js";
+import { forgeAccountEnvOverlay } from "../server/workspace-forge-account.js";
 import {
   CLI_AUTH_PROBE_TIMEOUT_MS,
   createForgeCliRunner,
@@ -952,6 +960,13 @@ interface GitHubServiceDependencies {
    * per invocation.
    */
   resolveRepoSlug: (cwd: string) => Promise<string | null>;
+  /**
+   * Config directory of the account this workspace speaks to, or null for the
+   * machine's default. Set as GH_CONFIG_DIR so a work and a private account can
+   * coexist: without it every workspace polls as whichever account is active,
+   * which reads as a missing pull request rather than as the wrong login.
+   */
+  resolveForgeConfigDir: (cwd: string) => Promise<string | null>;
 }
 
 export interface GitHubCommandRunnerOptions {
@@ -1043,6 +1058,7 @@ interface CreateGitHubServiceOptions {
   now?: () => number;
   resolveRepoHost?: (cwd: string) => Promise<string | null>;
   resolveRepoSlug?: (cwd: string) => Promise<string | null>;
+  resolveForgeConfigDir?: (cwd: string) => Promise<string | null>;
 }
 
 type PullRequestCheckRunNode = z.infer<typeof PullRequestCheckRunNodeSchema>;
@@ -1124,6 +1140,7 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     now: options.now ?? Date.now,
     resolveRepoHost: options.resolveRepoHost ?? resolveGitHubEnterpriseHost,
     resolveRepoSlug: options.resolveRepoSlug ?? resolveGitHubSlugFromOrigin,
+    resolveForgeConfigDir: options.resolveForgeConfigDir ?? (async () => null),
   };
   // A resolved enterprise host is cached permanently; a null resolution (no
   // host, or the auth probe said no) expires so `gh auth login --hostname`
@@ -1319,19 +1336,48 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
     // otherwise default to github.com regardless of the resolved repository,
     // which silently queries the wrong server on GitHub Enterprise. GH_HOST is
     // safe even for auto-routing subcommands because it matches the repo's host.
-    const host = await resolveRepoHostCached(runOptions.cwd);
-    const effectiveOptions: GitHubCommandRunnerOptions = host
-      ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, GH_HOST: host } }
-      : runOptions;
-    try {
-      const result = await deps.runner(args, effectiveOptions);
-      return result.stdout.trim();
-    } catch (error) {
-      throw githubCliRunner.normalizeError(error, {
-        args,
-        cwd: runOptions.cwd,
-      });
+    const [host, forgeConfigDir] = await Promise.all([
+      resolveRepoHostCached(runOptions.cwd),
+      deps.resolveForgeConfigDir(runOptions.cwd),
+    ]);
+    const extraOverlay: Record<string, string> = {
+      ...(host ? { GH_HOST: host } : {}),
+      ...forgeAccountEnvOverlay(forgeConfigDir),
+    };
+    const effectiveOptions: GitHubCommandRunnerOptions =
+      Object.keys(extraOverlay).length > 0
+        ? { ...runOptions, envOverlay: { ...runOptions.envOverlay, ...extraOverlay } }
+        : runOptions;
+    // One daemon serves workspaces from several GitHub accounts (e.g. a work
+    // account for company repos, a private one for personal repos). gh only
+    // knows the account from GH_CONFIG_DIR, so retry account-shaped failures
+    // with the next configured directory instead of failing the poll.
+    const configDirs = resolveGhConfigDirChain(effectiveOptions.envOverlay?.GH_CONFIG_DIR);
+    let firstError: unknown = null;
+    for (let index = 0; index < configDirs.length; index += 1) {
+      const dir = configDirs[index];
+      const attemptOptions =
+        dir === undefined
+          ? effectiveOptions
+          : {
+              ...effectiveOptions,
+              envOverlay: { ...effectiveOptions.envOverlay, GH_CONFIG_DIR: dir },
+            };
+      try {
+        const result = await deps.runner(args, attemptOptions);
+        return result.stdout.trim();
+      } catch (error) {
+        const normalized = githubCliRunner.normalizeError(error, {
+          args,
+          cwd: runOptions.cwd,
+        });
+        firstError ??= normalized;
+        if (index + 1 >= configDirs.length || !isGhAccountFallbackError(normalized)) {
+          throw index === 0 ? normalized : (firstError ?? normalized);
+        }
+      }
     }
+    throw firstError;
   }
 
   async function runGhJson<T>(
@@ -2188,6 +2234,102 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
       });
     },
 
+    getRelatedPullRequests(input) {
+      return cached({
+        cwd: input.cwd,
+        method: "getRelatedPullRequests",
+        // Keyed on the head as well as the number: the set only changes when the change
+        // request does, so a poll that finds the same head reuses this answer instead of
+        // spending two more forge calls.
+        args: {
+          number: input.number,
+          headRef: input.headRef,
+          headSha: input.headSha,
+          siblingHeadRefs: [...(input.siblingHeadRefs ?? [])].sort(),
+        },
+        readOptions: input,
+        load: async () => {
+          const stackNumbers = await loadGitHubStackNumbers({
+            cwd: input.cwd,
+            number: input.number,
+            run,
+          });
+
+          // One list call answers both halves: the stack members by number, and anything
+          // opened from this head. `additions`/`deletions` ride along, so per-change-request
+          // diff figures cost nothing extra.
+          const searchNumbers = [...new Set([...stackNumbers, input.number])];
+          const listArgs = [
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--limit",
+            String(Math.max(searchNumbers.length, 1) + RELATED_PULL_REQUEST_HEAD_SLACK),
+            "--head",
+            input.headRef,
+            "--json",
+            RELATED_PULL_REQUEST_JSON_FIELDS.join(","),
+          ];
+          const byHead = parseGhPullRequestList(
+            await runGhJson(listArgs, { cwd: input.cwd }, z.unknown(), "[]"),
+          );
+
+          // One worktree per ticket: the session's other change requests sit on
+          // branches this workspace never checks out, so ask for each of them too.
+          // Capped because the call count scales with the number of workspaces.
+          const siblingRefs = [...new Set(input.siblingHeadRefs ?? [])]
+            .filter((ref) => ref && ref !== input.headRef)
+            .slice(0, RELATED_PULL_REQUEST_SIBLING_HEAD_LIMIT);
+          for (const ref of siblingRefs) {
+            const siblingArgs = [
+              "pr",
+              "list",
+              "--state",
+              "all",
+              "--limit",
+              "5",
+              "--head",
+              ref,
+              "--json",
+              RELATED_PULL_REQUEST_JSON_FIELDS.join(","),
+            ];
+            byHead.push(
+              ...parseGhPullRequestList(
+                await runGhJson(siblingArgs, { cwd: input.cwd }, z.unknown(), "[]"),
+              ),
+            );
+          }
+
+          const missing = searchNumbers.filter(
+            (number) => !byHead.some((facts) => facts.number === number),
+          );
+          const byNumber: RelatedPullRequestFacts[] = [];
+          for (const number of missing) {
+            const view = await runGhJson(
+              ["pr", "view", String(number), "--json", RELATED_PULL_REQUEST_JSON_FIELDS.join(",")],
+              { cwd: input.cwd },
+              z.unknown(),
+              "{}",
+            ).catch(() => null);
+            if (view) byNumber.push(...parseGhPullRequestList([view]));
+          }
+
+          const ordered: RelatedPullRequestFacts[] = [];
+          for (const number of stackNumbers) {
+            const facts =
+              byNumber.find((entry) => entry.number === number) ??
+              byHead.find((entry) => entry.number === number);
+            if (facts) ordered.push(facts);
+          }
+          for (const facts of [...byHead, ...byNumber]) {
+            if (!ordered.some((entry) => entry.number === facts.number)) ordered.push(facts);
+          }
+          return ordered;
+        },
+      });
+    },
+
     getPullRequestTimeline(input) {
       return cached({
         cwd: input.cwd,
@@ -2844,11 +2986,65 @@ const githubCliRunner = createForgeCliRunner({
   },
 });
 
+/**
+ * Room for change requests that share this head beyond the stack itself — a reopened one, a
+ * closed duplicate. Small on purpose: the list is a sidebar row, not a report.
+ */
+const RELATED_PULL_REQUEST_HEAD_SLACK = 5;
+/**
+ * Each sibling head costs one `gh pr list` call on every set refresh, so a
+ * project with many workspaces would turn one poll into dozens. Twenty covers
+ * a session's worth of tickets; beyond that the user curates.
+ */
+const RELATED_PULL_REQUEST_SIBLING_HEAD_LIMIT = 20;
+
+/**
+ * GitHub's own stack membership for a change request. The endpoint is public preview and
+ * answers `[]` for anything unstacked, so a failure here degrades to "no stack" rather than
+ * failing the resolve — the branch half of the set still stands on its own.
+ */
+async function loadGitHubStackNumbers(input: {
+  cwd: string;
+  number: number;
+  run: (args: string[], options: GitHubCommandRunnerOptions) => Promise<string>;
+}): Promise<number[]> {
+  try {
+    const stdout = await input.run(
+      ["api", `repos/{owner}/{repo}/stacks?pull_request=${input.number}`],
+      { cwd: input.cwd },
+    );
+    return parseGitHubStackResponse(JSON.parse(stdout || "[]"));
+  } catch {
+    // Preview endpoint, unauthenticated host, or a repo without stacks: the head-branch half
+    // of the set still stands on its own, so degrade instead of failing the resolve.
+    return [];
+  }
+}
+
 async function runGhCommand(
   args: string[],
   options: GitHubCommandRunnerOptions,
 ): Promise<GitHubCommandResult> {
   return githubCliRunner.run(args, options);
+}
+
+/**
+ * What `gh auth status` says under one config directory, as plain text. It is the
+ * only source that knows whether a directory holds a login that still works, and
+ * gh has printed it to stdout and to stderr in different releases, so both are
+ * returned. Never throws: an unauthenticated directory is an answer, not a fault.
+ */
+export async function readGhAuthStatus(configDir: string): Promise<string | null> {
+  try {
+    const result = await githubCliRunner.run(["auth", "status"], {
+      cwd: homedir(),
+      envOverlay: { GH_CONFIG_DIR: configDir },
+    });
+    return `${result.stdout}\n${result.stderr}`.trim();
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    return typeof stderr === "string" && stderr.length > 0 ? stderr : null;
+  }
 }
 
 // Anchored to github.com so a pasted URL from an unrelated tracker (a GitLab
@@ -2932,6 +3128,60 @@ function isAuthFailureText(text: string): boolean {
     normalized.includes("authentication required") ||
     normalized.includes("bad credentials") ||
     normalized.includes("http 401")
+  );
+}
+
+/**
+ * Ordered GH_CONFIG_DIR chain for daemon gh calls. `PASEO_GH_CONFIG_DIRS`
+ * is colon-separated (e.g. work config first, private config second); an
+ * explicit per-call GH_CONFIG_DIR leads. Unset means current behavior: a
+ * single attempt inheriting the process environment. Resolved per call so
+ * tests and restarts pick up changes without a rebuild.
+ */
+export function resolveGhConfigDirChain(explicitDir?: string): (string | undefined)[] {
+  const fromEnv = (process.env.PASEO_GH_CONFIG_DIRS ?? "")
+    .split(":")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const chain: (string | undefined)[] = [];
+  if (explicitDir !== undefined && explicitDir.length > 0) {
+    chain.push(explicitDir);
+  }
+  for (const dir of fromEnv) {
+    if (!chain.includes(dir)) {
+      chain.push(dir);
+    }
+  }
+  if (chain.length === 0 && explicitDir === undefined) {
+    chain.push(undefined);
+  }
+  return chain;
+}
+
+/**
+ * Failures worth retrying with the next GitHub account: auth failures and
+ * "not found" shapes (a repo invisible to the current account 404s instead
+ * of 403ing). Rate limits are deliberately excluded — hammering a second
+ * account must stay an explicit choice, not a silent fallback.
+ */
+export function isGhAccountFallbackError(error: unknown): boolean {
+  if (error instanceof GitHubAuthenticationError) {
+    return true;
+  }
+  if (!(error instanceof GitHubCommandError)) {
+    return false;
+  }
+  if (isGitHubRateLimitError(error)) {
+    return false;
+  }
+  const text = error.stderr.toLowerCase();
+  return (
+    isAuthFailureText(error.stderr) ||
+    text.includes("could not resolve to a repository") ||
+    text.includes("could not resolve to a pullrequest") ||
+    text.includes("not found") ||
+    text.includes("http 404") ||
+    text.includes("http 403")
   );
 }
 

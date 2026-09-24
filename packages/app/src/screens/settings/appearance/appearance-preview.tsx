@@ -6,7 +6,7 @@ import type { HighlightToken } from "@getpaseo/highlight";
 import { isWeb } from "@/constants/platform";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
-import { DEFAULT_MONO_FONT_STACK } from "@/styles/theme";
+import { DEFAULT_MONO_FONT_STACK, DEFAULT_DISPLAY_FONT_STACK } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { tokenizeToLines } from "@/utils/highlight-cache";
 import { CHANGED_LINE_INDICES, PREVIEW_AFTER, PREVIEW_BEFORE } from "./preview-snippet";
@@ -29,6 +29,7 @@ interface PreviewOverrides {
   contentFontSize?: number;
   monoFontFamily?: string;
   codeFontSize?: number;
+  displayFontFamily?: string;
 }
 
 interface AppearancePreviewProps {
@@ -68,6 +69,13 @@ function buildContentOverride(overrides: PreviewOverrides | undefined): TextStyl
   const fontSize = resolveSizeOverride(overrides?.contentFontSize);
   if (fontSize === undefined) return {};
   return inlineUnistylesStyle({ fontSize, lineHeight: Math.round(fontSize * 1.4) });
+}
+
+function buildDisplayOverride(overrides: PreviewOverrides | undefined): TextStyle {
+  if (!overrides) return {};
+  const fontFamily = resolveFamilyOverride(overrides.displayFontFamily, DEFAULT_DISPLAY_FONT_STACK);
+  if (fontFamily === undefined) return {};
+  return inlineUnistylesStyle({ fontFamily });
 }
 
 interface KeyedToken {
@@ -146,8 +154,10 @@ export function AppearancePreview({ overrides }: AppearancePreviewProps) {
   const rows = useMemo(() => buildUnifiedRows(), []);
   const contentOverride = useMemo(() => buildContentOverride(overrides), [overrides]);
   const codeOverride = useMemo(() => buildCodeOverride(overrides), [overrides]);
+  const displayOverride = useMemo(() => buildDisplayOverride(overrides), [overrides]);
   const contentStyle = useMemo(() => [styles.contentSample, contentOverride], [contentOverride]);
   const codeStyle = useMemo(() => [styles.codeLine, codeOverride], [codeOverride]);
+  const displayStyle = useMemo(() => [styles.displaySample, displayOverride], [displayOverride]);
   const addRowStyle = useMemo(() => [styles.row, styles.addRow], []);
   const removeRowStyle = useMemo(() => [styles.row, styles.removeRow], []);
 
@@ -164,6 +174,7 @@ export function AppearancePreview({ overrides }: AppearancePreviewProps) {
       dataSet={CODE_SURFACE_DATASET}
       style={styles.card}
     >
+      <Text style={displayStyle}>Code</Text>
       <Text style={contentStyle}>{t("settings.appearance.syntax.previewContent")}</Text>
       {rows.map((row) => (
         <View key={row.key} style={rowStyle(row.type)}>
@@ -217,6 +228,13 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: Math.round(theme.fontSize.content * 1.4),
     paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[2],
+  },
+  displaySample: {
+    fontFamily: theme.fontFamily.display,
+    fontSize: theme.fontSize["4xl"],
+    color: theme.colors.foreground,
+    paddingHorizontal: theme.spacing[3],
+    paddingBottom: theme.spacing[1],
   },
   markerContext: {
     color: theme.colors.foregroundMuted,

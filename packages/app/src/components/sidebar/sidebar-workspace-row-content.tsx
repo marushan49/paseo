@@ -164,10 +164,14 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View>
           </View>
           <WorkspaceMetaRow
+            workspaceKey={workspace.workspaceKey}
+            serverId={workspace.serverId}
+            workspaceId={workspace.workspaceId}
             currentBranch={workspace.currentBranch}
             projectName={leadingProjectName}
             hostBadge={hostBadge ?? null}
             prHint={workspace.prHint}
+            relatedPullRequests={workspace.relatedPullRequests}
             serviceSummary={serviceSummary}
             labels={labels}
           />

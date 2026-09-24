@@ -330,7 +330,9 @@ export const fr: TranslationResources = {
     },
     actions: {
       copyCode: "Copier le code",
+      copyText: "Copier le texte",
       copyTurn: "Copier le tour",
+      copyFailed: "Échec de la copie",
       copyMessage: "Copier le message",
       forkMenu: "Dupliquer le message",
       forkInNewTab: "Dupliquer dans un nouvel onglet",
@@ -340,6 +342,9 @@ export const fr: TranslationResources = {
       forkFailed: "Impossible de dupliquer le chat",
       openFile: "Ouvrir le fichier",
       copied: "Copié",
+    },
+    writingBlock: {
+      untitled: "Texte",
     },
     attachments: {
       dismissImage: "Ignorer l'image",
@@ -633,6 +638,8 @@ export const fr: TranslationResources = {
         copyResumeCommand: "Copier la commande de reprise",
         copyAgentId: "Copier l'identifiant de l'agent",
         copyTerminalId: "Copier l'identifiant du terminal",
+        copyChatMarkdown: "Copier la conversation (Markdown)",
+        copyChatJson: "Copier la conversation (JSON)",
         copyFilePath: "Copy file path",
         rename: "Rebaptiser",
         closeAbove: "Fermer les onglets ci-dessus",
@@ -673,12 +680,18 @@ export const fr: TranslationResources = {
         toggle: "Basculer le panneau latéral",
         changes: "Changements",
         files: "Fichiers",
+        evidence: "Preuves",
       },
       toasts: {
         copyFailed: "Échec de la copie",
         agentIdCopiedLabel: "AgentID",
         terminalIdCopiedLabel: "Identifiant du terminal",
         resumeCommandCopiedLabel: "reprendre la commande",
+        chatCopiedLabel: "Transcription de la conversation",
+        copyingChat: "Copie de la conversation...",
+        copyChatFailed: "Échec de la copie de la conversation",
+        chatCopyEmpty: "Cette conversation est vide",
+        chatCopyTruncated: "Conversation copiée sans les messages les plus anciens",
         filePathCopiedLabel: "File path",
         resumeIdUnavailable: "ReprendreIDnon disponible",
         resumeCommandUnavailable: "Commande de reprise non disponible",
@@ -995,10 +1008,58 @@ export const fr: TranslationResources = {
         openFileIn: "Open {{fileName}} in {{target}}",
         failedOpen: "Échec de l'ouverture de l'espace de travail",
       },
+      forgeAccount: {
+        scopeProject: "Tout le projet",
+        scopeWorkspace: "Cet espace uniquement",
+        scopeProjectHint:
+          "Tous les espaces de ce projet utilisent ce compte sauf s'ils en définissent un.",
+        scopeWorkspaceHint: "S'applique à cet espace seulement et remplace le compte du projet.",
+        inherited: "{{host}} · hérité du projet",
+        savedProject: "Tous les espaces de ce projet utilisent désormais le compte dans {{path}}",
+        clearedProject: "Ce projet réutilise le compte par défaut",
+        title: "Compte GitHub",
+        defaultOption: "Par défaut de la machine",
+        defaultDetail: "Ce que gh choisit sur cet hôte",
+        empty: "Aucune connexion GitHub trouvée sur cet hôte",
+        placeholder: "Chemin vers un dossier de configuration gh, par ex. ~/.config/gh-work",
+        confirm: "Enregistrer",
+        saved: "Cet espace de travail agit désormais comme le compte dans {{path}}",
+        cleared: "Cet espace de travail utilise à nouveau le compte par défaut",
+      },
       pr: {
         actions: {
           viewPullRequest: "Voir",
           openOn: "Ouvrir sur {{brand}}",
+        },
+        set: {
+          toggleEmptyAccessibility: "Associer une pull request à cet espace de travail",
+          toggleOneAccessibility: "Afficher la pull request #{{number}}",
+          addAction: "Ajouter",
+          scanAction: "Analyser le chat",
+          emptyList: "Aucune pull request",
+          count: "{{count}} PR",
+          failing: "{{count}} en échec",
+          running: "en cours",
+          passing: "réussi",
+          draft: "brouillon",
+          toggleAccessibility: "Afficher les {{count}} pull requests",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "Numéros de PR, par exemple 1346 ou 1346, 1350",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          attachNotFoundMany: "Aucune pull request trouvée dans ce dépôt : {{numbers}}.",
+          moreInCard: "+{{count}} de plus",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
+          scanChatPullRequests: "Scan chat for PRs",
+          scanChatFound: "Found {{count}} pull requests in chat",
+          scanChatEmpty: "No pull requests found in chat",
+          scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Pull requests dans cette conversation",
+          scanChatSubtitle: "{{count}} trouvées. Choisissez celles qui concernent cet espace.",
+          scanChatMentions: "mentionnée {{count}}x",
+          scanChatAttach: "Joindre {{count}}",
+          scanChatUnresolved: "Introuvables sur la forge : {{numbers}}",
         },
         checksSummary: {
           passedLabel: "succès",
@@ -1232,6 +1293,10 @@ export const fr: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Copie de travail : {{additions}} ajoutées, {{deletions}} supprimées par rapport à la base, travail non validé compris",
+      },
       status: {
         serviceRunning: "Service {{name}} en cours",
         serviceUnhealthy: "Service {{name}} en échec",
@@ -1906,6 +1971,15 @@ export const fr: TranslationResources = {
       emptyDescription:
         "Créez une demande de fusion pour cette copie de travail afin d’afficher ses détails ici.",
     },
+    evidence: {
+      label: "Preuves",
+      subtitle: "Captures de vérification",
+      emptyTitle: "Aucune preuve pour le moment",
+      emptyDescription:
+        "Exécutez une recette de vérification pour capturer des copies d'écran et des journaux.",
+      loadFailed: "Impossible de charger les preuves.",
+      showInChat: "Afficher dans le chat",
+    },
     diff: {
       changesLabel: "Modifications",
       diffLabel: "Diff",
@@ -2037,6 +2111,8 @@ export const fr: TranslationResources = {
       projects: "Projets",
       connections: "Relations",
       agents: "Agents",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Métadonnées",
       workspaces: "Workspaces",
       providers: "Fournisseurs",
@@ -2045,6 +2121,8 @@ export const fr: TranslationResources = {
       plugins: "Plugins",
       host: "Aperçu",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.fr,
     metadataGeneration: {
       title: "Génération de métadonnées",
@@ -2210,6 +2288,14 @@ export const fr: TranslationResources = {
       detailLevel: {
         title: "Niveau de détail",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Plan de la discussion",
         description: "Afficher un plan pour passer d’une requête à l’autre",
@@ -2226,6 +2312,9 @@ export const fr: TranslationResources = {
         interfaceFont: "Police d'interface",
         interfaceFontHint:
           "Utilisé dans toute l'application. Laisser vide pour la valeur par défaut du système",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Famille de polices d'interface",
         interfaceSize: "Taille de l'interface",
         interfaceSizeHint: "Utilisée pour la navigation, les contrôles et les libellés",
@@ -2458,6 +2547,35 @@ export const fr: TranslationResources = {
           title: "Activer les outilsPaseo",
           hint: "Les agents pourront gérer les arbres de travail, les agents et les horaires",
           accessibilityLabel: "Injecter les outilsPaseo",
+        },
+        resourcePolicy: {
+          schedules: {
+            title: "Exécuter les planifications",
+            onHint: "Les planifications se déclenchent à leur cadence sur cet hôte.",
+            offHint:
+              "Les planifications ne se déclencheront pas. Rien ne s'exécute à l'heure prévue.",
+            economyException:
+              "Maintenu par exception à economy, qui arrête sinon toute boucle automatique.",
+          },
+          title: "Utilisation des ressources",
+          loading: "Chargement de la politique de ressources...",
+          options: {
+            economy: {
+              label: "Économie",
+              description:
+                "Une lecture d'état par exécution. L'interrogation et les horaires automatiques restent désactivés.",
+            },
+            balanced: {
+              label: "Équilibré",
+              description:
+                "Des vérifications d'état et un travail automatisé limités pour un usage quotidien.",
+            },
+            deep: {
+              label: "Travail approfondi",
+              description:
+                "Davantage de vérifications d'état limitées pour les flux de travail actifs et longs.",
+            },
+          },
         },
         systemPrompt: {
           title: "Invite système",

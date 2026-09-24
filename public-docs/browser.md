@@ -25,7 +25,7 @@ Because you share the browser with the agent, you can watch it work — and step
 
 Browser tools are off by default. Turn them on per host:
 
-- **In the app:** open **Settings → your host → Agents** and turn on **Browser tools**.
+- **In the app:** open **Settings → your host → Browser** and turn on **Browser tools**.
 - **In `config.json`** (`~/.paseo/config.json`):
 
 ```json
@@ -42,9 +42,9 @@ The tools are part of the [Paseo MCP toolset](/docs/mcp), so **Enable Paseo tool
 
 > Browser tools let agents access and control Paseo browser tabs, including logged-in browser state. Only enable this for agents you trust.
 
-## Desktop only, for now
+## Host-native browser
 
-Browser tabs are hosted by the Paseo desktop app. The daemon itself doesn't run a browser — it routes tool calls to a connected desktop app, and returns an error when none is connected. The wire contract is host-neutral, so other hosts can carry the same tools later.
+Browser tabs are hosted by the Paseo daemon on the machine where your workspace runs. The app shows a remote viewport and forwards clicks, keyboard input, scrolling, hover, and long-press drags, so Mac, Android, and the web client can use the same Linux browser profile. The desktop app remains a compatibility fallback for older daemons.
 
 ## How an agent sees a page
 
@@ -62,15 +62,69 @@ Interactive elements carry refs like `@e3`. The agent passes a ref to `browser_c
 
 For anything the tree can't capture, agents fall back to `browser_screenshot`, and `browser_logs` exposes console messages and network timing.
 
+## Fast goal loops with Jev
+
+`browser_goal` runs a bounded browser loop through TypeSafe's Jev model. Jev chooses one operation and one observed element at a time; Paseo executes that choice through the existing browser host, takes a fresh snapshot, and stops only after every required text or URL check passes.
+
+Configure and enable Jev under **Settings → your host → System One**. Paseo stores a key entered there in a host-local `0600` file; it can also use `TYPESAFE_API_KEY` or `~/.config/typesafe-ai/env` as a fallback. Form values use environment-variable references so credentials do not enter the tool transcript or the TypeSafe request:
+
+```json
+{
+  "goal": "Sign in with the test account and reach the dashboard",
+  "url": "http://localhost:3000/login",
+  "values": {
+    "email": { "env": "E2E_EMAIL", "description": "test account email" },
+    "password": { "env": "E2E_PASSWORD", "description": "test account password" }
+  },
+  "verify": [{ "text": "Dashboard" }, { "url": "/dashboard" }]
+}
+```
+
+Low-confidence decisions stop without mutating the page. Stale refs trigger a new observation and decision, never a blind retry of the previous browser action.
+
+The same System One setup also gives every supported coding agent the general `system_one_decide` tool. See [System One](/docs/system-one) for when agents use Jev outside the browser.
+
+## Testing engine
+
+`browser_test` is the tool agents use for every UI or end-to-end check. The daemon runs the steps itself and returns only the verdict: pass or fail, the checks, console and network error counts, and an evidence reference for the screenshots. The page never enters the agent's context, so a test costs a small fraction of the tokens of driving `browser_*` tools by hand.
+
+Save recurring flows as recipes in the workspace's `paseo.json`:
+
+```json
+{
+  "verification": {
+    "recipes": {
+      "settings-smoke": {
+        "steps": [
+          { "action": "navigate", "service": "web", "path": "/settings" },
+          {
+            "action": "goal",
+            "goal": "Open the browser settings",
+            "verify": [{ "text": "Start page" }]
+          },
+          { "action": "assert-console-errors", "max": 0 },
+          { "action": "screenshot", "name": "settings" }
+        ]
+      }
+    }
+  }
+}
+```
+
+Scripted steps (`navigate`, `click`, `fill`, `wait-text`, `assert-visible`, `assert-text`, `assert-console-errors`, `assert-failed-requests`, `screenshot`, `ensure-authenticated`) run without any model. A `goal` step hands the part you cannot script to Jev and passes only when its `verify` checks hold; it needs System One. Agents call `browser_test` with no arguments to list recipes, with `recipe` to run one, or with `steps` for an ad-hoc run; adding `saveAs` stores a passing ad-hoc run as a recipe in `paseo.json`, so the next run needs no model at all. While browser tools are enabled, Paseo hides other browser MCP servers (Playwright, Puppeteer, Chrome DevTools, Browser MCP, Browser Use) from its Claude, Codex, and OpenCode agents so every test goes through the engine.
+
 ## Architecture
 
 ```
-agent ──MCP──▶ daemon (broker) ──▶ browser host (desktop app) ──▶ webview
+agent ──MCP──▶ daemon (broker) ──▶ persistent browser (workspace host)
+                                      ▲
+                         app viewport + input RPC
 ```
 
 - **Workspace-scoped tabs.** An agent only sees and controls tabs in its own workspace. New tabs open in the background without stealing your focus.
-- **Tab-to-host routing.** The daemon remembers which host owns each tab and routes tab commands there. `browser_list_tabs` aggregates all connected hosts.
-- **Trusted input.** Clicks, keys, hovers, and drags are dispatched as real browser input events — CSS `:hover` triggers, and pages can't tell an agent's click from a user's. Every action first waits for its target to be visible, enabled, and stable.
+- **Persistent profiles.** The daemon stores browser profiles below its Paseo home, so cookies, local storage, and logins stay on the workspace host.
+- **Tab-to-host routing.** The daemon browser owns new tabs when available and keeps tab commands on that host. `browser_list_tabs` still aggregates connected hosts for compatibility.
+- **Trusted input.** Clicks, keys, hovers, scrolls, and drags are dispatched as real browser input events — CSS `:hover` triggers, and pages can't tell an agent's click from a user's. Ref-based actions first wait for their target to be visible, enabled, and stable.
 - **Dialogs never block.** `alert` is accepted; `confirm`, `prompt`, and `beforeunload` are dismissed. Every handled dialog is reported in the tool result so the agent knows the page flow changed.
 
 ## Security
@@ -78,5 +132,6 @@ agent ──MCP──▶ daemon (broker) ──▶ browser host (desktop app) �
 - Navigation is restricted to `http(s)` URLs.
 - File uploads can only reference files inside the agent's workspace.
 - Tabs share the browser profile you use in Paseo, including cookies and logins — that's what makes logged-in testing work, and why the feature is opt-in per host.
+- `browser_goal` sends the goal, accessibility element summary, and recent action metadata to TypeSafe. It does not send screenshots or values loaded from the `values` environment-variable map.
 
 See the [tools reference](/docs/browser-tools) for the full tool list.

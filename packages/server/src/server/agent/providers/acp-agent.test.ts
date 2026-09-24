@@ -2877,6 +2877,30 @@ describe("ACPAgentSession", () => {
     ]);
   });
 
+  test("fresh sessions send Paseo instructions with the first turn only", async () => {
+    const session = createSession();
+    const prompt = vi.fn(async () => ({ stopReason: "end_turn" }));
+    const internals = asInternals<
+      ACPSessionInternals & { pendingSessionInstructions: string | null }
+    >(session);
+    internals.sessionId = "session-1";
+    internals.connection = { prompt };
+    internals.pendingSessionInstructions = "Use Jev.";
+
+    await session.startTurn("hello");
+    await vi.waitFor(() => expect(internals.activeForegroundTurnId).toBeNull());
+    await session.startTurn("again");
+
+    const sent = prompt.mock.calls.map(
+      (call) => (call as unknown as [{ prompt: Array<{ text?: string }> }])[0].prompt,
+    );
+    expect(sent[0]?.map((block) => block.text)).toEqual([
+      "<paseo-instructions>\nUse Jev.\n</paseo-instructions>",
+      "hello",
+    ]);
+    expect(sent[1]?.map((block) => block.text)).toEqual(["again"]);
+  });
+
   test("startTurn returns before the ACP prompt settles and completes later via subscribers", async () => {
     const session = createSession();
     const events: Array<{ type: string; turnId?: string }> = [];

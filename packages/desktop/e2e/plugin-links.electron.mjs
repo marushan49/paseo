@@ -109,14 +109,24 @@ export async function runPluginLinksRegression({
 
 async function expectPresentedBrowser(page, url) {
   await expect
-    .poll(() =>
-      page
+    .poll(async () => {
+      const urls = await page
         .locator("webview")
         .evaluateAll((views) =>
           views
             .filter((view) => view.parentElement?.getAttribute("aria-hidden") === "false")
             .map((view) => view.getURL()),
-        ),
-    )
-    .toEqual([url]);
+        );
+      if (urls.length > 0) return urls.includes(url);
+      return await page
+        .locator("input")
+        .evaluateAll(
+          (inputs, expectedUrl) => inputs.some((input) => input.value === expectedUrl),
+          url,
+        );
+    })
+    .toBe(true);
+  await expect
+    .poll(() => page.locator('img[src^="data:image/png;base64,"]').count())
+    .toBeGreaterThan(0);
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ScheduleCreateRequestSchema, ScheduleUpdateRequestSchema } from "./rpc-schemas.js";
+import {
+  ScheduleCreateRequestSchema,
+  ScheduleInspectResponseSchema,
+  ScheduleUpdateRequestSchema,
+} from "./rpc-schemas.js";
 
 describe("schedule RPC schemas", () => {
   it("round-trips new-agent run options on create requests", () => {
@@ -60,5 +64,29 @@ describe("schedule RPC schemas", () => {
         isolation: "worktree",
       },
     });
+  });
+
+  it("accepts an inspect response with and without a blocked reason", () => {
+    const base = {
+      type: "schedule/inspect/response" as const,
+      payload: {
+        requestId: "request-1",
+        schedule: null,
+        error: null,
+      },
+    };
+    expect(
+      ScheduleInspectResponseSchema.parse(base).payload.automationBlockedReason,
+    ).toBeUndefined();
+    expect(
+      ScheduleInspectResponseSchema.parse({
+        ...base,
+        payload: {
+          ...base.payload,
+          automationBlockedReason:
+            "Automated schedules is disabled by the economy resource policy.",
+        },
+      }).payload.automationBlockedReason,
+    ).toBe("Automated schedules is disabled by the economy resource policy.");
   });
 });

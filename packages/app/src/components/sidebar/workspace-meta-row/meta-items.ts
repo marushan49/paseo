@@ -1,5 +1,11 @@
 import type { WorkspaceLabelDefinition } from "@getpaseo/protocol/workspace-labels";
 import type { PrHint } from "@/git/pr-hint";
+import {
+  shouldPresentAsSet,
+  summarizeRelatedPullRequests,
+  type RelatedPullRequest,
+  type RelatedPullRequestsSummary,
+} from "@/git/related-pull-requests";
 import type { SidebarChecksDisplay } from "@/components/sidebar/display-preferences/checks-display";
 import type { SidebarRowItems } from "@/components/sidebar/display-preferences/row-items";
 import { selectCheckSummary, type CheckSummary } from "./check-summary";
@@ -20,6 +26,14 @@ export type MetaRowItem =
   | { kind: "project"; name: string }
   | { kind: "host" }
   | { kind: "changeRequest"; hint: PrHint }
+  | {
+      kind: "changeRequestSet";
+      pullRequests: readonly RelatedPullRequest[];
+      summary: RelatedPullRequestsSummary;
+      /** The one change request's number when that is all there is, so the line names it. */
+      soleNumber: number | null;
+      expanded: boolean;
+    }
   | { kind: "checks"; summary: CheckSummary; label: boolean }
   | { kind: "services"; summary: WorkspaceServiceSummary }
   | { kind: "labels"; labels: readonly WorkspaceLabelDefinition[] };
@@ -39,6 +53,8 @@ export function selectMetaRowItems(input: {
   projectName: string | null;
   hasHostBadge: boolean;
   prHint: PrHint | null;
+  relatedPullRequests?: readonly RelatedPullRequest[];
+  setExpanded?: boolean;
   serviceSummary: WorkspaceServiceSummary | null;
   labels: readonly WorkspaceLabelDefinition[];
   visible: SidebarRowItems;
@@ -54,6 +70,12 @@ export function selectMetaRowItems(input: {
     visible,
     checksDisplay,
   } = input;
+  const relatedPullRequests = input.relatedPullRequests ?? [];
+  const asSet = shouldPresentAsSet({
+    pullRequests: relatedPullRequests,
+    onBranch: currentBranch !== null,
+    hasOwnChangeRequest: prHint !== null,
+  });
   const items: MetaRowItem[] = [];
 
   if (currentBranch && visible.branch) {
@@ -65,7 +87,18 @@ export function selectMetaRowItems(input: {
   if (hasHostBadge) {
     items.push({ kind: "host" });
   }
-  if (prHint && visible.changeRequest) {
+  // A set replaces both the single change request and the separate CI item: it already reports
+  // the worst state across every layer, and leaving the checked-out layer's own `passed` beside
+  // it is the reading that sends you away from a red sibling.
+  if (asSet && visible.changeRequest) {
+    items.push({
+      kind: "changeRequestSet",
+      pullRequests: relatedPullRequests,
+      summary: summarizeRelatedPullRequests(relatedPullRequests),
+      soleNumber: soleChangeRequestNumber(relatedPullRequests),
+      expanded: input.setExpanded === true,
+    });
+  } else if (prHint && visible.changeRequest) {
     items.push({ kind: "changeRequest", hint: prHint });
   }
 
@@ -73,7 +106,10 @@ export function selectMetaRowItems(input: {
   // meant the checks setting could sit on a value while nothing was drawn, which is a control that
   // lies about its own state. Showing checks without the change request beside them is the
   // stranger combination, but it is the one you asked for and it is what you get.
-  if (checksDisplay !== "none") {
+  if (
+    checksDisplay !== "none" &&
+    !(asSet && visible.changeRequest && relatedPullRequests.length > 0)
+  ) {
     const summary = selectCheckSummary(prHint);
     if (summary) {
       items.push({ kind: "checks", summary, label: checksDisplay === "iconAndText" });
@@ -89,4 +125,12 @@ export function selectMetaRowItems(input: {
   }
 
   return items;
+}
+
+/** The number to name on the collapsed line, or null when the set has more than one. */
+function soleChangeRequestNumber(pullRequests: readonly RelatedPullRequest[]): number | null {
+  if (pullRequests.length !== 1) {
+    return null;
+  }
+  return pullRequests[0]?.number ?? null;
 }

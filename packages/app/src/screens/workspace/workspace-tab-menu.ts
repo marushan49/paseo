@@ -1,3 +1,4 @@
+import type { TranscriptFormat } from "@/agent-transcript/serialize";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
@@ -7,6 +8,8 @@ export type WorkspaceTabMenuSurface = "desktop" | "mobile";
 
 export interface WorkspaceTabMenuLabels {
   copyResumeCommand: string;
+  copyChatMarkdown: string;
+  copyChatJson: string;
   copyAgentId: string;
   copyTerminalId: string;
   copyFilePath: string;
@@ -23,6 +26,8 @@ export interface WorkspaceTabMenuLabels {
 
 export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   copyResumeCommand: i18n.t("workspace.tabs.menu.copyResumeCommand"),
+  copyChatMarkdown: i18n.t("workspace.tabs.menu.copyChatMarkdown"),
+  copyChatJson: i18n.t("workspace.tabs.menu.copyChatJson"),
   copyAgentId: i18n.t("workspace.tabs.menu.copyAgentId"),
   copyTerminalId: i18n.t("workspace.tabs.menu.copyTerminalId"),
   copyFilePath: i18n.t("workspace.tabs.menu.copyFilePath"),
@@ -69,6 +74,7 @@ interface BuildWorkspaceTabMenuEntriesInput {
   tabCount: number;
   menuTestIDBase: string;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -86,6 +92,7 @@ interface BuildWorkspaceDesktopTabActionsInput {
   index: number;
   tabCount: number;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -151,7 +158,11 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {
     return `workspace-working-diff-close-${encodeFilePathForPathSegment(buildDeterministicWorkspaceTabId(tab.target))}`;
   }
-  if (tab.target.kind === "files" || tab.target.kind === "pull_request") {
+  if (
+    tab.target.kind === "files" ||
+    tab.target.kind === "pull_request" ||
+    tab.target.kind === "evidence"
+  ) {
     return `workspace-${tab.target.kind}-close`;
   }
   if (tab.target.kind === "plugin") {
@@ -173,6 +184,7 @@ export function buildWorkspaceTabMenuEntries(
     tabCount,
     menuTestIDBase,
     onCopyResumeCommand,
+    onCopyChat,
     onCopyAgentId,
     onCopyTerminalId,
     onCopyFilePath,
@@ -210,6 +222,26 @@ export function buildWorkspaceTabMenuEntries(
       testID: `${menuTestIDBase}-copy-agent-id`,
       onSelect: () => {
         void onCopyAgentId(agentId);
+      },
+    });
+    entries.push({
+      kind: "item",
+      key: "copy-chat-markdown",
+      label: labels.copyChatMarkdown,
+      icon: "copy",
+      testID: `${menuTestIDBase}-copy-chat-markdown`,
+      onSelect: () => {
+        void onCopyChat(agentId, "markdown");
+      },
+    });
+    entries.push({
+      kind: "item",
+      key: "copy-chat-json",
+      label: labels.copyChatJson,
+      icon: "copy",
+      testID: `${menuTestIDBase}-copy-chat-json`,
+      onSelect: () => {
+        void onCopyChat(agentId, "json");
       },
     });
   }
@@ -334,6 +366,7 @@ export function buildWorkspaceDesktopTabActions(
       tabCount: input.tabCount,
       menuTestIDBase: contextMenuTestId,
       onCopyResumeCommand: input.onCopyResumeCommand,
+      onCopyChat: input.onCopyChat,
       onCopyAgentId: input.onCopyAgentId,
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFilePath: input.onCopyFilePath,

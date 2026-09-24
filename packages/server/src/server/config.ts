@@ -25,6 +25,7 @@ import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { mergeHostnames, parseHostnamesEnv, type HostnamesConfig } from "./hostnames.js";
 import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
+import type { ResourcePolicy } from "@getpaseo/protocol/messages";
 
 export {
   loadPersistedConfig,
@@ -513,8 +514,20 @@ function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedCon
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
 
+function resolveResourcePolicy(persisted: ReturnType<typeof loadPersistedConfig>): ResourcePolicy {
+  return persisted.daemon?.resourcePolicy ?? "balanced";
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
+}
+
+function resolveSystemOneConfig(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return {
+    enabled: persisted.daemon?.systemOne?.enabled ?? false,
+    model: persisted.daemon?.systemOne?.model ?? "jev-latest",
+    minimumConfidence: persisted.daemon?.systemOne?.minimumConfidence ?? 0.5,
+  };
 }
 
 /**
@@ -539,8 +552,11 @@ function resolveStaticLoadConfigSettings(
     mcpInjectIntoAgents:
       cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
+    systemOne: resolveSystemOneConfig(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
+    resourcePolicy: resolveResourcePolicy(persisted),
+    allowScheduledAutomation: persisted.daemon?.allowScheduledAutomation,
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -574,8 +590,11 @@ export function resolveConfigFromPersisted(
     mcpEnabled,
     mcpInjectIntoAgents,
     browserToolsEnabled,
+    systemOne,
     autoArchiveAfterMerge,
     appendSystemPrompt,
+    resourcePolicy,
+    allowScheduledAutomation,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -617,10 +636,13 @@ export function resolveConfigFromPersisted(
     mcpEnabled,
     mcpInjectIntoAgents,
     browserToolsEnabled,
+    systemOne,
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
+    resourcePolicy,
+    allowScheduledAutomation,
     terminalProfiles,
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,

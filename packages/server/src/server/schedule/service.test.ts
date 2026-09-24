@@ -41,6 +41,7 @@ import {
 } from "./service.js";
 import { ScheduleStore } from "./store.js";
 import type { ScheduleExecutionResult, StoredSchedule } from "@getpaseo/protocol/schedule/types";
+import { ResourcePolicyRuntime } from "../resource-policy.js";
 
 interface ScheduleServiceInternals {
   executeSchedule(schedule: StoredSchedule, runId: string): Promise<ScheduleExecutionResult>;
@@ -351,6 +352,37 @@ describe("ScheduleService", () => {
       output: "ran:Review new PRs",
     });
     expect(inspected.nextRunAt).toBe("2026-01-01T00:02:00.000Z");
+  });
+
+  test("blocks automated economy ticks while allowing a manual run once", async () => {
+    const service = createScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: new AgentManager({ logger: createTestLogger() }),
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+      resourcePolicyRuntime: new ResourcePolicyRuntime({ getPolicy: () => "economy" }),
+      runner: async () => ({
+        agentId: null,
+        output: "manual",
+      }),
+    });
+    const created = await service.create({
+      prompt: "Check status",
+      cadence: { type: "every", everyMs: 60_000 },
+      target: {
+        type: "new-agent",
+        config: { provider: "claude", cwd: tempDir },
+      },
+    });
+
+    now = new Date("2026-01-01T00:01:00.000Z");
+    await service.tick();
+    expect((await service.inspect(created.id)).runs).toHaveLength(0);
+
+    await service.runOnce(created.id);
+    expect((await service.inspect(created.id)).runs).toHaveLength(1);
   });
 
   test("pause and resume update persisted schedule state", async () => {
@@ -1081,6 +1113,81 @@ describe("ScheduleService", () => {
       status: "failed",
       error: expect.stringContaining("was canceled"),
     });
+  });
+
+  test("a finished run waits for its reader before the workspace is archived", async () => {
+    const agentId = "00000000-0000-0000-0000-000000000444";
+    const archiveWorkspace = vi.fn(async () => {});
+    const manager = new AgentManager({
+      logger: createTestLogger(),
+      clients: createTestAgentClients(),
+      registry: agentStorage,
+    });
+    manager.runAgent = async () => ({
+      sessionId: "scheduled-watched-run",
+      finalText: "the report",
+      timeline: [],
+      canceled: false,
+    });
+    manager.waitForAgentEvent = async () => ({
+      status: "idle",
+      permission: null,
+      lastMessage: "the report",
+    });
+    manager.archiveAgent = async () => {};
+    const service = createScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: manager,
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      archiveWorkspace,
+      createAgent: async (input) => {
+        const snapshot = {
+          id: agentId,
+          provider: "claude",
+          cwd: input.cwd ?? tempDir,
+          workspaceId: input.workspaceId,
+          status: "idle",
+          lifecycle: "idle",
+        };
+        return {
+          snapshot: snapshot as Awaited<
+            ReturnType<ScheduleServiceOptions["createAgent"]>
+          >["snapshot"],
+          liveSnapshot: snapshot as Awaited<
+            ReturnType<ScheduleServiceOptions["createAgent"]>
+          >["liveSnapshot"],
+          background: true,
+          initialPromptStarted: false,
+          initialPromptError: null,
+        };
+      },
+      now: () => now,
+    });
+
+    const created = await service.create({
+      prompt: "write the daily report",
+      cadence: { type: "every", everyMs: 60_000 },
+      target: {
+        type: "new-agent",
+        config: { provider: "claude", cwd: tempDir, archiveOnFinish: true },
+      },
+      maxRuns: 1,
+    });
+
+    // Someone opened the run and is reading it while it finishes.
+    service.markAgentsViewed("client-1", [agentId]);
+    await service.tick();
+
+    const inspected = await service.inspect(created.id);
+    expect(inspected.runs[0]?.status).toBe("succeeded");
+    expect(archiveWorkspace).not.toHaveBeenCalled();
+
+    // They close it: now the workspace may go.
+    service.releaseViewedAgents("client-1");
+    await vi.waitFor(() => expect(archiveWorkspace).toHaveBeenCalledTimes(1));
+    expect(archiveWorkspace).toHaveBeenCalledWith(inspected.runs[0]?.workspaceId);
   });
 
   test("failed new-agent run keeps run error when workspace archive also fails", async () => {

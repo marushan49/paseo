@@ -34,6 +34,12 @@ import type { PrHint } from "@/git/use-pr-status-query";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { copyToClipboard } from "@/utils/copy-to-clipboard";
 import { PrBadge } from "@/components/sidebar-workspace-list";
+import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import {
+  relatedPullRequestsHealthCount,
+  summarizeRelatedPullRequests,
+  type RelatedPullRequest,
+} from "@/git/related-pull-requests";
 import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { FloatingSurface } from "@/components/ui/floating";
@@ -227,6 +233,10 @@ function WorkspaceHoverCardContent({
   contentRef: React.RefObject<View | null>;
 }): ReactElement | null {
   const { t } = useTranslation();
+  const relatedPullRequests = workspace.relatedPullRequests ?? EMPTY_PULL_REQUESTS;
+  // One change request is what the badge was built for. Several make it a lie: it
+  // reports the checked-out one's checks while a sibling is red.
+  const isSet = relatedPullRequests.length > 1;
   const bottomSheetInternal = useBottomSheetModalInternal(true);
   const [triggerRect, setTriggerRect] = useState<Rect | null>(null);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | null>(null);
@@ -299,7 +309,7 @@ function WorkspaceHoverCardContent({
               {workspace.name}
             </Text>
           </View>
-          {prHint ? <PrBadge hint={prHint} style={styles.cardInfoRow} /> : null}
+          <PullRequestSummary pullRequests={relatedPullRequests} isSet={isSet} prHint={prHint} />
           {workspace.diffStat ? (
             <View style={styles.cardInfoRow}>
               <ThemedFileDiff size={12} uniProps={foregroundMutedColorMapping} />
@@ -328,7 +338,7 @@ function WorkspaceHoverCardContent({
               testID="hover-card-workspace-cwd"
             />
           ) : null}
-          {prHint?.checks && prHint.checks.length > 0 ? (
+          {!isSet && prHint?.checks && prHint.checks.length > 0 ? (
             <>
               <View style={styles.separator} />
               <ChecksSummaryPressable
@@ -560,6 +570,77 @@ function checksSummaryPressableStyle({ hovered = false }: { pressed: boolean; ho
   return [styles.checksSummaryRow, hovered && styles.listRowHovered];
 }
 
+const EMPTY_PULL_REQUESTS: readonly RelatedPullRequest[] = [];
+const HOVER_HEALTH_LABEL_KEYS = {
+  failing: "workspace.git.pr.set.failing",
+  running: "workspace.git.pr.set.running",
+  passing: "workspace.git.pr.set.passing",
+} as const;
+const HOVER_CARD_SET_LIMIT = 6;
+
+/** One change request keeps its badge; several become the list. */
+function PullRequestSummary({
+  pullRequests,
+  isSet,
+  prHint,
+}: {
+  pullRequests: readonly RelatedPullRequest[];
+  isSet: boolean;
+  prHint: PrHint | null;
+}): ReactElement | null {
+  if (isSet) {
+    return <PullRequestSetRows pullRequests={pullRequests} />;
+  }
+  if (prHint) {
+    return <PrBadge hint={prHint} style={styles.cardInfoRow} />;
+  }
+  return null;
+}
+
+/**
+ * A workspace's change requests as a list, for the hover card. With several of
+ * them the single badge answers the wrong question: it shows the checked-out
+ * one's checks while a sibling may be red. The summary line carries the worst
+ * state across the set, each row carries its own.
+ */
+function PullRequestSetRows({
+  pullRequests,
+}: {
+  pullRequests: readonly RelatedPullRequest[];
+}): ReactElement {
+  const { t } = useTranslation();
+  const summary = summarizeRelatedPullRequests(pullRequests);
+  const shown = pullRequests.slice(0, HOVER_CARD_SET_LIMIT);
+  const hidden = pullRequests.length - shown.length;
+
+  return (
+    <View style={styles.cardSet} testID="hover-card-pull-request-set">
+      <Text style={styles.cardSetSummary}>
+        {summary.health === "unknown"
+          ? t("workspace.git.pr.set.count", { count: summary.total })
+          : `${t("workspace.git.pr.set.count", { count: summary.total })} · ${t(
+              HOVER_HEALTH_LABEL_KEYS[summary.health],
+              { count: relatedPullRequestsHealthCount(summary) },
+            )}`}
+      </Text>
+      {shown.map((pullRequest) => (
+        <View key={pullRequest.number} style={styles.cardSetRow}>
+          <PullRequestStateIcon state={pullRequest.state} size={12} />
+          <Text style={styles.cardSetNumber}>{`#${pullRequest.number}`}</Text>
+          <Text style={styles.cardSetTitle} numberOfLines={1}>
+            {pullRequest.title ?? ""}
+          </Text>
+        </View>
+      ))}
+      {hidden > 0 ? (
+        <Text style={styles.cardSetMore}>
+          {t("workspace.git.pr.set.moreInCard", { count: hidden })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   portalOverlay: {
     position: "absolute",
@@ -603,6 +684,35 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[2],
+  },
+  cardSet: {
+    paddingHorizontal: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
+    gap: theme.spacing[1],
+  },
+  cardSetSummary: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  cardSetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+  },
+  cardSetNumber: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  cardSetTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  cardSetMore: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   cardInfoText: {
     flex: 1,

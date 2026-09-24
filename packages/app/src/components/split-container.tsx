@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import type { TranscriptFormat } from "@/agent-transcript/serialize";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import {
   DndContext,
@@ -107,6 +108,7 @@ interface SplitContainerProps {
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -320,6 +322,7 @@ export function SplitContainer({
   onNavigateTab,
   onCloseTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -673,6 +676,7 @@ export function SplitContainer({
                   onNavigateTab={onNavigateTab}
                   onCloseTab={onCloseTab}
                   onCopyResumeCommand={onCopyResumeCommand}
+                  onCopyChat={onCopyChat}
                   onCopyAgentId={onCopyAgentId}
                   onCopyTerminalId={onCopyTerminalId}
                   onCopyFilePath={onCopyFilePath}
@@ -935,6 +939,7 @@ function SplitNodeView({
   onNavigateTab,
   onCloseTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -1023,6 +1028,7 @@ function SplitNodeView({
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
             onCopyResumeCommand={onCopyResumeCommand}
+            onCopyChat={onCopyChat}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
             onCopyFilePath={onCopyFilePath}
@@ -1075,6 +1081,7 @@ function SplitNodeView({
               onNavigateTab={onNavigateTab}
               onCloseTab={onCloseTab}
               onCopyResumeCommand={onCopyResumeCommand}
+              onCopyChat={onCopyChat}
               onCopyAgentId={onCopyAgentId}
               onCopyTerminalId={onCopyTerminalId}
               onCopyFilePath={onCopyFilePath}
@@ -1135,6 +1142,7 @@ function SplitPaneView({
   onNavigateTab,
   onCloseTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -1270,6 +1278,7 @@ function SplitPaneView({
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
             onCopyResumeCommand={onCopyResumeCommand}
+            onCopyChat={onCopyChat}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
             onCopyFilePath={onCopyFilePath}

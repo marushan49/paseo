@@ -329,7 +329,9 @@ export const ja: TranslationResources = {
     },
     actions: {
       copyCode: "コードをコピー",
+      copyText: "テキストをコピー",
       copyTurn: "ターンをコピー",
+      copyFailed: "コピーできませんでした",
       copyMessage: "メッセージをコピー",
       forkMenu: "メッセージをフォーク",
       forkInNewTab: "新しいタブにフォーク",
@@ -339,6 +341,9 @@ export const ja: TranslationResources = {
       forkFailed: "チャットのフォークに失敗しました",
       openFile: "ファイルを開く",
       copied: "コピーしました",
+    },
+    writingBlock: {
+      untitled: "テキスト",
     },
     attachments: {
       dismissImage: "画像を閉じる",
@@ -633,6 +638,8 @@ export const ja: TranslationResources = {
         copyResumeCommand: "再開コマンドをコピー",
         copyAgentId: "エージェントIDをコピー",
         copyTerminalId: "ターミナルIDをコピー",
+        copyChatMarkdown: "チャットをコピー (Markdown)",
+        copyChatJson: "チャットをコピー (JSON)",
         copyFilePath: "ファイルパスをコピー",
         rename: "名前を変更",
         closeAbove: "上のタブを閉じる",
@@ -673,12 +680,18 @@ export const ja: TranslationResources = {
         toggle: "サイドパネルを切り替え",
         changes: "変更",
         files: "ファイル",
+        evidence: "証拠",
       },
       toasts: {
         copyFailed: "コピーに失敗しました",
         agentIdCopiedLabel: "エージェントID",
         terminalIdCopiedLabel: "ターミナルID",
         resumeCommandCopiedLabel: "再開コマンド",
+        chatCopiedLabel: "チャット記録",
+        copyingChat: "チャットをコピーしています...",
+        copyChatFailed: "チャットをコピーできませんでした",
+        chatCopyEmpty: "このチャットは空です",
+        chatCopyTruncated: "最も古いメッセージを除いてチャットをコピーしました",
         filePathCopiedLabel: "ファイルパス",
         resumeIdUnavailable: "再開IDが利用できません",
         resumeCommandUnavailable: "再開コマンドが利用できません",
@@ -976,10 +989,61 @@ export const ja: TranslationResources = {
         openFileIn: "{{target}}で{{fileName}}を開く",
         failedOpen: "ワークスペースを開けませんでした",
       },
+      forgeAccount: {
+        scopeProject: "プロジェクト全体",
+        scopeWorkspace: "このワークスペースのみ",
+        scopeProjectHint:
+          "このプロジェクトの各ワークスペースは、独自に設定しない限りこのアカウントを使います。",
+        scopeWorkspaceHint:
+          "このワークスペースだけに適用され、プロジェクトのアカウントより優先されます。",
+        inherited: "{{host}} · プロジェクトから継承",
+        savedProject:
+          "このプロジェクトのすべてのワークスペースが {{path}} のアカウントを使うようになりました",
+        clearedProject: "このプロジェクトは既定のアカウントに戻りました",
+        title: "GitHub アカウント",
+        defaultOption: "マシンの既定",
+        defaultDetail: "このホストで gh が選ぶもの",
+        empty: "このホストに GitHub のログインが見つかりません",
+        placeholder: "gh 設定ディレクトリのパス（例: ~/.config/gh-work）",
+        confirm: "保存",
+        saved: "このワークスペースは {{path}} のアカウントとして動作します",
+        cleared: "このワークスペースは既定のアカウントに戻りました",
+      },
       pr: {
         actions: {
           viewPullRequest: "表示",
           openOn: "{{brand}}で開く",
+        },
+        set: {
+          toggleEmptyAccessibility: "このワークスペースにプルリクエストを追加",
+          toggleOneAccessibility: "プルリクエスト #{{number}} を表示",
+          addAction: "追加",
+          scanAction: "チャットを検索",
+          emptyList: "プルリクエストはまだありません",
+          count: "{{count}} 件のPR",
+          failing: "{{count}} 件失敗",
+          running: "実行中",
+          passing: "成功",
+          draft: "下書き",
+          toggleAccessibility: "{{count}} 件のプルリクエストをすべて表示",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "PR番号（例: 1346 または 1346, 1350）",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          attachNotFoundMany: "このリポジトリにプルリクエストが見つかりません: {{numbers}}",
+          moreInCard: "他 {{count}} 件",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
+          scanChatPullRequests: "Scan chat for PRs",
+          scanChatFound: "Found {{count}} pull requests in chat",
+          scanChatEmpty: "No pull requests found in chat",
+          scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "このチャット内のプルリクエスト",
+          scanChatSubtitle:
+            "{{count}} 件見つかりました。このワークスペースに属するものを選んでください。",
+          scanChatMentions: "言及 {{count}} 回",
+          scanChatAttach: "{{count}} 件を追加",
+          scanChatUnresolved: "フォージで見つかりませんでした: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "成功",
@@ -1210,6 +1274,10 @@ export const ja: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "ワークツリー: ベースに対して {{additions}} 行追加、{{deletions}} 行削除（未コミット分を含む）",
+      },
       status: {
         serviceRunning: "サービス {{name}} 実行中",
         serviceUnhealthy: "サービス {{name}} 異常",
@@ -1873,6 +1941,14 @@ export const ja: TranslationResources = {
       emptyDescription:
         "このチェックアウトのプルリクエストを作成すると、ここに詳細が表示されます。",
     },
+    evidence: {
+      label: "証拠",
+      subtitle: "検証の記録",
+      emptyTitle: "証拠はまだありません",
+      emptyDescription: "検証レシピを実行するとスクリーンショットとログが保存されます。",
+      loadFailed: "証拠を読み込めませんでした。",
+      showInChat: "チャットで表示",
+    },
     diff: {
       changesLabel: "変更",
       diffLabel: "差分",
@@ -2004,6 +2080,8 @@ export const ja: TranslationResources = {
       projects: "プロジェクト",
       connections: "接続",
       agents: "エージェント",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "メタデータ",
       workspaces: "ワークスペース",
       providers: "プロバイダー",
@@ -2012,6 +2090,8 @@ export const ja: TranslationResources = {
       plugins: "プラグイン",
       host: "概要",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.ja,
     metadataGeneration: {
       title: "メタデータ生成",
@@ -2173,6 +2253,14 @@ export const ja: TranslationResources = {
       detailLevel: {
         title: "詳細レベル",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "チャットのアウトライン",
         description: "プロンプト間を移動するためのアウトラインを表示します",
@@ -2189,6 +2277,9 @@ export const ja: TranslationResources = {
         interfaceFont: "インターフェースフォント",
         interfaceFontHint:
           "アプリ全体で使用されます。システムデフォルトにするには空のままにしてください",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "インターフェースフォントファミリー",
         interfaceSize: "インターフェースサイズ",
         interfaceSizeHint: "ナビゲーション、コントロール、ラベルに使用されます",
@@ -2420,6 +2511,31 @@ export const ja: TranslationResources = {
           title: "Paseoツールを有効にする",
           hint: "エージェントがワークツリー、エージェント、スケジュールを管理できるようになります",
           accessibilityLabel: "Paseoツールを有効にする",
+        },
+        resourcePolicy: {
+          schedules: {
+            title: "スケジュールを実行",
+            onHint: "このホストでスケジュールは設定間隔どおりに実行されます。",
+            offHint: "スケジュールは実行されません。設定時刻に何も動きません。",
+            economyException: "economy の例外として有効化。通常は自動ループすべてが停止します。",
+          },
+          title: "リソース使用量",
+          loading: "リソースポリシーを読み込み中...",
+          options: {
+            economy: {
+              label: "節約",
+              description:
+                "実行ごとにステータスを1回だけ取得します。自動ポーリングとスケジュールは停止します。",
+            },
+            balanced: {
+              label: "バランス",
+              description: "日常的な利用向けにステータス確認と自動処理を制限します。",
+            },
+            deep: {
+              label: "深い作業",
+              description: "長時間のアクティブなワークフロー向けに、制限内で確認回数を増やします。",
+            },
+          },
         },
         systemPrompt: {
           title: "システムプロンプト",

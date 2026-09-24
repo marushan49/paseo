@@ -3152,6 +3152,10 @@ class ClaudeAgentSession implements AgentSession {
     // Preserve claudeSessionId across query recreation so buildOptions() passes
     // resume: sessionId and the new query continues the existing conversation.
     this.persistence = null;
+    // A new query is built from the current config, so a change requested while no
+    // query existed is already applied; a stale flag would restart it at once and
+    // drop the input the first turn is about to write to.
+    this.queryRestartNeeded = false;
 
     const input = createAsyncMessageInput<SDKUserMessage>();
     const options = await this.buildOptions();
@@ -3341,11 +3345,13 @@ class ClaudeAgentSession implements AgentSession {
     if (this.claudeSessionId && !this.pendingFreshSessionId) {
       base.resume = this.claudeSessionId;
     }
-    if (this.runtimeSettings?.disallowedTools?.length) {
-      base.disallowedTools = [
-        ...(base.disallowedTools ?? []),
-        ...this.runtimeSettings.disallowedTools,
-      ];
+    const disallowedTools = mergeDisallowedTools(
+      base.disallowedTools,
+      this.runtimeSettings?.disallowedTools,
+      this.config.daemonBlockedMcpServers,
+    );
+    if (disallowedTools.length > 0) {
+      base.disallowedTools = disallowedTools;
     }
     return base;
   }
@@ -6418,4 +6424,17 @@ function readClaudeCommandLifecycle(message: unknown): ClaudeCommandLifecycle | 
     commandUuid: record.command_uuid,
     state: record.state as ClaudeCommandLifecycle["state"],
   };
+}
+
+function mergeDisallowedTools(
+  configured: readonly string[] | undefined,
+  runtime: readonly string[] | undefined,
+  blockedMcpServers: readonly string[] | undefined,
+): string[] {
+  return [
+    ...(configured ?? []),
+    ...(runtime ?? []),
+    // A bare mcp__<server> rule covers every tool of that server.
+    ...(blockedMcpServers ?? []).map((server) => `mcp__${server}`),
+  ];
 }

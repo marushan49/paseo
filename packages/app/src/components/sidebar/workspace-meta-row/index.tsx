@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -16,6 +16,14 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { useSidebarMetaPreferences } from "@/components/sidebar/display-preferences/model";
 import type { Theme } from "@/styles/theme";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import type { RelatedPullRequest } from "@/git/related-pull-requests";
+import { applyPullRequestCuration } from "@/git/pull-request-curation";
+import {
+  pullRequestCurationStore,
+  usePullRequestCuration,
+} from "@/git/pull-request-curation-store";
+import { ChangeRequestSetItem, ChangeRequestSetList } from "./change-request-set";
+import { ManagedChangeRequestSetList } from "./managed-change-request-set";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
 import { selectMetaRowItems, type MetaRowItem } from "./meta-items";
@@ -61,26 +69,64 @@ const dangerMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
  * read first, and it stays the same height as the rest of the line.
  */
 export function WorkspaceMetaRow({
+  workspaceKey = null,
+  serverId = null,
+  workspaceId = null,
   currentBranch,
   projectName,
   hostBadge,
   prHint,
+  relatedPullRequests = EMPTY_PULL_REQUESTS,
   serviceSummary,
   labels = EMPTY_LABELS,
 }: {
+  /**
+   * Sidebar identity for user curation. Absent in previews: the row then
+   * shows exactly what the daemon derived, with nothing removable.
+   */
+  workspaceKey?: string | null;
+  /**
+   * The host and workspace the set belongs to. Both present means the expanded set can grow:
+   * attaching and scanning need a daemon to ask. Absent in previews.
+   */
+  serverId?: string | null;
+  workspaceId?: string | null;
   currentBranch: string | null;
   projectName: string | null;
   hostBadge: HostBadgeModel | null;
   prHint: PrHint | null;
+  relatedPullRequests?: readonly RelatedPullRequest[];
   serviceSummary: WorkspaceServiceSummary | null;
   labels?: readonly WorkspaceLabelDefinition[];
 }) {
   const { rowItems, checksDisplay } = useSidebarMetaPreferences();
+  // Expansion is this row's own business: it survives no navigation and nothing else reads it,
+  // so it stays local rather than becoming another field in the sidebar's persisted state.
+  const [expanded, setExpanded] = useState(false);
+  const handleToggle = useCallback(() => setExpanded((open) => !open), []);
+  const curation = usePullRequestCuration(workspaceKey ?? "");
+  const curatedPullRequests = useMemo(
+    () =>
+      workspaceKey
+        ? applyPullRequestCuration(relatedPullRequests, curation.facts, curation.curation)
+        : relatedPullRequests,
+    [workspaceKey, relatedPullRequests, curation],
+  );
+  const handleRemovePullRequest = useCallback(
+    (number: number) => {
+      if (workspaceKey) {
+        pullRequestCurationStore.remove(workspaceKey, number);
+      }
+    },
+    [workspaceKey],
+  );
   const items = selectMetaRowItems({
     currentBranch,
     projectName,
     hasHostBadge: hostBadge !== null,
     prHint,
+    relatedPullRequests: curatedPullRequests,
+    setExpanded: expanded,
     serviceSummary,
     labels,
     visible: rowItems,
@@ -89,15 +135,71 @@ export function WorkspaceMetaRow({
 
   if (items.length === 0) return null;
 
+  const expandedSet = items.find((item) => item.kind === "changeRequestSet" && item.expanded);
+
   return (
-    <View style={styles.row}>
-      {items.map((item, index) => (
-        <Fragment key={item.kind}>
-          {index > 0 ? <Text style={styles.separator}>·</Text> : null}
-          <MetaItemNode item={item} hostBadge={hostBadge} leading={index === 0} />
-        </Fragment>
-      ))}
+    <View style={styles.column}>
+      <View style={styles.row}>
+        {items.map((item, index) => (
+          <Fragment key={item.kind}>
+            {index > 0 ? <Text style={styles.separator}>·</Text> : null}
+            <MetaItemNode
+              item={item}
+              hostBadge={hostBadge}
+              leading={index === 0}
+              onToggleSet={handleToggle}
+            />
+          </Fragment>
+        ))}
+      </View>
+      {expandedSet?.kind === "changeRequestSet" ? (
+        <ExpandedChangeRequestSet
+          workspaceKey={workspaceKey}
+          serverId={serverId}
+          workspaceId={workspaceId}
+          pullRequests={expandedSet.pullRequests}
+          onRemovePullRequest={handleRemovePullRequest}
+        />
+      ) : null}
     </View>
+  );
+}
+
+const EMPTY_PULL_REQUESTS: readonly RelatedPullRequest[] = [];
+
+/**
+ * The set below the line. A workspace with a host behind it gets the managed panel, which can
+ * also grow the set; a preview gets the same list with nothing to press.
+ */
+function ExpandedChangeRequestSet({
+  workspaceKey,
+  serverId,
+  workspaceId,
+  pullRequests,
+  onRemovePullRequest,
+}: {
+  workspaceKey: string | null;
+  serverId: string | null;
+  workspaceId: string | null;
+  pullRequests: readonly RelatedPullRequest[];
+  onRemovePullRequest: (number: number) => void;
+}) {
+  if (workspaceKey && serverId && workspaceId) {
+    return (
+      <ManagedChangeRequestSetList
+        serverId={serverId}
+        workspaceId={workspaceId}
+        workspaceKey={workspaceKey}
+        pullRequests={pullRequests}
+        onRemovePullRequest={onRemovePullRequest}
+      />
+    );
+  }
+  return (
+    <ChangeRequestSetList
+      pullRequests={pullRequests}
+      onRemovePullRequest={workspaceKey ? onRemovePullRequest : undefined}
+    />
   );
 }
 
@@ -105,11 +207,13 @@ function MetaItemNode({
   item,
   hostBadge,
   leading,
+  onToggleSet,
 }: {
   item: MetaRowItem;
   hostBadge: HostBadgeModel | null;
   /** First on the line, so this item's ink sets the rail the title above it already uses. */
   leading: boolean;
+  onToggleSet: () => void;
 }): ReactNode {
   if (item.kind === "branch") {
     return <IdentityItem kind="branch" name={item.name} />;
@@ -122,6 +226,16 @@ function MetaItemNode({
   }
   if (item.kind === "changeRequest") {
     return <PullRequestItem hint={item.hint} />;
+  }
+  if (item.kind === "changeRequestSet") {
+    return (
+      <ChangeRequestSetItem
+        summary={item.summary}
+        soleNumber={item.soleNumber}
+        expanded={item.expanded}
+        onToggle={onToggleSet}
+      />
+    );
   }
   if (item.kind === "checks") {
     return <ChecksItem summary={item.summary} label={item.label} />;
@@ -310,6 +424,9 @@ function pressableItemStyle({ pressed }: { pressed: boolean }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  column: {
+    minWidth: 0,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",

@@ -61,6 +61,12 @@ const BrowserAutomationTabTargetSchema = z
 const BrowserAutomationRefSchema = z.string().regex(/^@e\d+$/);
 const BrowserAutomationMouseButtonSchema = z.enum(["left", "right", "middle"]);
 const BrowserAutomationInputModifierSchema = z.enum(["Alt", "Control", "Meta", "Shift"]);
+const BrowserAutomationPointSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+  })
+  .strict();
 const BrowserAutomationHttpUrlSchema = z
   .string()
   .url()
@@ -91,12 +97,20 @@ export const BrowserAutomationSnapshotCommandSchema = z.object({
 
 export const BrowserAutomationClickCommandSchema = z.object({
   command: z.literal("click"),
-  args: BrowserAutomationTabTargetSchema.extend({
-    ref: BrowserAutomationRefSchema,
-    button: BrowserAutomationMouseButtonSchema.default("left"),
-    doubleClick: z.boolean().default(false),
-    modifiers: z.array(BrowserAutomationInputModifierSchema).default([]),
-  }),
+  args: z.union([
+    BrowserAutomationTabTargetSchema.extend({
+      ref: BrowserAutomationRefSchema,
+      button: BrowserAutomationMouseButtonSchema.default("left"),
+      doubleClick: z.boolean().default(false),
+      modifiers: z.array(BrowserAutomationInputModifierSchema).default([]),
+    }),
+    BrowserAutomationTabTargetSchema.extend({
+      ...BrowserAutomationPointSchema.shape,
+      button: BrowserAutomationMouseButtonSchema.default("left"),
+      doubleClick: z.boolean().default(false),
+      modifiers: z.array(BrowserAutomationInputModifierSchema).default([]),
+    }),
+  ]),
 });
 
 export const BrowserAutomationFillCommandSchema = z.object({
@@ -160,6 +174,10 @@ export const BrowserAutomationScreenshotCommandSchema = z.object({
   command: z.literal("screenshot"),
   args: BrowserAutomationTabTargetSchema.extend({
     fullPage: z.boolean().default(false),
+    reveal: z.boolean().default(false),
+    ephemeral: z.boolean().optional(),
+    runId: z.string().optional(),
+    artifactName: z.string().optional(),
   }),
 });
 
@@ -181,17 +199,26 @@ export const BrowserAutomationSelectCommandSchema = z.object({
 
 export const BrowserAutomationHoverCommandSchema = z.object({
   command: z.literal("hover"),
-  args: BrowserAutomationTabTargetSchema.extend({
-    ref: BrowserAutomationRefSchema,
-  }),
+  args: z.union([
+    BrowserAutomationTabTargetSchema.extend({ ref: BrowserAutomationRefSchema }),
+    BrowserAutomationTabTargetSchema.extend(BrowserAutomationPointSchema.shape),
+  ]),
 });
 
 export const BrowserAutomationDragCommandSchema = z.object({
   command: z.literal("drag"),
-  args: BrowserAutomationTabTargetSchema.extend({
-    sourceRef: BrowserAutomationRefSchema,
-    targetRef: BrowserAutomationRefSchema,
-  }),
+  args: z.union([
+    BrowserAutomationTabTargetSchema.extend({
+      sourceRef: BrowserAutomationRefSchema,
+      targetRef: BrowserAutomationRefSchema,
+    }),
+    BrowserAutomationTabTargetSchema.extend({
+      sourceX: z.number(),
+      sourceY: z.number(),
+      targetX: z.number(),
+      targetY: z.number(),
+    }),
+  ]),
 });
 
 export const BrowserAutomationLogsCommandSchema = z.object({
@@ -215,6 +242,8 @@ export const BrowserAutomationScrollCommandSchema = z.object({
     ref: BrowserAutomationRefSchema.optional(),
     deltaX: z.number(),
     deltaY: z.number(),
+    x: z.number().optional(),
+    y: z.number().optional(),
   }),
 });
 
@@ -304,7 +333,7 @@ export const BrowserAutomationSnapshotResultSchema = z.object({
 export const BrowserAutomationClickResultSchema = z.object({
   command: z.literal("click"),
   browserId: BrowserAutomationBrowserIdSchema,
-  ref: BrowserAutomationRefSchema,
+  ref: BrowserAutomationRefSchema.optional(),
   x: z.number().optional(),
   y: z.number().optional(),
 });
@@ -363,7 +392,10 @@ export const BrowserAutomationScreenshotResultSchema = z.object({
   command: z.literal("screenshot"),
   browserId: BrowserAutomationBrowserIdSchema,
   mimeType: z.literal("image/png"),
-  dataBase64: z.string().min(1),
+  dataBase64: z.string().min(1).optional(),
+  evidenceRef: z.string().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  sha256: z.string().optional(),
   width: z.number().int().nonnegative(),
   height: z.number().int().nonnegative(),
 });
@@ -385,7 +417,7 @@ export const BrowserAutomationSelectResultSchema = z.object({
 export const BrowserAutomationHoverResultSchema = z.object({
   command: z.literal("hover"),
   browserId: BrowserAutomationBrowserIdSchema,
-  ref: BrowserAutomationRefSchema,
+  ref: BrowserAutomationRefSchema.optional(),
   x: z.number().optional(),
   y: z.number().optional(),
 });
@@ -393,8 +425,8 @@ export const BrowserAutomationHoverResultSchema = z.object({
 export const BrowserAutomationDragResultSchema = z.object({
   command: z.literal("drag"),
   browserId: BrowserAutomationBrowserIdSchema,
-  sourceRef: BrowserAutomationRefSchema,
-  targetRef: BrowserAutomationRefSchema,
+  sourceRef: BrowserAutomationRefSchema.optional(),
+  targetRef: BrowserAutomationRefSchema.optional(),
   sourceX: z.number().optional(),
   sourceY: z.number().optional(),
   targetX: z.number().optional(),
@@ -507,22 +539,24 @@ export const BrowserAutomationExecuteRequestSchema = z
   })
   .strict();
 
+export const BrowserAutomationResponsePayloadSchema = z.union([
+  z.object({
+    requestId: z.string().min(1),
+    ok: z.literal(true),
+    result: BrowserAutomationResultSchema,
+    dialogs: z.array(BrowserAutomationDialogEventSchema).optional(),
+  }),
+  z.object({
+    requestId: z.string().min(1),
+    ok: z.literal(false),
+    error: BrowserAutomationErrorSchema,
+    dialogs: z.array(BrowserAutomationDialogEventSchema).optional(),
+  }),
+]);
+
 export const BrowserAutomationExecuteResponseSchema = z.object({
   type: z.literal("browser.automation.execute.response"),
-  payload: z.discriminatedUnion("ok", [
-    z.object({
-      requestId: z.string().min(1),
-      ok: z.literal(true),
-      result: BrowserAutomationResultSchema,
-      dialogs: z.array(BrowserAutomationDialogEventSchema).optional(),
-    }),
-    z.object({
-      requestId: z.string().min(1),
-      ok: z.literal(false),
-      error: BrowserAutomationErrorSchema,
-      dialogs: z.array(BrowserAutomationDialogEventSchema).optional(),
-    }),
-  ]),
+  payload: BrowserAutomationResponsePayloadSchema,
 });
 
 export type BrowserAutomationErrorCode = z.infer<typeof BrowserAutomationErrorCodeSchema>;
@@ -534,6 +568,9 @@ export type BrowserAutomationConsoleLogEntry = z.infer<
 >;
 export type BrowserAutomationNetworkLogEntry = z.infer<
   typeof BrowserAutomationNetworkLogEntrySchema
+>;
+export type BrowserAutomationResponsePayload = z.infer<
+  typeof BrowserAutomationResponsePayloadSchema
 >;
 export type BrowserAutomationDialogEvent = z.infer<typeof BrowserAutomationDialogEventSchema>;
 export type BrowserAutomationExecuteRequest = z.infer<typeof BrowserAutomationExecuteRequestSchema>;

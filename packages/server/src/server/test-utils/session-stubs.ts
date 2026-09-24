@@ -62,7 +62,12 @@ export function asPushNotifications(
 }
 
 export function asScheduleService(): SessionOptions["scheduleService"] {
-  return createStub<SessionOptions["scheduleService"]>({});
+  // Every session reports which timelines it shows, so the run cleanup knows when
+  // someone is still reading. Tests that do not care still make the calls.
+  return createStub<SessionOptions["scheduleService"]>({
+    markAgentsViewed: () => {},
+    releaseViewedAgents: () => {},
+  });
 }
 
 export function asCheckoutDiffManager(stub: {

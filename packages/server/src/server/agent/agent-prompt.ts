@@ -9,6 +9,12 @@ import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
+import {
+  describeProviderFailure,
+  providerRetryDelayMs,
+  shouldRetryProviderFailure,
+  type ProviderFailure,
+} from "./provider-failure.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
 
@@ -24,6 +30,7 @@ export type AgentRunController = Pick<
   | "streamAgent"
 > & {
   reloadAgentSession(agentId: string): Promise<unknown>;
+  routeNextTurn?(agentId: string, prompt: AgentPromptInput): Promise<void>;
 };
 
 export interface StartAgentRunOptions {
@@ -75,17 +82,93 @@ async function startOrReplaceRun(
   replaced: boolean;
 }> {
   const replaced = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
+  const systemPrompt = typeof prompt === "string" && isSystemInjectedEnvelope(prompt);
+  if (!agentManager.hasInFlightRun(agentId) && !systemPrompt) {
+    await agentManager.routeNextTurn?.(agentId, prompt);
+  }
   const iterator = replaced
     ? await agentManager.replaceAgentRun(agentId, prompt, options?.runOptions)
     : agentManager.streamAgent(agentId, prompt, options?.runOptions);
   return { iterator, replaced };
 }
 
+/**
+ * How a run ended, as far as deciding whether to run it again goes.
+ *
+ * `producedSideEffects` is true once the turn has called a tool. A retry re-sends the same
+ * prompt, so a turn that already touched the working tree must never be replayed behind the
+ * user's back, however retryable the provider says its failure was.
+ */
+interface AgentRunOutcome {
+  failure: ProviderFailure | null;
+  producedSideEffects: boolean;
+}
+
+/** How many times one prompt may be sent before a passing failure is treated as real. */
+const MAX_PROVIDER_ATTEMPTS = 3;
+
 async function drainAgentRunIterator(
   iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>,
+): Promise<AgentRunOutcome> {
+  let failure: ProviderFailure | null = null;
+  let producedSideEffects = false;
+  for await (const event of iterator) {
+    // Events are broadcast via AgentManager subscribers; this loop only watches how it ends.
+    if (event.type === "turn_failed") {
+      failure = describeProviderFailure(event.error, event.code);
+    } else if (event.type === "turn_completed" || event.type === "turn_canceled") {
+      failure = null;
+    } else if (event.type === "timeline" && event.item.type === "tool_call") {
+      producedSideEffects = true;
+    }
+  }
+  return { failure, producedSideEffects };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Run the prompt, and run it again when the provider failed in a way it called passing.
+ *
+ * Every abort measured on this daemon looked the same: a 503 "Our servers are currently
+ * overloaded", flagged `isRetryable` by the provider itself, and nobody acting on it. The run
+ * simply stopped mid-way. One prompt now gets up to `MAX_PROVIDER_ATTEMPTS` sends, backing off
+ * between them, and stops the moment the turn has done anything a replay would repeat.
+ */
+async function drainWithProviderRetry(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  logger: Logger,
+  options: StartAgentRunOptions | undefined,
+  first: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>,
 ): Promise<void> {
-  for await (const _ of iterator) {
-    // Events are broadcast via AgentManager subscribers.
+  let outcome = await drainAgentRunIterator(first);
+  let sideEffects = outcome.producedSideEffects;
+  for (let attempt = 1; attempt < MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+    const failure = outcome.failure;
+    if (
+      !failure ||
+      !shouldRetryProviderFailure({
+        failure,
+        attempt,
+        maxAttempts: MAX_PROVIDER_ATTEMPTS,
+        producedSideEffects: sideEffects,
+      })
+    ) {
+      return;
+    }
+    const waitMs = providerRetryDelayMs(attempt);
+    logger.warn(
+      { agentId, attempt, waitMs, failure: failure.message, statusCode: failure.statusCode },
+      "Provider failed in a way it called retryable; sending the prompt again",
+    );
+    await delay(waitMs);
+    const retry = await startOrReplaceRun(agentManager, agentId, prompt, options);
+    outcome = await drainAgentRunIterator(retry.iterator);
+    sideEffects = sideEffects || outcome.producedSideEffects;
   }
 }
 
@@ -154,7 +237,7 @@ async function startAgentRunInner(
   void (async () => {
     try {
       try {
-        await drainAgentRunIterator(iterator);
+        await drainWithProviderRetry(agentManager, agentId, prompt, logger, options, iterator);
       } catch (error) {
         if (!isStaleProviderSessionError(error)) throw error;
         logger.info(
@@ -163,7 +246,14 @@ async function startAgentRunInner(
         );
         await agentManager.reloadAgentSession(agentId);
         const retry = await startOrReplaceRun(agentManager, agentId, prompt, options);
-        await drainAgentRunIterator(retry.iterator);
+        await drainWithProviderRetry(
+          agentManager,
+          agentId,
+          prompt,
+          logger,
+          options,
+          retry.iterator,
+        );
       }
       logger.trace(
         {

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { DaemonConfigStore, applyMutableProviderConfigToOverrides } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import type { PersistedConfig } from "./persisted-config.js";
-import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
+import { MutableDaemonConfigSchema, type MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
 function reloadableConfig(
   persisted: PersistedConfig,
@@ -22,11 +22,13 @@ function reloadableConfig(
     },
     mcp: { enabled: true, injectIntoAgents: false },
     browserTools: { enabled: daemon.browserTools?.enabled ?? false },
+    systemOne: reloadableSystemOne(daemon.systemOne),
     providers: (agents.providers ?? {}) as MutableDaemonConfig["providers"],
     metadataGeneration: { providers: agents.metadataGeneration?.providers ?? [] },
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: daemon.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: daemon.appendSystemPrompt ?? "",
+    resourcePolicy: MutableDaemonConfigSchema.shape.resourcePolicy.parse(daemon.resourcePolicy),
     terminalProfiles: daemon.terminalProfiles,
     agentProfiles: daemon.agentProfiles,
     cors: { allowedOrigins: [] },
@@ -39,6 +41,16 @@ function reloadableConfig(
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins ?? {},
   };
+}
+
+function reloadableSystemOne(systemOne: NonNullable<PersistedConfig["daemon"]>["systemOne"]) {
+  return {
+    enabled: systemOne?.enabled ?? false,
+    model: systemOne?.model ?? "jev-latest",
+    minimumConfidence: systemOne?.minimumConfidence ?? 0.5,
+    configured: false,
+    credentialSource: null,
+  } as const;
 }
 
 describe("applyMutableProviderConfigToOverrides", () => {
@@ -110,6 +122,7 @@ describe("DaemonConfigStore", () => {
       autoArchiveAfterMerge: false,
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
+      resourcePolicy: "balanced",
     });
     const changes: unknown[] = [];
     store.onFieldChange("relay.enabled", (value) => changes.push(value));
@@ -118,6 +131,37 @@ describe("DaemonConfigStore", () => {
 
     expect(changes).toEqual([true]);
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
+  });
+
+  test("patch persists System One settings but never its write-only API key", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      systemOne: {
+        enabled: false,
+        model: "jev-latest",
+        minimumConfidence: 0.5,
+        configured: false,
+        credentialSource: null,
+      },
+      providers: {},
+      metadataGeneration: { providers: [] },
+    });
+
+    store.patch({
+      systemOne: { enabled: true, model: "jev-1.12", minimumConfidence: 0.7 },
+      systemOneApiKey: "write-only-key",
+    });
+
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.systemOne).toEqual({
+      enabled: true,
+      model: "jev-1.12",
+      minimumConfidence: 0.7,
+    });
+    expect(JSON.stringify(persisted)).not.toContain("write-only-key");
   });
 
   test("patch round-trips agent profiles through the strictly-parsed persisted config", () => {
@@ -680,6 +724,60 @@ describe("DaemonConfigStore", () => {
 
     const persisted = loadPersistedConfig(paseoHome);
     expect(persisted.daemon?.appendSystemPrompt).toBe("Prefer terse replies.");
+  });
+
+  test("patch persists resource policy and emits its field change", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+      resourcePolicy: "balanced",
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("resourcePolicy", (value) => changes.push(value));
+
+    store.patch({ resourcePolicy: "deep" });
+
+    expect(changes).toEqual(["deep"]);
+    expect(store.get().resourcePolicy).toBe("deep");
+    expect(loadPersistedConfig(paseoHome).daemon?.resourcePolicy).toBe("deep");
+  });
+
+  test("patch persists scheduled automation overrides independently of economy", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+      resourcePolicy: "economy",
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("allowScheduledAutomation", (value) => changes.push(value));
+
+    store.patch({ allowScheduledAutomation: true });
+
+    expect(changes).toEqual([true]);
+    expect(store.get().resourcePolicy).toBe("economy");
+    expect(store.get().allowScheduledAutomation).toBe(true);
+    expect(loadPersistedConfig(paseoHome).daemon?.allowScheduledAutomation).toBe(true);
+
+    store.patch({ allowScheduledAutomation: false });
+
+    expect(changes).toEqual([true, false]);
+    expect(loadPersistedConfig(paseoHome).daemon?.allowScheduledAutomation).toBe(false);
   });
 
   test("patch persists browser tools opt-in into config.json", () => {

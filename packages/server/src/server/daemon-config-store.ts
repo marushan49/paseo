@@ -20,12 +20,17 @@ interface SupportedMutableConfigPatch {
   relay?: { enabled?: boolean };
   mcp?: { injectIntoAgents?: boolean };
   browserTools?: { enabled?: boolean };
+  systemOne?: Partial<
+    Pick<NonNullable<MutableDaemonConfig["systemOne"]>, "enabled" | "model" | "minimumConfidence">
+  >;
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
   metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  resourcePolicy?: MutableDaemonConfig["resourcePolicy"];
+  allowScheduledAutomation?: boolean;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   skills?: MutableDaemonConfig["skills"];
@@ -164,6 +169,14 @@ function getValueAtPath(config: MutableDaemonConfig, path: string): unknown {
     .reduce<unknown>((value, segment) => (isRecord(value) ? value[segment] : undefined), config);
 }
 
+function pickScheduledAutomationPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "allowScheduledAutomation"> {
+  return patch.allowScheduledAutomation === undefined
+    ? {}
+    : { allowScheduledAutomation: patch.allowScheduledAutomation };
+}
+
 function isEqualValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -173,6 +186,9 @@ const RELOADABLE_PATHS = [
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
   "daemon.browserTools.enabled",
+  "daemon.systemOne.enabled",
+  "daemon.systemOne.model",
+  "daemon.systemOne.minimumConfidence",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
   "daemon.trustedProxies",
@@ -181,6 +197,8 @@ const RELOADABLE_PATHS = [
   "daemon.autoArchiveAfterMerge",
   "daemon.enableTerminalAgentHooks",
   "daemon.appendSystemPrompt",
+  "daemon.resourcePolicy",
+  "daemon.allowScheduledAutomation",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -196,6 +214,9 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
+  ["daemon.systemOne.enabled", "systemOne.enabled"],
+  ["daemon.systemOne.model", "systemOne.model"],
+  ["daemon.systemOne.minimumConfidence", "systemOne.minimumConfidence"],
   ["daemon.hostnames", "hostnames"],
   ["daemon.cors.allowedOrigins", "cors.allowedOrigins"],
   ["daemon.trustedProxies", "trustedProxies"],
@@ -204,6 +225,8 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.autoArchiveAfterMerge", "autoArchiveAfterMerge"],
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
+  ["daemon.resourcePolicy", "resourcePolicy"],
+  ["daemon.allowScheduledAutomation", "allowScheduledAutomation"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["app.baseUrl", "app.baseUrl"],
@@ -258,6 +281,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.browserTools?.enabled !== undefined
       ? { browserTools: { enabled: patch.browserTools.enabled } }
       : {}),
+    ...(patch.systemOne !== undefined ? { systemOne: patch.systemOne } : {}),
     ...(patch.providers !== undefined ? { providers: patch.providers } : {}),
     ...(patch.removeProviders !== undefined ? { removeProviders: patch.removeProviders } : {}),
     ...(patch.metadataGeneration?.providers !== undefined
@@ -272,6 +296,8 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
       : {}),
+    ...(patch.resourcePolicy !== undefined ? { resourcePolicy: patch.resourcePolicy } : {}),
+    ...pickScheduledAutomationPatch(patch),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
@@ -353,6 +379,23 @@ export class DaemonConfigStore {
 
   public setAgentSkillSelection(selection: AgentSkillSelection): MutableDaemonConfig {
     return this.applySupportedPatch({ skills: { selection } });
+  }
+
+  public setSystemOneCredentialStatus(status: {
+    configured: boolean;
+    credentialSource: NonNullable<MutableDaemonConfig["systemOne"]>["credentialSource"];
+  }): MutableDaemonConfig {
+    const next = MutableDaemonConfigSchema.parse({
+      ...this.current,
+      systemOne: {
+        enabled: this.current.systemOne?.enabled ?? false,
+        model: this.current.systemOne?.model ?? "jev-latest",
+        minimumConfidence: this.current.systemOne?.minimumConfidence ?? 0.5,
+        ...status,
+      },
+    });
+    this.applyReplacement(next, { removedProviders: [] });
+    return this.current;
   }
 
   private applySupportedPatch(parsedPatch: SupportedMutableConfigPatch): MutableDaemonConfig {
@@ -652,6 +695,9 @@ function mergeMutableDaemonPatch(
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };
   }
+  if (patch.systemOne !== undefined) {
+    next.systemOne = { ...next.systemOne, ...patch.systemOne };
+  }
   if (patch.autoArchiveAfterMerge !== undefined) {
     next.autoArchiveAfterMerge = patch.autoArchiveAfterMerge;
   }
@@ -659,6 +705,10 @@ function mergeMutableDaemonPatch(
     next.enableTerminalAgentHooks = patch.enableTerminalAgentHooks;
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
+  if (patch.resourcePolicy !== undefined) next.resourcePolicy = patch.resourcePolicy;
+  if (patch.allowScheduledAutomation !== undefined) {
+    next.allowScheduledAutomation = patch.allowScheduledAutomation;
+  }
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;

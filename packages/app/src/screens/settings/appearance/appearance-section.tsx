@@ -36,6 +36,7 @@ import {
 import {
   DEFAULT_MONO_FONT_STACK,
   DEFAULT_UI_FONT_STACK,
+  DEFAULT_DISPLAY_FONT_STACK,
   ICON_SIZE,
   PLUGIN_THEME_PREFERENCE,
   THEME_OPTIONS,
@@ -329,6 +330,66 @@ function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
   );
 }
 
+const SESSION_CARD_STYLES: readonly AppSettings["sessionCardStyle"][] = ["card", "row"];
+
+interface SessionCardStyleMenuItemProps {
+  value: AppSettings["sessionCardStyle"];
+  selected: boolean;
+  onChange: (value: AppSettings["sessionCardStyle"]) => void;
+}
+
+function SessionCardStyleMenuItem({ value, selected, onChange }: SessionCardStyleMenuItemProps) {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => onChange(value), [onChange, value]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={handleSelect}>
+      {t(`settings.appearance.cards.${value}`)}
+    </DropdownMenuItem>
+  );
+}
+
+function SessionCardStyleRow({
+  value,
+  onChange,
+}: {
+  value: AppSettings["sessionCardStyle"];
+  onChange: (value: AppSettings["sessionCardStyle"]) => void;
+}) {
+  const { t } = useTranslation();
+  const selectedLabel = t(`settings.appearance.cards.${value}`);
+  return (
+    <View style={settingsStyles.row}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.appearance.cards.sessionStyle")}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.appearance.cards.sessionStyleHint")}
+        </Text>
+      </View>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          style={dropdownTriggerStyle}
+          accessibilityLabel={t("settings.appearance.cards.sessionStyleAccessibility", {
+            value: selectedLabel,
+          })}
+        >
+          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="bottom" align="end" width={200}>
+          {SESSION_CARD_STYLES.map((option) => (
+            <SessionCardStyleMenuItem
+              key={option}
+              value={option}
+              selected={value === option}
+              onChange={onChange}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Fonts: family text fields + numeric size fields (commit on blur/submit)
 // ---------------------------------------------------------------------------
@@ -517,9 +578,11 @@ export function AppearanceSection() {
   const showInterfaceFontFamilyRow = !isNative;
   const uiFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_UI_FONT_STACK);
   const monoFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_MONO_FONT_STACK);
+  const displayFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_DISPLAY_FONT_STACK);
 
   const [uiFontDraft, setUiFontDraft] = useState(settings.uiFontFamily);
   const [monoFontDraft, setMonoFontDraft] = useState(settings.monoFontFamily);
+  const [displayFontDraft, setDisplayFontDraft] = useState(settings.displayFontFamily);
   const [uiBaseSizeDraft, setUiBaseSizeDraft] = useState(String(settings.uiBaseFontSize));
   const [contentSizeDraft, setContentSizeDraft] = useState(String(settings.contentFontSize));
   const [codeSizeDraft, setCodeSizeDraft] = useState(String(settings.codeFontSize));
@@ -607,6 +670,28 @@ export function AppearanceSection() {
     [settings.monoFontFamily, updateSettings],
   );
 
+  const commitDisplayFontFamily = useCallback(
+    (value: string) => {
+      const sanitized = sanitizeFontFamily(value);
+      if (sanitized === null) {
+        setDisplayFontDraft(settings.displayFontFamily);
+        return;
+      }
+      setDisplayFontDraft(sanitized);
+      if (sanitized !== settings.displayFontFamily) {
+        void updateSettings({ displayFontFamily: sanitized });
+      }
+    },
+    [settings.displayFontFamily, updateSettings],
+  );
+
+  const handleSessionCardStyleChange = useCallback(
+    (sessionCardStyle: AppSettings["sessionCardStyle"]) => {
+      void updateSettings({ sessionCardStyle });
+    },
+    [updateSettings],
+  );
+
   const handleUiBaseSizeChange = useCallback((value: string) => {
     setUiBaseSizeDraft(value.replace(/[^\d]/g, ""));
   }, []);
@@ -663,8 +748,9 @@ export function AppearanceSection() {
       contentFontSize: sizeDraftToOverride(contentSizeDraft),
       monoFontFamily: monoFontDraft,
       codeFontSize: sizeDraftToOverride(codeSizeDraft),
+      displayFontFamily: displayFontDraft,
     }),
-    [codeSizeDraft, contentSizeDraft, monoFontDraft],
+    [codeSizeDraft, contentSizeDraft, monoFontDraft, displayFontDraft],
   );
 
   return (
@@ -699,6 +785,14 @@ export function AppearanceSection() {
         </SettingsCard>
       </SettingsSection>
       <SidebarNavSection />
+      <SettingsSection title={t("settings.appearance.cards.title")}>
+        <View style={settingsStyles.card}>
+          <SessionCardStyleRow
+            value={settings.sessionCardStyle}
+            onChange={handleSessionCardStyleChange}
+          />
+        </View>
+      </SettingsSection>
       <SettingsSection title={t("settings.appearance.fonts.title")}>
         <View style={settingsStyles.card}>
           {showInterfaceFontFamilyRow ? (
@@ -714,6 +808,17 @@ export function AppearanceSection() {
               onCommit={commitUiFontFamily}
             />
           ) : null}
+          <FontFamilyRow
+            title={t("settings.appearance.fonts.displayFont")}
+            hint={t("settings.appearance.fonts.displayFontHint")}
+            accessibilityLabel={t("settings.appearance.fonts.displayFontAccessibility")}
+            placeholder={displayFontPlaceholder}
+            value={settings.displayFontFamily}
+            draft={displayFontDraft}
+            withBorder
+            onChangeDraft={setDisplayFontDraft}
+            onCommit={commitDisplayFontFamily}
+          />
           <FontSizeRow
             title={t("settings.appearance.fonts.interfaceSize")}
             hint={t("settings.appearance.fonts.interfaceSizeHint")}

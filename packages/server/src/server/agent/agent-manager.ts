@@ -1,7 +1,10 @@
 import { projectTimelineRows } from "./timeline-projection.js";
+import type { TurnRouter } from "../system-one/model-routing.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
+import { composeDaemonAppendSystemPrompt } from "./writing-block-instruction.js";
+import { forgeAccountEnvOverlay } from "../workspace-forge-account.js";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
@@ -78,12 +81,16 @@ import {
   type PendingForegroundRun,
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
-import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { formatSystemNotificationPrompt, isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { buildAgentHandoffNote } from "./handoff.js";
+import { buildResourcePolicyPrompt, resolveResourcePolicy } from "../resource-policy.js";
+import type { ResourcePolicy } from "@getpaseo/protocol/messages";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import { describeProviderFailure } from "./provider-failure.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -127,7 +134,7 @@ export class AgentManagerShuttingDownError extends Error {
 }
 
 export class AgentRunCancellationError extends Error {
-  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop") {
+  constructor(agentId: string, action: "reload" | "replace" | "rewind" | "stop" | "switch") {
     super(
       `Cannot ${action} agent ${agentId} because its active run cancellation was not acknowledged`,
     );
@@ -332,12 +339,22 @@ export interface AgentManagerOptions {
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   appendSystemPrompt?: string;
+  resourcePolicy?: ResourcePolicy;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
   beforeSteerUnavailableFallback?: (input: {
     agentId: string;
     expectedTurnId: string;
   }) => Promise<void>;
+  /**
+   * The forge CLI account a workspace speaks to, as that account's config
+   * directory. Injected so the manager keeps no workspace-registry dependency.
+   * Null means the machine's default account.
+   */
+  resolveWorkspaceForgeConfigDir?: (input: {
+    workspaceId: string | null;
+    cwd: string;
+  }) => Promise<string | null> | string | null;
   logger: Logger;
 }
 
@@ -723,6 +740,10 @@ export class AgentManager {
   private readonly providerDefinitions = new Map<AgentProvider, ProviderEnabledFlag>();
   private readonly agents = new Map<string, LiveManagedAgent>();
   private readonly timelineStore = new InMemoryAgentTimelineStore();
+  // A switched-to provider session starts empty. Its briefing waits here until
+  // the next prompt, so the switch itself costs no tokens and the note arrives
+  // attached to the thing it explains.
+  private readonly pendingHandoffs = new Map<string, string>();
   private readonly providerSubagents = new ProviderSubagentStore();
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
@@ -749,12 +770,20 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private resolveBlockedMcpServers: () => readonly string[] = () => [];
+  private turnRouter: TurnRouter | null = null;
+  private streamObserver:
+    | ((agent: { id: string; provider: string; cwd: string }, event: AgentStreamEvent) => void)
+    | null = null;
+  private readonly routedModels = new Map<string, string | null>();
+  private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
+  private readonly resolveWorkspaceForgeConfigDir?: AgentManagerOptions["resolveWorkspaceForgeConfigDir"];
   private acceptingAgentRegistrations = true;
 
   constructor(options: AgentManagerOptions) {
@@ -769,6 +798,7 @@ export class AgentManager {
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
+    this.resourcePolicy = resolveResourcePolicy(options.resourcePolicy);
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
       reloadSessionCloseMs:
@@ -777,6 +807,7 @@ export class AgentManager {
         options.rescueTimeouts?.interruptSessionMs ?? INTERRUPT_SESSION_TIMEOUT_MS,
     };
     this.beforeSteerUnavailableFallback = options.beforeSteerUnavailableFallback;
+    this.resolveWorkspaceForgeConfigDir = options.resolveWorkspaceForgeConfigDir;
     this.agentStreamCoalescer = new AgentStreamCoalescer({
       windowMs: options.agentStreamCoalesceWindowMs ?? AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS,
       timers: { setTimeout, clearTimeout },
@@ -876,8 +907,66 @@ export class AgentManager {
     return this.mcpAuthToken;
   }
 
+  setStreamObserver(
+    observer:
+      | ((agent: { id: string; provider: string; cwd: string }, event: AgentStreamEvent) => void)
+      | null,
+  ): void {
+    this.streamObserver = observer;
+  }
+
+  setTurnRouter(router: TurnRouter | null): void {
+    this.turnRouter = router;
+  }
+
+  /**
+   * Lets System One pick model and thinking for the next turn. Call it before the
+   * turn is registered so queued steers and replacements keep their order.
+   * Fail-open: a routing problem must never block the user's turn.
+   */
+  async routeNextTurn(agentId: string, prompt: AgentPromptInput): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!this.turnRouter || !agent || agent.config.internal) return;
+    const lastRouted = this.routedModels.get(agent.id);
+    // A model picked by hand after routing started wins for the rest of the session.
+    if (lastRouted !== undefined && lastRouted !== (agent.config.model ?? null)) return;
+    try {
+      const route = await this.turnRouter({
+        provider: agent.provider,
+        cwd: agent.cwd,
+        model: agent.config.model,
+        thinkingOptionId: agent.config.thinkingOptionId,
+        prompt,
+        isFirstTurn: agent.lastUserMessageAt === null,
+      });
+      if (route?.model && route.model !== agent.config.model) {
+        await this.setAgentModel(agent.id, route.model);
+      }
+      if (route?.thinkingOptionId && route.thinkingOptionId !== agent.config.thinkingOptionId) {
+        await this.setAgentThinkingOption(agent.id, route.thinkingOptionId);
+      }
+      this.routedModels.set(agent.id, agent.config.model ?? null);
+      if (route) {
+        this.logger.info(
+          { agentId: agent.id, provider: agent.provider, route },
+          "System One routed turn",
+        );
+      }
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: agent.id }, "System One turn routing failed");
+    }
+  }
+
+  setBlockedMcpServers(resolver: () => readonly string[]): void {
+    this.resolveBlockedMcpServers = resolver;
+  }
+
   setAppendSystemPrompt(prompt: string | null | undefined): void {
     this.appendSystemPrompt = prompt ?? "";
+  }
+
+  setResourcePolicy(policy: ResourcePolicy): void {
+    this.resourcePolicy = policy;
   }
 
   public getMetricsSnapshot(): AgentMetricsSnapshot {
@@ -1574,6 +1663,7 @@ export class AgentManager {
         // Wipe the in-memory timeline so registerSession mints a new epoch and
         // hydrateTimelineFromProvider re-streams the freshly read provider history.
         this.timelineStore.delete(agentId);
+        this.pendingHandoffs.delete(agentId);
         for (const event of this.providerSubagents.deleteParent(agentId)) {
           this.dispatch({ type: "provider_subagent", event });
         }
@@ -1601,6 +1691,150 @@ export class AgentManager {
         existing.lifecycle = "error";
         existing.lastError = error instanceof Error ? error.message : String(error);
         this.emitState(existing);
+      }
+      throw error;
+    } finally {
+      if (!handedToRegistration) {
+        if (hadPreviousPaseoToolPolicy) {
+          this.paseoToolPolicies.set(agentId, previousPaseoToolPolicy);
+        } else {
+          this.paseoToolPolicies.delete(agentId);
+        }
+        if (session) {
+          await this.closeUnregisteredSession(session);
+        }
+      }
+    }
+  }
+
+  /**
+   * Move a live agent to another provider. The Paseo agent id, workspace,
+   * labels, timestamps, and timeline survive the switch; the provider session
+   * does not.
+   *
+   * The new runtime is created, never resumed: a persisted session belongs to
+   * the provider that minted it. `registerSession` re-derives `persistence` and
+   * `runtimeInfo` from the session it installs, so the previous provider's
+   * handle leaves the record with it. A surviving handle would point the next
+   * `ensureAgentLoaded()` at a foreign session.
+   *
+   * Mode, thinking option, features, and provider options are dropped for the
+   * same reason: each names something only the old provider offers.
+   *
+   * A failed switch leaves the agent closed on its old provider, as reload
+   * does. The record still resumes its original session, so the switch is
+   * retryable and nothing is lost by declining it.
+   */
+  setAgentProvider(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    return this.trackAgentRegistrationOperation(
+      this.runLifecycleMutation(agentId, () =>
+        this.setAgentProviderInternal(agentId, provider, modelId),
+      ),
+    );
+  }
+
+  private async setAgentProviderInternal(
+    agentId: string,
+    provider: AgentProvider,
+    modelId: string | null,
+  ): Promise<ManagedAgent> {
+    this.assertAcceptingAgentRegistrations();
+    let existing = this.requireSessionAgent(agentId);
+    if (existing.provider === provider) {
+      throw new Error(`Agent ${agentId} already runs on provider '${provider}'`);
+    }
+    this.requireEnabledProvider(provider);
+    const client = await this.requireAvailableClient({ provider });
+    const wasRunning = this.hasInFlightRun(agentId);
+    if (wasRunning) {
+      await this.cancelAgentRunBefore(agentId, "switch");
+      existing = this.requireSessionAgent(agentId);
+    }
+
+    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+      {
+        provider,
+        cwd: existing.cwd,
+        model: modelId ?? undefined,
+        systemPrompt: existing.config.systemPrompt,
+        mcpServers: existing.config.mcpServers,
+        toolPolicy: existing.config.toolPolicy,
+      },
+      agentId,
+    );
+
+    const persistedRecord = await this.registry?.get(agentId);
+    const handoffNote = buildAgentHandoffNote({
+      title: persistedRecord?.title ?? existing.config.title ?? null,
+      cwd: existing.cwd,
+      previous: { provider: existing.provider, model: existing.config.model ?? null },
+      next: { provider, model: modelId },
+      timeline: this.timelineStore.getItems(agentId),
+      interrupted: wasRunning,
+    });
+    const preservedLastUsage = existing.lastUsage;
+    const preservedLastError = existing.lastError;
+    const preservedAttention = existing.attention;
+    const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
+    const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
+
+    let session: AgentSession | undefined;
+    let closedExisting: ManagedAgentClosed | undefined;
+    let handedToRegistration = false;
+    try {
+      // A persisted thread can have only one writer, even when its turn is idle.
+      await this.closeReloadedSession(existing.session, agentId);
+      await this.drainSessionEvents(agentId);
+      this.cancelRunningProviderSubagents(agentId);
+      closedExisting = this.prepareAgentForClosure(existing, "agent provider switched");
+      await this.persistSnapshot(closedExisting);
+      this.assertAcceptingAgentRegistrations();
+
+      this.paseoToolPolicies.set(agentId, paseoToolPolicy);
+      const launchContext = await this.buildLaunchContext(
+        agentId,
+        client,
+        storedConfig.cwd,
+        paseoToolPolicy,
+        undefined,
+        { reason: "create", purpose: "interactive", workspaceId: existing.workspaceId ?? null },
+      );
+      const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
+      session = await client.createSession(providerLaunchConfig, launchContext);
+      await this.requireExternalMcpSupport(session, storedConfig);
+      this.assertAcceptingAgentRegistrations();
+
+      handedToRegistration = true;
+      const switched = await this.registerSession(session, storedConfig, agentId, {
+        labels: existing.labels,
+        workspaceId: existing.workspaceId,
+        owner: existing.owner,
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+        lastUserMessageAt: existing.lastUserMessageAt,
+        // The canonical timeline is already primed and the new provider has no
+        // history of its own to replay into it.
+        historyPrimed: true,
+        lastUsage: preservedLastUsage,
+        lastError: preservedLastError,
+        attention: preservedAttention,
+      });
+      this.pendingHandoffs.set(agentId, handoffNote);
+      // One timeline stretches across two provider sessions, so mark where the
+      // cut is: everything above it was said by a different brain.
+      await this.appendTimelineItem(agentId, {
+        type: "notification",
+        level: "info",
+        message: `Switched provider: ${existing.provider} → ${provider}`,
+      });
+      return switched;
+    } catch (error) {
+      if (closedExisting) {
+        this.emitClosedAgent(closedExisting, { persist: false });
       }
       throw error;
     } finally {
@@ -2464,12 +2698,31 @@ export class AgentManager {
     }
   }
 
+  /**
+   * Hands the waiting briefing to the provider in front of the prompt it belongs
+   * to, once. It rides as a system envelope so the person never sees it as a
+   * message they supposedly sent.
+   */
+  private applyPendingHandoff(agentId: string, prompt: AgentPromptInput): AgentPromptInput {
+    const note = this.pendingHandoffs.get(agentId);
+    if (!note) {
+      return prompt;
+    }
+    this.pendingHandoffs.delete(agentId);
+    const envelope = formatSystemNotificationPrompt(note);
+    if (typeof prompt === "string") {
+      return `${envelope}\n\n${prompt}`;
+    }
+    return [{ type: "text", text: envelope }, ...prompt];
+  }
+
   streamAgent(
     agentId: string,
-    prompt: AgentPromptInput,
+    promptInput: AgentPromptInput,
     options?: AgentRunOptions,
   ): AsyncGenerator<AgentStreamEvent> {
     const existingAgent = this.requireSessionAgent(agentId);
+    const prompt = this.applyPendingHandoff(agentId, promptInput);
     this.logger.trace(
       {
         agentId,
@@ -3078,7 +3331,7 @@ export class AgentManager {
 
   private async cancelAgentRunBefore(
     agentId: string,
-    action: "reload" | "replace" | "rewind",
+    action: "reload" | "replace" | "rewind" | "switch",
   ): Promise<void> {
     const result = await this.cancelAgentRun(agentId);
     if (result.status === "refused") {
@@ -4737,14 +4990,11 @@ export class AgentManager {
   private formatTurnFailedMessage(
     event: Extract<AgentStreamEvent, { type: "turn_failed" }>,
   ): string {
-    const base = event.error.trim();
-    const parts = [base.length > 0 ? base : "Provider run failed"];
-    const code = event.code?.trim();
-    if (code) {
-      parts.push(`code: ${code}`);
-    }
+    // Providers serialize their whole error object into this string. Read it, don't print it.
+    const failure = describeProviderFailure(event.error, event.code);
+    const parts = [failure.message];
     const diagnostic = event.diagnostic?.trim();
-    if (diagnostic && diagnostic !== base) {
+    if (diagnostic && diagnostic !== event.error.trim() && diagnostic !== failure.message) {
       parts.push(diagnostic);
     }
     return parts.join("\n\n");
@@ -4980,6 +5230,11 @@ export class AgentManager {
       "agent.manager.dispatch_stream",
     );
     this.dispatch({ type: "agent_stream", agentId, event, ...metadata });
+    // Live turns only: session replay would score steps that already happened.
+    const liveTurnEvent = agent?.lifecycle === "running" || event.type === "turn_completed";
+    if (this.streamObserver && agent && !agent.internal && liveTurnEvent) {
+      this.streamObserver({ id: agentId, provider: agent.provider, cwd: agent.cwd }, event);
+    }
     if (this.pluginLifecycle && agent && !agent.internal && event.type !== "timeline") {
       publishAgentStream(
         this.pluginLifecycle,
@@ -5145,16 +5400,22 @@ export class AgentManager {
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
-    const daemonAppendSystemPrompt = this.appendSystemPrompt.trim();
+    // The writing-block convention always ships; operator and resource policy prompts follow it.
+    const daemonAppendSystemPrompt = composeDaemonAppendSystemPrompt(
+      [this.appendSystemPrompt.trim(), buildResourcePolicyPrompt(this.resourcePolicy)]
+        .filter((part) => part.length > 0)
+        .join("\n\n"),
+    );
     const next = { ...config };
     delete next.daemonAppendSystemPrompt;
+    delete next.daemonBlockedMcpServers;
+    const blocked = this.resolveBlockedMcpServers();
 
-    return daemonAppendSystemPrompt
-      ? {
-          ...next,
-          daemonAppendSystemPrompt,
-        }
-      : next;
+    return {
+      ...next,
+      daemonAppendSystemPrompt,
+      ...(blocked.length > 0 ? { daemonBlockedMcpServers: [...blocked] } : {}),
+    };
   }
 
   private async buildLaunchContext(
@@ -5182,10 +5443,23 @@ export class AgentManager {
       const transformed = await this.pluginLifecycle.before("agent.session_open", request);
       env = transformed.env;
     }
+    // The agent runs `gh` itself, so the workspace's account has to reach the
+    // process, not just Paseo's own forge queries. An explicit value already in
+    // env wins: a caller or a session_open plugin that set it meant it.
+    const forgeEnv =
+      env?.GH_CONFIG_DIR === undefined
+        ? forgeAccountEnvOverlay(
+            await this.resolveWorkspaceForgeConfigDir?.({
+              workspaceId: opening?.workspaceId ?? null,
+              cwd,
+            }),
+          )
+        : {};
     const context: AgentLaunchContext = {
       agentId,
       env: {
         ...env,
+        ...forgeEnv,
         PASEO_AGENT_ID: agentId,
         PASEO_AGENT_CWD: cwd,
       },

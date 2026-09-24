@@ -12,6 +12,7 @@ import {
   expectHostLabelEditMode,
   expectHostConnectionsCard,
   expectHostInjectMcpCard,
+  expectHostResourcePolicyCard,
   expectHostActionCards,
   expectHostProvidersCard,
   expectHostNoDaemonLifecycleRow,
@@ -35,6 +36,9 @@ test.describe("Settings host page", () => {
       await openHostSection(page, serverId, "agents");
       await expectSettingsHeader(page, "Agents");
       await expectHostInjectMcpCard(page);
+    });
+    await test.step("agents section shows the resource policy control", async () => {
+      await expectHostResourcePolicyCard(page);
     });
     await test.step("providers section shows the providers card", async () => {
       await expectHostProvidersCard(page, serverId);
@@ -62,6 +66,54 @@ test.describe("Settings host page", () => {
     await test.step("settings sidebar exposes the flat App and Host section rows", async () => {
       await expectRetiredSidebarSectionsAbsent(page);
     });
+  });
+
+  test("schedules can be enabled with Economy and remain enabled after reload", async ({
+    page,
+  }, testInfo) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+    await openHostSection(page, serverId, "agents");
+
+    const card = page.getByTestId("host-page-resource-policy-card");
+    const economy = card.getByTestId("host-page-resource-policy-economy");
+    const schedules = card.getByTestId("host-page-schedule-automation-switch");
+
+    await economy.click();
+    await expect(economy).toHaveAttribute("aria-selected", "true");
+    await expect(schedules).toHaveAttribute("aria-checked", "false");
+    await schedules.click();
+    await expect(schedules).toHaveAttribute("aria-checked", "true");
+
+    await page.reload();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+    await openHostSection(page, serverId, "agents");
+
+    const reloadedCard = page.getByTestId("host-page-resource-policy-card");
+    await expect(reloadedCard.getByTestId("host-page-resource-policy-economy")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const reloadedSchedules = reloadedCard.getByTestId("host-page-schedule-automation-switch");
+    await expect(reloadedSchedules).toHaveAttribute("aria-checked", "true");
+    const screenshotPath = testInfo.outputPath("schedules-enabled-under-economy.png");
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await testInfo.attach("schedules-enabled-under-economy", {
+      path: screenshotPath,
+      contentType: "image/png",
+    });
+
+    await reloadedCard.getByTestId("host-page-resource-policy-balanced").click();
+    await expect(reloadedCard.getByTestId("host-page-resource-policy-balanced")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await reloadedSchedules.click();
+    await expect(reloadedSchedules).toHaveAttribute("aria-checked", "false");
   });
 
   test("a failed remote daemon update remains visible in the host UI", async ({
@@ -102,5 +154,31 @@ test.describe("Settings host page", () => {
     await openHostSection(page, serverId, "host");
     await expectHostLabelDisplayed(page);
     await expectHostActionCards(page, serverId);
+  });
+
+  test("explains shared System One decisions and Jev browser automation", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+
+    await openHostSection(page, serverId, "system-one");
+    await expectSettingsHeader(page, "System One");
+    await expect(page.getByTestId("host-system-one-settings")).toBeVisible();
+    await expect(page.getByText("Jev / System One", { exact: true })).toBeVisible();
+    await expect(page.getByText("Split decisions", { exact: true })).toBeVisible();
+    if (process.env.E2E_SYSTEM_ONE_SCREENSHOT) {
+      await page.screenshot({ path: process.env.E2E_SYSTEM_ONE_SCREENSHOT, fullPage: true });
+    }
+
+    await openHostSection(page, serverId, "browser");
+    await expectSettingsHeader(page, "Browser");
+    await expect(page.getByTestId("host-page-browser-tools-card")).toBeVisible();
+    await expect(page.getByText("Jev browser goals", { exact: true })).toBeVisible();
+    await expect(page.getByText("Start page", { exact: true })).toBeVisible();
+    await expect(page.getByText("Import from browser", { exact: true })).toBeVisible();
+    if (process.env.E2E_BROWSER_SETTINGS_SCREENSHOT) {
+      await page.screenshot({ path: process.env.E2E_BROWSER_SETTINGS_SCREENSHOT, fullPage: true });
+    }
   });
 });

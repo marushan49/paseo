@@ -156,6 +156,31 @@ describe("browser automation protocol integration", () => {
     expect(parsed.type).toBe("browser.automation.execute.response");
   });
 
+  test("remote browser execute messages round-trip through the session schemas", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "browser.remote.execute.request",
+        requestId: "req-remote-1",
+        workspaceId: "workspace-1",
+        command: { command: "screenshot", args: { browserId, reveal: true } },
+      }),
+    ).toMatchObject({
+      type: "browser.remote.execute.request",
+      workspaceId: "workspace-1",
+    });
+
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "browser.remote.execute.response",
+        payload: {
+          requestId: "req-remote-1",
+          ok: false,
+          error: { code: "browser_no_host", message: "offline", retryable: true },
+        },
+      }),
+    ).toMatchObject({ type: "browser.remote.execute.response" });
+  });
+
   test("mutable daemon config defaults browser tools off and accepts opt-in patches", () => {
     expect(
       MutableDaemonConfigSchema.parse({
@@ -168,5 +193,26 @@ describe("browser automation protocol integration", () => {
         browserTools: { enabled: true },
       }).browserTools,
     ).toEqual({ enabled: true });
+  });
+
+  test("System One exposes status without accepting a key in readable config", () => {
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: false },
+      systemOne: {
+        enabled: true,
+        model: "jev-latest",
+        minimumConfidence: 0.7,
+        configured: true,
+        credentialSource: "paseo",
+        apiKey: "must-not-survive",
+      },
+    });
+    const patch = MutableDaemonConfigPatchSchema.parse({
+      systemOne: { model: "jev-1.12" },
+      systemOneApiKey: "write-only-key",
+    });
+
+    expect(config.systemOne).not.toHaveProperty("apiKey");
+    expect(patch.systemOneApiKey).toBe("write-only-key");
   });
 });

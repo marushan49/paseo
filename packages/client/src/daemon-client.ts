@@ -7,7 +7,11 @@ import {
   type TimelineSubscription,
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
-import type { CreationSnapshot } from "@getpaseo/protocol/messages";
+import type {
+  CreationSnapshot,
+  ForgeAccount,
+  ForgeAccountScope,
+} from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
@@ -168,8 +172,10 @@ import {
 } from "./compat/normalize-provider-models.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
 import type {
+  BrowserAutomationCommand,
   BrowserAutomationExecuteRequest,
   BrowserAutomationExecuteResponse,
+  BrowserAutomationResponsePayload,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 
 export interface Logger {
@@ -506,6 +512,13 @@ type WriteProjectConfigPayload = Extract<
   SessionOutboundMessage,
   { type: "write_project_config_response" }
 >["payload"];
+
+type CuratedPullRequestFacts = Extract<
+  SessionInboundMessage,
+  { type: "workspace.pull_requests.curate.request" }
+>["facts"] extends readonly (infer T)[] | undefined
+  ? T
+  : never;
 
 type ListCommandsPayload = ListCommandsResponse["payload"];
 type ListCommandsDraftConfig = Pick<
@@ -2223,6 +2236,24 @@ export class DaemonClient {
     );
   }
 
+  executeRemoteBrowserCommand(input: {
+    workspaceId: string;
+    command: BrowserAutomationCommand;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<BrowserAutomationResponsePayload> {
+    return this.sendCorrelatedSessionRequest<"browser.remote.execute.response">({
+      requestId: input.requestId,
+      message: {
+        type: "browser.remote.execute.request",
+        workspaceId: input.workspaceId,
+        command: input.command,
+      },
+      responseType: "browser.remote.execute.response",
+      timeout: input.timeout,
+    });
+  }
+
   observeEvents(
     events: SessionEventSubscription[],
     options?: { signal?: AbortSignal; notifications?: boolean },
@@ -2630,6 +2661,98 @@ export class DaemonClient {
     });
   }
 
+  async listBrowserImportSources(
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "browser.import.list_sources.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "browser.import.list_sources.request" },
+      responseType: "browser.import.list_sources.response",
+    });
+  }
+
+  async importBrowserCookies(
+    source: Extract<
+      SessionInboundMessage,
+      { type: "browser.import.import_cookies.request" }
+    >["source"],
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "browser.import.import_cookies.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "browser.import.import_cookies.request", source },
+      responseType: "browser.import.import_cookies.response",
+      // A daemon on macOS may wait on the user's Keychain prompt.
+      timeout: 180_000,
+    });
+  }
+
+  async listVerifyRecipes(
+    workspaceId: string,
+    requestId?: string,
+  ): Promise<Extract<SessionOutboundMessage, { type: "verify.recipe.list.response" }>["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "verify.recipe.list.request", workspaceId },
+      responseType: "verify.recipe.list.response",
+    });
+  }
+
+  async runVerifyRecipe(
+    workspaceId: string,
+    recipeName: string,
+    params?: Record<string, string>,
+    requestId?: string,
+  ): Promise<Extract<SessionOutboundMessage, { type: "verify.recipe.run.response" }>["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "verify.recipe.run.request",
+        workspaceId,
+        recipeName,
+        ...(params === undefined ? {} : { params }),
+      },
+      responseType: "verify.recipe.run.response",
+    });
+  }
+
+  async listEvidenceRuns(
+    workspaceId: string,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "verify.evidence.run.list.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "verify.evidence.run.list.request", workspaceId },
+      responseType: "verify.evidence.run.list.response",
+    });
+  }
+
+  async getEvidenceArtifact(
+    workspaceId: string,
+    runId: string,
+    name: string,
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "verify.evidence.artifact.get.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "verify.evidence.artifact.get.request",
+        workspaceId,
+        runId,
+        name,
+      },
+      responseType: "verify.evidence.artifact.get.response",
+    });
+  }
+
   async archiveWorkspace(
     workspaceId: string,
     requestId?: string,
@@ -2976,6 +3099,86 @@ export class DaemonClient {
       throw new Error(payload.error ?? "setWorkspaceTitle rejected");
     }
     return { title: payload.title };
+  }
+
+  /**
+   * Store which change requests this workspace keeps in its set and which it drops. Decisions
+   * rather than a list, so a set the daemon resolves differently tomorrow still honours them.
+   */
+  async curateWorkspacePullRequests(
+    workspaceId: string,
+    curation: { added: readonly number[]; removed: readonly number[] },
+    // COMPAT(curatedPullRequestFacts): added in v0.8.1. What the numbers stand
+    // for, so the daemon can hand the set back to any client instead of only to
+    // the one that resolved it.
+    facts?: readonly CuratedPullRequestFacts[],
+    requestId?: string,
+  ): Promise<{ curation: { added: number[]; removed: number[] } | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "workspace.pull_requests.curate.request",
+        workspaceId,
+        curation: { added: [...curation.added], removed: [...curation.removed] },
+        ...(facts && facts.length > 0
+          ? {
+              facts: facts.map((entry) => ({
+                number: entry.number,
+                url: entry.url,
+                state: entry.state,
+                ...(entry.title === undefined ? {} : { title: entry.title }),
+                ...(entry.isDraft === undefined ? {} : { isDraft: entry.isDraft }),
+                ...(entry.headRefName === undefined ? {} : { headRefName: entry.headRefName }),
+                ...(entry.baseRefName === undefined ? {} : { baseRefName: entry.baseRefName }),
+              })),
+            }
+          : {}),
+      },
+      responseType: "workspace.pull_requests.curate.response",
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "curateWorkspacePullRequests rejected");
+    }
+    return { curation: payload.curation };
+  }
+
+  /**
+   * Point one workspace's gh at its own config directory, so its agents and Paseo's own gh
+   * calls act as that account. An empty string clears it back to the machine's default.
+   */
+  /** The GitHub logins this host can offer, for a picker that shows names, not paths. */
+  async listForgeAccounts(requestId?: string): Promise<ForgeAccount[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "forge.accounts.list.request" },
+      responseType: "forge.accounts.list.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return payload.accounts;
+  }
+
+  async setWorkspaceForgeAccount(
+    workspaceId: string,
+    forgeConfigDir: string,
+    scope: ForgeAccountScope = "workspace",
+    requestId?: string,
+  ): Promise<{ forgeConfigDir: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "workspace.forge_account.set.request",
+        workspaceId,
+        forgeConfigDir,
+        scope,
+      },
+      responseType: "workspace.forge_account.set.response",
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setWorkspaceForgeAccount rejected");
+    }
+    return { forgeConfigDir: payload.forgeConfigDir };
   }
 
   async setWorkspacePinned(
@@ -3467,6 +3670,38 @@ export class DaemonClient {
       throw new Error(payload.error ?? "setAgentMode rejected");
     }
     return payload.notice ?? null;
+  }
+
+  /**
+   * Moves the agent to another provider. `modelId` names a model of the target
+   * provider; the agent's mode and thinking selections do not survive the move.
+   */
+  async setAgentProvider(agentId: string, provider: string, modelId: string | null): Promise<void> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "set_agent_provider_request",
+      agentId,
+      provider,
+      modelId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "set_agent_provider_response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentProvider rejected");
+    }
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
@@ -5080,7 +5315,7 @@ export class DaemonClient {
   async patchDaemonConfig(
     config: MutableDaemonConfigPatch,
     requestId?: string,
-  ): Promise<{ requestId: string; config: MutableDaemonConfig }> {
+  ): Promise<{ requestId: string; config: MutableDaemonConfig; error?: string }> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {

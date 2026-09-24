@@ -11,6 +11,7 @@ import {
   type BrowserRecordPatch,
   type BrowserViewport,
   createBrowserRecord,
+  createRemoteBrowserRecord,
   normalizeBrowserIndexState,
   normalizeBrowserUrl,
   removeBrowserFromIndex,
@@ -27,9 +28,11 @@ export {
 
 interface BrowserStoreState extends BrowserIndexState {
   createBrowser: (input?: { initialUrl?: string }) => string;
+  upsertRemoteBrowser: (input: { browserId: string; url: string; title?: string }) => void;
   updateBrowser: (browserId: string, patch: BrowserRecordPatch) => void;
   setBrowserViewport: (browserId: string, viewport: BrowserViewport) => void;
   removeBrowser: (browserId: string) => void;
+  setStartUrl: (url: string | null) => void;
 }
 
 function createBrowserId(): string {
@@ -45,13 +48,14 @@ function createBrowserId(): string {
 
 export const useBrowserStore = create<BrowserStoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       browsersById: {},
+      startUrl: null,
       createBrowser: (input) => {
         const browserId = createBrowserId();
         const record = createBrowserRecord({
           browserId,
-          initialUrl: input?.initialUrl,
+          initialUrl: input?.initialUrl ?? get().startUrl,
           now: Date.now(),
         });
 
@@ -64,6 +68,18 @@ export const useBrowserStore = create<BrowserStoreState>()(
 
         return browserId;
       },
+      upsertRemoteBrowser: (input) => {
+        set((state) => {
+          if (state.browsersById[input.browserId]) return state;
+          const record = createRemoteBrowserRecord({
+            browserId: input.browserId,
+            initialUrl: input.url,
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            now: Date.now(),
+          });
+          return { browsersById: { ...state.browsersById, [input.browserId]: record } };
+        });
+      },
       updateBrowser: (browserId, patch) => {
         set((state) => applyBrowserPatch(state, browserId, patch));
       },
@@ -72,6 +88,10 @@ export const useBrowserStore = create<BrowserStoreState>()(
       },
       removeBrowser: (browserId) => {
         set((state) => removeBrowserFromIndex(state, browserId));
+      },
+      setStartUrl: (url) => {
+        const trimmed = trimNonEmpty(url);
+        set({ startUrl: trimmed ? normalizeBrowserUrl(trimmed) : null });
       },
     }),
     {
@@ -102,7 +122,8 @@ export function createWorkspaceBrowser(input?: { initialUrl?: string }): {
   const record = getBrowserRecord(browserId);
   return {
     browserId,
-    url: record?.url ?? normalizeBrowserUrl(input?.initialUrl),
+    url:
+      record?.url ?? normalizeBrowserUrl(input?.initialUrl ?? useBrowserStore.getState().startUrl),
   };
 }
 

@@ -18,6 +18,7 @@ import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
+import { ViewedAgentRegistry } from "./viewed-agents.js";
 import type {
   CreateScheduleInput,
   ScheduleExecutionResult,
@@ -28,6 +29,8 @@ import type {
   UpdateScheduleNewAgentConfig,
 } from "@getpaseo/protocol/schedule/types";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import type { ResourcePolicyRuntime } from "../resource-policy.js";
+import { resolveScheduleAutomationBlock } from "./automation-gate.js";
 
 const SCHEDULE_TICK_INTERVAL_MS = 1000;
 
@@ -240,6 +243,9 @@ export interface ScheduleServiceOptions {
   archiveWorkspace: (workspaceId: string) => Promise<void>;
   now?: () => Date;
   runner?: (schedule: StoredSchedule, runId: string) => Promise<ScheduleExecutionResult>;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "canStartAutomatedLoop">;
+  /** Read live, so flipping the switch takes effect without a daemon restart. */
+  readAllowScheduledAutomation?: () => boolean | undefined;
 }
 
 export class ScheduleService {
@@ -260,7 +266,19 @@ export class ScheduleService {
     schedule: StoredSchedule,
     runId: string,
   ) => Promise<ScheduleExecutionResult>;
+  private readonly readAllowScheduledAutomation: () => boolean | undefined;
+  private readonly resourcePolicyRuntime: Pick<
+    ResourcePolicyRuntime,
+    "canStartAutomatedLoop"
+  > | null;
   private readonly runningScheduleIds = new Set<string>();
+  private readonly viewedAgents = new ViewedAgentRegistry();
+  // Workspaces a finished run wanted to archive while someone still had the run
+  // open, keyed by workspace id. Emptied as soon as nobody is looking.
+  private readonly deferredArchives = new Map<
+    string,
+    { workspaceId: string; agentId: string; scheduleId: string; runId: string }
+  >();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: ScheduleServiceOptions) {
@@ -274,9 +292,16 @@ export class ScheduleService {
     this.archiveWorkspace = options.archiveWorkspace;
     this.now = options.now ?? (() => new Date());
     this.runner = options.runner ?? ((schedule, runId) => this.executeSchedule(schedule, runId));
+    this.resourcePolicyRuntime = options.resourcePolicyRuntime ?? null;
+    this.readAllowScheduledAutomation = options.readAllowScheduledAutomation ?? (() => undefined);
   }
 
   async start(): Promise<void> {
+    const blocked = this.automationBlockedReason();
+    if (blocked !== null) {
+      this.logSkippedTick(blocked);
+      return;
+    }
     await this.recoverInterruptedRuns();
     await this.sweepOrphanedSchedules();
     if (this.tickTimer) {
@@ -289,6 +314,15 @@ export class ScheduleService {
     }, SCHEDULE_TICK_INTERVAL_MS);
     (timer as unknown as { unref?: () => void }).unref?.();
     this.tickTimer = timer;
+  }
+
+  async syncResourcePolicy(): Promise<void> {
+    if (this.automationBlockedReason() !== null) {
+      await this.stop();
+      return;
+    }
+    this.lastSkippedTickReason = null;
+    await this.start();
   }
 
   async stop(): Promise<void> {
@@ -546,7 +580,40 @@ export class ScheduleService {
     return this.inspect(id);
   }
 
+  /**
+   * Why this host will not start any schedule right now, or null.
+   *
+   * The tick below returns before it reads a single schedule when the resource
+   * policy forbids automated loops. Nothing about the stored record changes, so
+   * a list that does not carry this reads "active, next run soon" for a schedule
+   * that will never run again until the setting changes.
+   */
+  /** Once per reason, not once per tick: the tick runs on a timer. */
+  private lastSkippedTickReason: string | null = null;
+
+  private logSkippedTick(reason: string): void {
+    if (this.lastSkippedTickReason === reason) {
+      return;
+    }
+    this.lastSkippedTickReason = reason;
+    this.logger.warn({ reason }, "Skipping schedule tick: automation is disabled");
+  }
+
+  automationBlockedReason(): string | null {
+    return resolveScheduleAutomationBlock({
+      runtime: this.resourcePolicyRuntime ?? undefined,
+      allowScheduledAutomation: this.readAllowScheduledAutomation(),
+    });
+  }
+
   async tick(): Promise<void> {
+    await this.flushDeferredArchives();
+    const blocked = this.automationBlockedReason();
+    if (blocked !== null) {
+      this.logSkippedTick(blocked);
+      return;
+    }
+    this.lastSkippedTickReason = null;
     const now = this.now();
     const schedules = await this.store.list();
     for (const schedule of schedules) {
@@ -833,6 +900,73 @@ export class ScheduleService {
     requireSchedule(updatedSchedule, params.scheduleId);
   }
 
+  /** A client reports which agent timelines it currently shows. */
+  markAgentsViewed(ownerId: string, agentIds: Iterable<string>): void {
+    this.viewedAgents.setViewed(ownerId, agentIds);
+  }
+
+  /** A client stopped showing its timelines; whatever it held open may go now. */
+  releaseViewedAgents(ownerId: string): void {
+    this.viewedAgents.clearOwner(ownerId);
+    void this.flushDeferredArchives();
+  }
+
+  // "Archive on finish" says the agent is done, not that the person reading what
+  // it wrote is done. Clearing a workspace someone has open takes the report off
+  // their screen mid-sentence, so it waits until they close it.
+  private async archiveRunWorkspace(entry: {
+    workspaceId: string;
+    agentId: string | null;
+    scheduleId: string;
+    runId: string;
+  }): Promise<void> {
+    const { agentId } = entry;
+    if (agentId && this.viewedAgents.isViewed(agentId)) {
+      this.deferredArchives.set(entry.workspaceId, { ...entry, agentId });
+      return;
+    }
+    try {
+      await this.archiveWorkspace(entry.workspaceId);
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error,
+          agentId: entry.agentId,
+          workspaceId: entry.workspaceId,
+          scheduleId: entry.scheduleId,
+          runId: entry.runId,
+        },
+        "Failed to archive scheduled workspace after run",
+      );
+    }
+  }
+
+  private async flushDeferredArchives(): Promise<void> {
+    const released = [];
+    for (const entry of this.deferredArchives.values()) {
+      if (!this.viewedAgents.isViewed(entry.agentId)) {
+        released.push(entry);
+      }
+    }
+    for (const entry of released) {
+      this.deferredArchives.delete(entry.workspaceId);
+      try {
+        await this.archiveWorkspace(entry.workspaceId);
+      } catch (error) {
+        this.logger.warn(
+          {
+            err: error,
+            agentId: entry.agentId,
+            workspaceId: entry.workspaceId,
+            scheduleId: entry.scheduleId,
+            runId: entry.runId,
+          },
+          "Failed to archive scheduled workspace after run",
+        );
+      }
+    }
+  }
+
   private async executeSchedule(
     schedule: StoredSchedule,
     runId: string,
@@ -951,20 +1085,12 @@ export class ScheduleService {
         workspace &&
         shouldArchiveScheduleRunWorkspace({ agentId, archiveOnFinish: config.archiveOnFinish })
       ) {
-        try {
-          await this.archiveWorkspace(workspace.workspaceId);
-        } catch (error) {
-          this.logger.warn(
-            {
-              err: error,
-              agentId,
-              workspaceId: workspace.workspaceId,
-              scheduleId: schedule.id,
-              runId,
-            },
-            "Failed to archive scheduled workspace after run",
-          );
-        }
+        await this.archiveRunWorkspace({
+          workspaceId: workspace.workspaceId,
+          agentId,
+          scheduleId: schedule.id,
+          runId,
+        });
       }
     }
   }

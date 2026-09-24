@@ -156,60 +156,75 @@ export class OpenCodeEventConsumer implements OpenCodeEventSource {
     let delivered = false;
     let phase: OpenCodeEventStreamPhase = "first-record";
     let watchdogPhase: OpenCodeEventStreamPhase | null = null;
+    let abandoned = false;
     let sseError: unknown;
+    let expire!: (result: OpenCodeConnectionResult) => void;
+    // A transport that ignores the abort must not hold readiness hostage, so the
+    // watchdog also settles the attempt instead of only signalling it.
+    const expired = new Promise<OpenCodeConnectionResult>((resolve) => {
+      expire = resolve;
+    });
     const armWatchdog = () => {
       cancelWatchdog();
       cancelWatchdog = this.timing.arm(WATCHDOG_MS, () => {
         watchdogPhase = phase;
-        requestAbort.abort(new Error(`OpenCode event stream ${phase} watchdog expired`));
+        abandoned = true;
+        const error = new Error(`OpenCode event stream ${phase} watchdog expired`);
+        requestAbort.abort(error);
+        expire({ delivered, phase, outcome: "watchdog", error });
       });
     };
-    try {
-      const result = await this.client.global.event({
-        signal: requestAbort.signal,
-        sseMaxRetryAttempts: 0,
-        onSseError: (error) => {
-          sseError = error;
-        },
-      });
-      armWatchdog();
-      for await (const event of result.stream) {
-        if (this.closed) {
-          return { delivered, phase, outcome: "ended" };
-        }
+    const attempt = async (): Promise<OpenCodeConnectionResult> => {
+      try {
+        const result = await this.client.global.event({
+          signal: requestAbort.signal,
+          sseMaxRetryAttempts: 0,
+          onSseError: (error) => {
+            sseError = error;
+          },
+        });
         armWatchdog();
-        delivered = true;
-        phase = "stream";
-        this.phase = phase;
-        if (!this.connected && event.payload.type === "server.connected") {
-          this.connected = true;
-          this.resolveReady();
-          continue;
+        for await (const event of result.stream) {
+          if (this.closed || abandoned) {
+            return { delivered, phase, outcome: "ended" };
+          }
+          armWatchdog();
+          delivered = true;
+          phase = "stream";
+          this.phase = phase;
+          if (!this.connected && event.payload.type === "server.connected") {
+            this.connected = true;
+            this.resolveReady();
+            continue;
+          }
+          this.logPluginFailure(event);
+          this.publish(event);
         }
-        this.logPluginFailure(event);
-        this.publish(event);
+        let outcome: OpenCodeConnectionOutcome = "ended";
+        if (watchdogPhase) outcome = "watchdog";
+        else if (sseError !== undefined) outcome = "error";
+        return {
+          delivered,
+          phase: watchdogPhase ?? phase,
+          outcome,
+          ...(sseError === undefined ? {} : { error: sseError }),
+        };
+      } catch (error) {
+        return {
+          delivered,
+          phase: watchdogPhase ?? phase,
+          outcome: watchdogPhase ? "watchdog" : "error",
+          error,
+        };
+      } finally {
+        cancelWatchdog();
+        signal.removeEventListener("abort", abortRequest);
+        requestAbort.abort();
       }
-      let outcome: OpenCodeConnectionOutcome = "ended";
-      if (watchdogPhase) outcome = "watchdog";
-      else if (sseError !== undefined) outcome = "error";
-      return {
-        delivered,
-        phase: watchdogPhase ?? phase,
-        outcome,
-        ...(sseError === undefined ? {} : { error: sseError }),
-      };
-    } catch (error) {
-      return {
-        delivered,
-        phase: watchdogPhase ?? phase,
-        outcome: watchdogPhase ? "watchdog" : "error",
-        error,
-      };
-    } finally {
-      cancelWatchdog();
-      signal.removeEventListener("abort", abortRequest);
-      requestAbort.abort();
-    }
+    };
+    const pending = attempt();
+    void pending.catch(() => undefined);
+    return await Promise.race([pending, expired]);
   }
 
   private logPluginFailure(event: GlobalEvent): void {
@@ -273,7 +288,14 @@ export class OpenCodeEventConsumer implements OpenCodeEventSource {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const messages: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current !== undefined && current !== null; depth += 1) {
+    const message = current instanceof Error ? current.message : String(current);
+    if (message.length > 0 && messages.at(-1) !== message) messages.push(message);
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return messages.length > 0 ? messages.join(": ") : String(error);
 }
 
 function containsPluginError(error: unknown): boolean {

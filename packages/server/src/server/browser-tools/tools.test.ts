@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "./broker.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
+import type { JevBrowserGoalResult } from "./jev-goal-runner.js";
 import { registerBrowserTools, type RegisterBrowserToolsOptions } from "./tools.js";
 import type {
   PaseoToolConfig,
@@ -48,12 +49,16 @@ class BrowserToolHarness {
       workspaceId: "wks_workspace_a",
     },
     private readonly callerAgentId: string | null = "agent-1",
+    goalRunner?: RegisterBrowserToolsOptions["goalRunner"],
+    verify?: RegisterBrowserToolsOptions["verify"],
   ) {
     registerBrowserTools({
       registerTool: (name, config, handler) => {
         this.tools.set(name, { config, handler });
       },
       broker: this.broker as Pick<BrowserToolsBroker, "execute">,
+      ...(goalRunner ? { goalRunner } : {}),
+      ...(verify ? { verify } : {}),
       ...(this.callerAgentId ? { callerAgentId: this.callerAgentId } : {}),
       resolveCallerAgent: () => this.callerAgent,
     });
@@ -149,7 +154,9 @@ function screenshotPayload(): Extract<BrowserToolsResponsePayload, { ok: true }>
       command: "screenshot",
       browserId: BROWSER_ID,
       mimeType: "image/png",
-      dataBase64: "iVBORw0KGgo=",
+      evidenceRef: "evidence://wks-test/evr_01/screenshot",
+      bytes: 1234,
+      sha256: "deadbeef",
       width: 800,
       height: 600,
     },
@@ -257,16 +264,65 @@ const routedToolCases = [
     name: "screenshot",
     toolName: "browser_screenshot",
     input: { browserId: BROWSER_ID },
-    command: { command: "screenshot", args: { browserId: BROWSER_ID, fullPage: false } },
+    command: {
+      command: "screenshot",
+      args: { browserId: BROWSER_ID, fullPage: false, reveal: false },
+    },
     payload: screenshotPayload(),
     content: [
-      { type: "text", text: "Captured browser screenshot (800x600)." },
+      {
+        type: "text",
+        text: "Captured browser screenshot (800x600). Evidence: evidence://wks-test/evr_01/screenshot",
+      },
+    ],
+    structuredResult: {
+      command: "screenshot",
+      browserId: BROWSER_ID,
+      mimeType: "image/png",
+      evidenceRef: "evidence://wks-test/evr_01/screenshot",
+      bytes: 1234,
+      sha256: "deadbeef",
+      width: 800,
+      height: 600,
+    },
+  },
+  {
+    name: "revealed screenshot",
+    toolName: "browser_screenshot",
+    input: { browserId: BROWSER_ID, reveal: true },
+    command: {
+      command: "screenshot",
+      args: { browserId: BROWSER_ID, fullPage: false, reveal: true },
+    },
+    payload: {
+      requestId: "req-reveal",
+      ok: true,
+      result: {
+        command: "screenshot",
+        browserId: BROWSER_ID,
+        mimeType: "image/png",
+        dataBase64: "iVBORw0KGgo=",
+        evidenceRef: "evidence://wks-test/evr_01/screenshot",
+        bytes: 1234,
+        sha256: "deadbeef",
+        width: 800,
+        height: 600,
+      },
+    },
+    content: [
+      {
+        type: "text",
+        text: "Captured browser screenshot (800x600). Evidence: evidence://wks-test/evr_01/screenshot",
+      },
       { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
     ],
     structuredResult: {
       command: "screenshot",
       browserId: BROWSER_ID,
       mimeType: "image/png",
+      evidenceRef: "evidence://wks-test/evr_01/screenshot",
+      bytes: 1234,
+      sha256: "deadbeef",
       width: 800,
       height: 600,
     },
@@ -299,7 +355,10 @@ const routedToolCases = [
     name: "full page screenshot",
     toolName: "browser_screenshot",
     input: { browserId: BROWSER_ID, fullPage: true },
-    command: { command: "screenshot", args: { browserId: BROWSER_ID, fullPage: true } },
+    command: {
+      command: "screenshot",
+      args: { browserId: BROWSER_ID, fullPage: true, reveal: false },
+    },
     payload: {
       requestId: "req-full-page",
       ok: true,
@@ -307,19 +366,26 @@ const routedToolCases = [
         command: "screenshot",
         browserId: BROWSER_ID,
         mimeType: "image/png",
-        dataBase64: "iVBORw0KGgo=",
+        evidenceRef: "evidence://wks-test/evr_01/screenshot",
+        bytes: 2345,
+        sha256: "cafef00d",
         width: 390,
         height: 1200,
       },
     },
     content: [
-      { type: "text", text: "Captured browser screenshot (390x1200)." },
-      { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      {
+        type: "text",
+        text: "Captured browser screenshot (390x1200). Evidence: evidence://wks-test/evr_01/screenshot",
+      },
     ],
     structuredResult: {
       command: "screenshot",
       browserId: BROWSER_ID,
       mimeType: "image/png",
+      evidenceRef: "evidence://wks-test/evr_01/screenshot",
+      bytes: 2345,
+      sha256: "cafef00d",
       width: 390,
       height: 1200,
     },
@@ -540,6 +606,7 @@ describe("registerBrowserTools", () => {
     expect(harness.toolNames()).toEqual([
       "browser_list_tabs",
       "browser_new_tab",
+      "browser_goal",
       "browser_snapshot",
       "browser_click",
       "browser_fill",
@@ -561,6 +628,68 @@ describe("registerBrowserTools", () => {
       "browser_resize",
       "browser_close_tab",
     ]);
+  });
+
+  test("browser goal delegates the validated request to the Jev runner", async () => {
+    const calls: unknown[] = [];
+    const result: JevBrowserGoalResult = {
+      status: "passed",
+      browserId: BROWSER_ID,
+      url: "https://example.com/done",
+      title: "Done",
+      message: "Goal completed and verified.",
+      steps: [],
+      model: "jev-test",
+    };
+    const harness = new BrowserToolHarness(undefined, "agent-1", {
+      run: async (input, context) => {
+        calls.push({ input, context });
+        return result;
+      },
+    });
+
+    const response = await harness.execute("browser_goal", {
+      goal: "Open the finished page",
+      browserId: BROWSER_ID,
+      verify: [{ url: "/done" }],
+    });
+
+    expect(calls).toEqual([
+      {
+        input: {
+          goal: "Open the finished page",
+          browserId: BROWSER_ID,
+          verify: [{ url: "/done" }],
+        },
+        context: { agentId: "agent-1", cwd: "/repo", workspaceId: "wks_workspace_a" },
+      },
+    ]);
+    expect(response.structuredContent).toMatchObject({
+      ok: true,
+      result: { status: "passed", browserId: BROWSER_ID },
+    });
+  });
+
+  test("browser goal accepts environment references but rejects literal values", () => {
+    const harness = new BrowserToolHarness();
+    const base = {
+      goal: "Sign in",
+      browserId: BROWSER_ID,
+      verify: [{ text: "Welcome" }],
+    };
+
+    expect(
+      harness.validate("browser_goal", {
+        ...base,
+        values: { password: { env: "TEST_PASSWORD", description: "test password" } },
+      }).success,
+    ).toBe(true);
+    expect(
+      harness.validate("browser_goal", {
+        ...base,
+        values: { password: { value: "must-not-enter-tool-transcript" } },
+      }).success,
+    ).toBe(false);
   });
 
   test("list tabs sends workspace in the request envelope", async () => {
@@ -601,7 +730,7 @@ describe("registerBrowserTools", () => {
     expect(response.content).toEqual([
       {
         type: "text",
-        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com. Use this browserId for tab-scoped browser tools.`,
+        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com. Use this browserId for tab-scoped browser tools. If you are testing, stop and use browser_test with steps instead.`,
       },
     ]);
   });
@@ -993,5 +1122,50 @@ describe("registerBrowserTools", () => {
       result: snapshotPayload().result,
       context: { browserId: BROWSER_ID },
     });
+  });
+
+  it("runs browser_test in the caller's workspace and flags a failed verdict", async () => {
+    const calls: unknown[] = [];
+    const harness = new BrowserToolHarness(undefined, "agent-1", undefined, {
+      runForAgent: async (input) => {
+        calls.push(input);
+        return input.steps
+          ? {
+              kind: "run",
+              result: {
+                status: "fail",
+                recipe: "ad-hoc",
+                workspaceId: input.workspaceId,
+                runId: "evr_1",
+                profile: "default",
+                authReused: null,
+                route: "http://localhost:3000/",
+                checks: [{ name: 'goal "Open settings"', ok: false, detail: "blocked" }],
+                consoleErrors: 0,
+                failedRequests: 0,
+                evidenceRef: "evidence://wks_workspace_a/evr_1",
+                rawBytes: 10,
+                agentBytes: 5,
+              },
+            }
+          : { kind: "list", recipes: [{ name: "smoke", params: [], stepCount: 2 }] };
+      },
+    });
+
+    const listed = await harness.execute("browser_test", {});
+    expect(listed.structuredContent).toEqual({
+      recipes: [{ name: "smoke", params: [], stepCount: 2 }],
+    });
+
+    const steps = [
+      { action: "navigate", url: "http://localhost:3000" },
+      { action: "goal", goal: "Open settings", verify: [{ text: "Settings" }] },
+    ];
+    const run = await harness.execute("browser_test", { steps });
+    expect(run.isError).toBe(true);
+    expect(calls.at(-1)).toEqual({ workspaceId: "wks_workspace_a", steps });
+    expect(harness.validate("browser_test", { steps: [{ action: "teleport" }] }).success).toBe(
+      false,
+    );
   });
 });

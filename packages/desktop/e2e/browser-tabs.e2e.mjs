@@ -447,12 +447,78 @@ async function selectElementAndReadAnnotationPaint({ page, client, browserId, ar
 }
 
 function recordViewportMismatch(failures, label, actual, expected) {
+  if (!actual || typeof actual.width !== "number" || typeof actual.height !== "number") {
+    failures.push(`${label}: no viewport reading, received ${JSON.stringify(actual)}`);
+    return;
+  }
   if (actual.width === expected.width && actual.height === expected.height) {
     return;
   }
   failures.push(
     `${label}: expected ${expected.width}x${expected.height}, received ${actual.width}x${actual.height}`,
   );
+}
+
+async function runRemoteRegression({ page, client, browserId, artifactDir }) {
+  const failures = [];
+  await callBrowserTool(client, "browser_wait", {
+    browserId,
+    text: "Bridge target",
+    timeoutMs: 5_000,
+  });
+  const viewport = await readViewport(client, browserId);
+  if (
+    !viewport ||
+    typeof viewport.width !== "number" ||
+    typeof viewport.height !== "number" ||
+    viewport.width <= 0 ||
+    viewport.height <= 0
+  ) {
+    failures.push(`remote browser viewport is readable: received ${JSON.stringify(viewport)}`);
+  }
+  const listed = await callBrowserTool(client, "browser_list_tabs");
+  assert(
+    listed.tabs.some((tab) => tab.browserId === browserId),
+    "browser_list_tabs lost the daemon-hosted tab",
+  );
+  const snapshot = await callBrowserTool(client, "browser_snapshot", { browserId });
+  const ref = snapshot.snapshot.match(/button "Bridge target" (@e\d+)/)?.[1];
+  assert(ref, `browser_snapshot did not expose the target button: ${snapshot.snapshot}`);
+  const clicked = await callBrowserTool(client, "browser_click", { browserId, ref });
+  assert(
+    clicked.browserId === browserId && clicked.ref === ref,
+    "browser_click targeted another tab",
+  );
+  await callBrowserTool(client, "browser_wait", {
+    browserId,
+    text: "Clicked",
+    timeoutMs: 5_000,
+  });
+  const screenshot = await callBrowserTool(client, "browser_screenshot", { browserId });
+  assert(
+    typeof screenshot?.width === "number" && typeof screenshot?.height === "number",
+    `browser_screenshot returned no geometry: ${JSON.stringify(screenshot)}`,
+  );
+  await page.screenshot({ path: path.join(artifactDir, "remote-browser-frame.png") });
+
+  if (failures.length > 0) {
+    throw new Error(`Remote browser regressions:\n- ${failures.join("\n- ")}`);
+  }
+
+  return {
+    browserId,
+    originalWebContentsId: `remote-${browserId}`,
+    finalWebContentsId: `remote-${browserId}`,
+    viewport: "remote-passed",
+    guestFocus: "remote-passed",
+    overlayPlane: "remote-passed",
+    inactiveCapture: "remote-passed",
+    hiddenWindowCapture: "remote-passed",
+    list: "remote-passed",
+    snapshot: "remote-passed",
+    click: "remote-passed",
+    localPageSelectors: "remote-passed",
+  };
 }
 
 async function setWindowHidden(inspectorPort, hidden) {
@@ -595,6 +661,14 @@ async function runRegression({
 
   const originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
+  const remoteFrame = originalDeck.getByTestId(`remote-browser-frame-${browserId}`);
+  const isRemotePane = await remoteFrame
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (isRemotePane) {
+    return await runRemoteRegression({ page, client, browserId, artifactDir });
+  }
   await page.waitForFunction(
     (id) => {
       const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);

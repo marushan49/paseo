@@ -151,6 +151,7 @@ import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import { useAppSettings } from "@/hooks/use-settings";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
@@ -364,14 +365,17 @@ function getProjectWorkspaceRowStyle({
   isPressed,
   selected,
   isHovered,
+  isCardCompact,
 }: {
   isDragging: boolean;
   isPressed: boolean;
   selected: boolean;
   isHovered: boolean;
+  isCardCompact: boolean;
 }) {
   return [
     styles.workspaceRow,
+    isCardCompact && styles.workspaceRowCard,
     isHovered && styles.workspaceRowHovered,
     selected && styles.sidebarRowSelected,
     isDragging && styles.workspaceRowDragging,
@@ -1079,6 +1083,8 @@ function WorkspaceRowInner({
   const isCompact = useIsCompactFormFactor();
   const [isPressed, setIsPressed] = useState(false);
   const isTouchPlatform = platformIsNative || isCompact;
+  const { settings } = useAppSettings();
+  const isCardCompact = isCompact && settings.sessionCardStyle === "card";
   const interaction = useLongPressDragInteraction({
     drag,
     menuController,
@@ -1121,6 +1127,7 @@ function WorkspaceRowInner({
           isPressed,
           selected,
           isHovered,
+          isCardCompact,
         });
         const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
         return (
@@ -1288,6 +1295,9 @@ function WorkspaceRowWithMenu({
   const handleCloseRename = useCallback(() => {
     setIsRenameOpen(false);
   }, []);
+
+  // Row-level like rename: the dialog must survive the hover-gated kebab
+  // menu unmounting when its item is selected.
 
   const isPinned = workspace.pinnedAt != null;
   const handleTogglePin = useCallback(() => {
@@ -2607,7 +2617,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   projectTitle: {
-    color: theme.colors.foregroundMuted,
+    color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: "400",
     minWidth: 0,
@@ -2691,7 +2701,10 @@ const styles = StyleSheet.create((theme) => ({
   workspaceRow: {
     minHeight: 36,
     marginBottom: theme.spacing[0.5],
-    paddingVertical: theme.spacing[2],
+    paddingVertical: {
+      xs: theme.spacing[3],
+      md: theme.spacing[2],
+    },
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
@@ -2700,6 +2713,14 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[1],
     userSelect: "none",
+  },
+  workspaceRowCard: {
+    backgroundColor: theme.colors.surface1,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.xl,
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[4],
   },
   workspaceRowMain: {
     flexDirection: "row",

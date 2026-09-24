@@ -12,6 +12,7 @@ class FakeAgentConfigOperations implements AgentConfigOperations {
   readonly loadedAgentIds: string[] = [];
   readonly modeCalls: Array<{ agentId: string; modeId: string }> = [];
   readonly modelCalls: Array<{ agentId: string; modelId: string | null }> = [];
+  readonly providerCalls: Array<{ agentId: string; provider: string; modelId: string | null }> = [];
   readonly featureCalls: Array<{ agentId: string; featureId: string; value: unknown }> = [];
   readonly thinkingCalls: Array<{ agentId: string; thinkingOptionId: string | null }> = [];
   /** Cross-operation ordering, which the per-operation arrays above cannot show. */
@@ -36,6 +37,12 @@ class FakeAgentConfigOperations implements AgentConfigOperations {
   async setModel(agentId: string, modelId: string | null): Promise<void> {
     this.modelCalls.push({ agentId, modelId });
     this.callLog.push("model");
+    if (this.failWith) throw this.failWith;
+  }
+
+  async setProvider(agentId: string, provider: string, modelId: string | null): Promise<void> {
+    this.providerCalls.push({ agentId, provider, modelId });
+    this.callLog.push("provider");
     if (this.failWith) throw this.failWith;
   }
 
@@ -425,6 +432,61 @@ describe("AgentConfigSession", () => {
     expect(emitted[1]).toEqual({
       type: "agent.config.apply.response",
       payload: { requestId: "req-1", agentId: "agent-1", accepted: false, error: "apply boom" },
+    });
+  });
+});
+
+describe("AgentConfigSession provider switch", () => {
+  test("forwards the target provider and model and emits an accepted response", async () => {
+    const { subsystem, emitted, operations } = makeSubsystem();
+
+    await subsystem.handleSetAgentProviderRequest({
+      type: "set_agent_provider_request",
+      agentId: "agent-1",
+      provider: "claude",
+      modelId: "claude-opus-5",
+      requestId: "req-1",
+    });
+
+    expect(operations.providerCalls).toEqual([
+      { agentId: "agent-1", provider: "claude", modelId: "claude-opus-5" },
+    ]);
+    expect(operations.loadedAgentIds).toEqual(["agent-1"]);
+    expect(emitted).toEqual([
+      {
+        type: "set_agent_provider_response",
+        payload: {
+          requestId: "req-1",
+          agentId: "agent-1",
+          accepted: true,
+          error: null,
+          notice: undefined,
+        },
+      },
+    ]);
+  });
+
+  test("a failed switch emits the activity_log error frame before the rejected response", async () => {
+    const { subsystem, emitted, operations } = makeSubsystem();
+    operations.failWith = new Error("claude runtime unavailable");
+
+    await subsystem.handleSetAgentProviderRequest({
+      type: "set_agent_provider_request",
+      agentId: "agent-1",
+      provider: "claude",
+      modelId: "claude-opus-5",
+      requestId: "req-1",
+    });
+
+    expect(emitted.map((m) => m.type)).toEqual(["activity_log", "set_agent_provider_response"]);
+    expect(emitted[1]).toEqual({
+      type: "set_agent_provider_response",
+      payload: {
+        requestId: "req-1",
+        agentId: "agent-1",
+        accepted: false,
+        error: "claude runtime unavailable",
+      },
     });
   });
 });

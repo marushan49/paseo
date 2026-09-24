@@ -1,7 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { type Dirent, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1041,6 +1049,41 @@ describe("Codex app-server provider", () => {
       },
     });
     expect(turnStart).not.toHaveProperty("config.mcp_servers.hub.tools.reply");
+  });
+
+  test("disables only blocked MCP servers the user configured for Codex", async () => {
+    const codexHome = mkdtempSync(path.join(tmpdir(), "paseo-codex-home-"));
+    writeFileSync(
+      path.join(codexHome, "config.toml"),
+      '[mcp_servers.playwright]\ncommand = "npx"\n\n[mcp_servers."chrome-devtools"]\ncommand = "npx"\n',
+    );
+    vi.stubEnv("CODEX_HOME", codexHome);
+    try {
+      const session = createSession({
+        modeId: undefined,
+        daemonBlockedMcpServers: ["playwright", "chrome-devtools", "puppeteer"],
+      });
+      const request = vi.fn(async (method: string) => {
+        if (method === "thread/loaded/list") return { data: ["test-thread"] };
+        if (method === "turn/start") return {};
+        throw new Error(`Unexpected request: ${method}`);
+      });
+      session.activeForegroundTurnId = null;
+      session.client = createStub<CodexClientLike>({ request });
+
+      await session.startTurn("test");
+
+      const turnStart = request.mock.calls.find(([method]) => method === "turn/start")?.[1];
+      expect(turnStart).toMatchObject({
+        config: {
+          mcp_servers: { playwright: { enabled: false }, "chrome-devtools": { enabled: false } },
+        },
+      });
+      expect(turnStart).not.toHaveProperty("config.mcp_servers.puppeteer");
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(codexHome, { recursive: true, force: true });
+    }
   });
 
   test("passes ephemeral: true to thread/start when constructed as ephemeral", async () => {

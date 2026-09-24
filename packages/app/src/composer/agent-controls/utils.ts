@@ -97,13 +97,20 @@ function resolveThinkingId(
 
 type ThinkingOption = NonNullable<AgentModelDefinition["thinkingOptions"]>[number];
 
+/**
+ * The option the agent is actually on, or nothing when the model does not list
+ * it. Substituting the first option for an unlisted one put a value on the pill
+ * the agent never had -- for Claude models that is "Off" -- and it did so
+ * silently, so every pick that the model happened not to offer looked ignored.
+ */
 function resolveEffectiveThinking(
   thinkingOptions: ThinkingOption[] | null,
   resolvedThinkingId: string | null,
 ): ThinkingOption | null {
-  const selectedThinking =
-    thinkingOptions?.find((option) => option.id === resolvedThinkingId) ?? null;
-  return selectedThinking ?? thinkingOptions?.[0] ?? null;
+  if (resolvedThinkingId !== null) {
+    return thinkingOptions?.find((option) => option.id === resolvedThinkingId) ?? null;
+  }
+  return thinkingOptions?.[0] ?? null;
 }
 
 function resolveModelDisplay(
@@ -164,7 +171,7 @@ export function resolveAgentModelSelection(input: {
   const thinkingOptions = selectedModel?.thinkingOptions ?? null;
   const resolvedThinkingId = resolveThinkingId(explicitThinkingOptionId, selectedModel);
   const effectiveThinking = resolveEffectiveThinking(thinkingOptions, resolvedThinkingId);
-  const selectedThinkingId = effectiveThinking?.id ?? null;
+  const selectedThinkingId = effectiveThinking?.id ?? resolvedThinkingId;
   const displayThinking = resolveThinkingDisplay(
     effectiveThinking,
     selectedThinkingId,

@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.9.0-beta.5 - 2026-09-23
+
+### Added
+
+- Added System One decisions and Jev-driven browser goals, configurable in Host Settings
+
+### Changed
+
+- Changed direct Android APK downloads to target modern ARM64 devices
+- Changed macOS chat, file, and terminal Find to use Command+F while leaving Control+F for text editing ([#5129](https://github.com/getpaseo/paseo/pull/5129))
+
+### Improved
+
+- Chat Find now counts and navigates matches across the entire chat ([#5167](https://github.com/getpaseo/paseo/pull/5167))
+
+### Fixed
+
+- Fixed Chat Find timing out on streamed multi-block assistant messages ([#5146](https://github.com/getpaseo/paseo/pull/5146))
+- Fixed Pi model pickers and sessions using unsupported thinking levels ([#4413](https://github.com/getpaseo/paseo/pull/4413) by [@mcowger](https://github.com/mcowger), [@therainisme](https://github.com/therainisme))
+- Fixed blocked scheduled agents appearing as still running in heartbeat CLI output
+
+## 0.9.0-beta.4 - 2026-09-20
+
+### Added
+
+- Added persistent workspace browsers hosted by the daemon, with remote keyboard, pointer, scroll, hover, and drag input on desktop, web, and mobile ([#1](https://github.com/marushan49/paseo/pull/1))
+
+### Changed
+
+- Changed desktop updates to download releases from the `marushan49/paseo` fork
+- Changed fork Android APK releases to build directly in GitHub Actions without an Expo account
+
+### Fixed
+
+- Fixed unsigned fork macOS release builds treating an empty certificate path as the desktop package directory
+
+## 0.9.0-beta.3 - 2026-09-20
+
+### Added
+
+- Added grouped session cards to History and sidebar workspace rows, with a Rows fallback under Appearance → Cards
+- Added a display serif setting for hub titles, applied to the sessions header and the appearance preview
+
+### Changed
+
+- Changed the mobile composer to a floating surface with higher contrast and a readable placeholder
+- Changed compact sidebar rows to larger touch targets with brighter project titles
+
 ## 0.9.1 - 2026-09-22
 
 ### Added

@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { z } from "zod";
+import type { VerifySession } from "../../verify/verify-session.js";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -85,7 +86,12 @@ import {
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
+import { JevBrowserGoalRunner } from "../../browser-tools/jev-goal-runner.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
+import {
+  createConfiguredSystemOneDecisionSource,
+  registerSystemOneTools,
+} from "../../system-one/tools.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -95,6 +101,9 @@ import type {
 } from "./types.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+import { buildTerminalRunMarker, readTerminalRun, terminalRunPollDelayMs } from "./terminal-run.js";
+import type { ResourcePolicyRuntime } from "../../resource-policy.js";
+import { applyPullRequestCurationChange } from "../../workspace-pull-request-curation.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -104,6 +113,7 @@ export interface PaseoToolHostDependencies {
   scheduleService?: ScheduleService | null;
   providerSnapshotManager: ProviderSnapshotManager;
   daemonConfigStore?: Pick<DaemonConfigStore, "get">;
+  resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">;
   github?: ForgeService;
   workspaceGitService?: Pick<
     WorkspaceGitService,
@@ -131,6 +141,8 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  /** Paseo's testing engine: saved recipes, ad-hoc steps, and Jev goal steps. */
+  verify?: Pick<VerifySession, "runForAgent">;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
@@ -565,6 +577,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     scheduleService,
     providerSnapshotManager,
     daemonConfigStore,
+    resourcePolicyRuntime,
     callerAgentId,
     resolveSpeakHandler,
     resolveCallerContext,
@@ -572,6 +585,18 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   } = options;
   const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
+  const checkStatusRead = (requestKey: string): void => {
+    const decision = resourcePolicyRuntime?.checkStatusRead({
+      consumerId: callerAgentId ?? "mcp",
+      requestKey,
+      ...(callerAgentId
+        ? { runKey: agentManager.getAgent(callerAgentId)?.activeForegroundTurnId ?? undefined }
+        : {}),
+    });
+    if (decision && !decision.allowed) {
+      throw new Error(decision.reason ?? "The resource policy limits status reads.");
+    }
+  };
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
     const inputSchema = tool.inputSchema;
@@ -706,6 +731,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     }
 
     return options.ensureWorkspaceForCreate(resolvedCwd);
+  }
+
+  /**
+   * Which agent a tool should act on. Without an id it is the caller itself:
+   * an agent changing its own model or title knows who it is, and making it
+   * look its own id up first is a step that can only go wrong.
+   */
+  function resolveAgentIdForSelf(requestedAgentId?: string): string {
+    const explicitAgentId = requestedAgentId?.trim();
+    if (explicitAgentId) {
+      return explicitAgentId;
+    }
+    if (callerAgentId) {
+      return callerAgentId;
+    }
+    throw new Error("agentId is required outside an agent-scoped session");
   }
 
   function resolveWorkspaceIdForRename(requestedWorkspaceId?: string): string {
@@ -1220,10 +1261,48 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return toCatalog();
   }
 
+  if (options.paseoHome && options.daemonConfigStore) {
+    registerSystemOneTools({
+      registerTool,
+      paseoHome: options.paseoHome,
+      daemonConfigStore: options.daemonConfigStore,
+      resolveCwd: () => resolveCallerAgent()?.cwd,
+    });
+  }
+
   if (options.browserToolsEnabled && options.browserToolsBroker) {
+    const configuredGoalRunner =
+      options.paseoHome && options.daemonConfigStore
+        ? new JevBrowserGoalRunner({
+            broker: options.browserToolsBroker,
+            decisionSource: createConfiguredSystemOneDecisionSource(
+              options.paseoHome,
+              options.daemonConfigStore,
+              () => resolveCallerAgent()?.cwd,
+            ),
+          })
+        : null;
     registerBrowserTools({
       registerTool,
       broker: options.browserToolsBroker,
+      ...(configuredGoalRunner && options.daemonConfigStore
+        ? {
+            goalRunner: {
+              run: (input, context) =>
+                configuredGoalRunner.run(
+                  {
+                    ...input,
+                    minConfidence:
+                      input.minConfidence ??
+                      options.daemonConfigStore?.get().systemOne?.minimumConfidence ??
+                      0.5,
+                  },
+                  context,
+                ),
+            },
+          }
+        : {}),
+      verify: options.verify,
       callerAgentId,
       resolveCallerAgent,
     });
@@ -1990,6 +2069,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId }) => {
+      checkStatusRead(`agent:${agentId}`);
       const snapshot = agentManager.getAgent(agentId);
       if (snapshot) {
         const structuredSnapshot = await serializeSnapshotWithMetadata(
@@ -2048,6 +2128,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ includeArchived = false, cwd, sinceHours = 48, statuses, limit = 50 }) => {
+      checkStatusRead(
+        JSON.stringify({ includeArchived, cwd, sinceHours, statuses: statuses ?? null, limit }),
+      );
       const callerCwd = callerAgentId ? resolveCallerAgent()?.cwd : undefined;
       const requestedCwd = cwd?.trim() ? expandUserPath(cwd) : callerCwd;
       const statusFilter = statuses && statuses.length > 0 ? new Set(statuses) : null;
@@ -2162,10 +2245,17 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "update_agent",
     {
       title: "Update agent",
-      description: "Update an agent name, labels, and/or runtime settings.",
+      description:
+        "Update an agent's title, labels, and/or runtime settings (mode, model, thinking, features). " +
+        "Omit agentId to update yourself.",
       inputSchema: {
-        agentId: z.string(),
-        name: z.string().optional(),
+        agentId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Agent to update. Omit to update yourself."),
+        name: z.string().optional().describe("New user-visible agent title."),
         labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
         settings: UpdateAgentSettingsInputSchema.optional().describe(
           "Runtime settings to apply to the agent.",
@@ -2175,7 +2265,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         success: z.boolean(),
       },
     },
-    async ({ agentId, name, labels, settings }) => {
+    async ({ agentId: requestedAgentId, name, labels, settings }) => {
+      const agentId = resolveAgentIdForSelf(requestedAgentId);
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }
@@ -2256,6 +2347,71 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           workspaceId,
           title,
         }),
+      };
+    },
+  );
+
+  registerTool(
+    "curate_workspace_pull_requests",
+    {
+      title: "Curate workspace pull requests",
+      description:
+        "Attach pull request numbers to a workspace's set, or drop ones that do not belong to it. " +
+        "The decisions persist with the workspace and survive restarts. " +
+        "Omit workspaceId to curate your current workspace.",
+      inputSchema: {
+        workspaceId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Workspace id to curate. Omit for your current workspace."),
+        attach: z
+          .array(z.number().int().positive())
+          .optional()
+          .describe("Pull request numbers to add to this workspace's set."),
+        remove: z
+          .array(z.number().int().positive())
+          .optional()
+          .describe("Pull request numbers to drop from this workspace's set."),
+      },
+      outputSchema: {
+        workspaceId: z.string(),
+        added: z.array(z.number()),
+        removed: z.array(z.number()),
+      },
+    },
+    async ({ workspaceId: requestedWorkspaceId, attach, remove }) => {
+      if (!options.workspaceRegistry) {
+        throw new Error("Workspace registry is required to curate pull requests");
+      }
+      if (!options.emitWorkspaceUpdatesForWorkspaceIds) {
+        throw new Error("Workspace update emitter is required to curate pull requests");
+      }
+      if ((attach?.length ?? 0) === 0 && (remove?.length ?? 0) === 0) {
+        throw new Error("Pass at least one pull request number to attach or remove");
+      }
+
+      const workspaceId = resolveWorkspaceIdForRename(requestedWorkspaceId);
+      const existing = await options.workspaceRegistry.get(workspaceId);
+      if (!existing) {
+        throw new Error(`Workspace ${workspaceId} not found`);
+      }
+      const curation = applyPullRequestCurationChange({
+        stored: existing.pullRequestCuration,
+        attach,
+        remove,
+      });
+      await options.workspaceRegistry.upsert({
+        ...existing,
+        pullRequestCuration: curation,
+        updatedAt: new Date().toISOString(),
+      });
+      await options.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ workspaceId, ...curation }),
       };
     },
   );
@@ -2494,6 +2650,94 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           terminalId,
           lines: capture.lines,
           totalLines: capture.totalLines,
+        }),
+      };
+    },
+  );
+
+  registerTool(
+    "run_terminal_command",
+    {
+      title: "Run terminal command",
+      description:
+        "Run a command in a terminal and wait for it to finish. Returns its output and exit " +
+        "code. Use this instead of sending keys and capturing, which returns before the " +
+        "command is done.",
+      inputSchema: {
+        command: z.string().trim().min(1, "command is required"),
+        terminalId: z
+          .string()
+          .optional()
+          .describe("Run in this terminal. A new one is created for the cwd when omitted."),
+        cwd: z
+          .string()
+          .optional()
+          .describe("Working directory for a new terminal. Defaults to your own."),
+        timeoutSeconds: z
+          .number()
+          .int()
+          .positive()
+          .max(3600)
+          .optional()
+          .default(300)
+          .describe("How long to wait before giving up on the command finishing."),
+      },
+      outputSchema: {
+        terminalId: z.string(),
+        lines: z.array(z.string()),
+        exitCode: z.number().int().nullable(),
+        finished: z.boolean(),
+        timedOut: z.boolean(),
+      },
+    },
+    async ({ command, terminalId, cwd, timeoutSeconds = 300 }) => {
+      if (!terminalManager) {
+        throw new Error("Terminal manager is not configured");
+      }
+
+      let id = terminalId;
+      if (id) {
+        if (!terminalManager.getTerminal(id)) {
+          throw new Error(`Terminal ${id} not found`);
+        }
+      } else {
+        const resolvedCwd = resolveScopedCwd(cwd, { required: true });
+        const workspaceId = await resolveTerminalWorkspaceId(resolvedCwd);
+        const created = await terminalManager.createTerminal({ cwd: resolvedCwd, workspaceId });
+        id = created.id;
+      }
+
+      const terminal = terminalManager.getTerminal(id);
+      if (!terminal) {
+        throw new Error(`Terminal ${id} not found`);
+      }
+
+      // Where this command's output starts, so a terminal that has been used before does not
+      // hand back somebody else's scrollback.
+      const before = await terminalManager.captureTerminal(id, { stripAnsi: true });
+      const marker = buildTerminalRunMarker(command.trim());
+      terminal.send({ type: "input", data: marker.input });
+
+      const startedAt = Date.now();
+      const deadline = startedAt + timeoutSeconds * 1000;
+      let result = readTerminalRun([], marker);
+      while (Date.now() < deadline) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, terminalRunPollDelayMs(Date.now() - startedAt)),
+        );
+        const capture = await terminalManager.captureTerminal(id, { stripAnsi: true });
+        result = readTerminalRun(capture.lines, marker, before.totalLines);
+        if (result.finished) break;
+      }
+
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          terminalId: id,
+          lines: result.lines,
+          exitCode: result.exitCode,
+          finished: result.finished,
+          timedOut: !result.finished,
         }),
       };
     },
@@ -3096,9 +3340,15 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Set agent session mode",
       description:
-        "Switch the agent's session mode (plan, bypassPermissions, read-only, auto, etc.).",
+        "Switch the agent's session mode (plan, bypassPermissions, read-only, auto, etc.). " +
+        "Omit agentId to switch your own mode.",
       inputSchema: {
-        agentId: z.string(),
+        agentId: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Agent whose mode to switch. Omit for yourself."),
         modeId: z.string(),
       },
       outputSchema: {
@@ -3106,8 +3356,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         newMode: z.string(),
       },
     },
-    async ({ agentId, modeId }) => {
-      const result = await setAgentModeCommand({ agentManager }, { agentId, modeId });
+    async ({ agentId: requestedAgentId, modeId }) => {
+      const result = await setAgentModeCommand(
+        { agentManager },
+        { agentId: resolveAgentIdForSelf(requestedAgentId), modeId },
+      );
       return {
         content: [],
         structuredContent: ensureValidJson({ success: true, newMode: result.modeId }),

@@ -8,6 +8,7 @@ export const RESPONSIVE_BROWSER_VIEWPORT: BrowserViewport = { mode: "responsive"
 
 export interface BrowserRecord {
   browserId: string;
+  remoteBrowserId: string | null;
   url: string;
   title: string;
   isLoading: boolean;
@@ -23,6 +24,8 @@ export type BrowserRecordPatch = Partial<Omit<BrowserRecord, "browserId" | "crea
 
 export interface BrowserIndexState {
   browsersById: Record<string, BrowserRecord>;
+  /** Opened by new tabs that get no URL of their own. */
+  startUrl?: string | null;
 }
 
 const BrowserViewportSchema = z.discriminatedUnion("mode", [
@@ -36,6 +39,7 @@ const BrowserViewportSchema = z.discriminatedUnion("mode", [
 
 const BrowserRecordSchema = z.strictObject({
   browserId: z.string(),
+  remoteBrowserId: z.string().nullable().optional().default(null),
   url: z.string(),
   title: z.string(),
   isLoading: z.boolean(),
@@ -49,6 +53,7 @@ const BrowserRecordSchema = z.strictObject({
 
 export const BrowserIndexStateSchema: z.ZodType<BrowserIndexState> = z.strictObject({
   browsersById: z.record(z.string(), BrowserRecordSchema),
+  startUrl: z.string().nullable().optional(),
 });
 
 export function createFixedBrowserViewport(width: number, height: number): BrowserViewport {
@@ -111,6 +116,7 @@ export function createBrowserRecord(input: {
 }): BrowserRecord {
   return {
     browserId: input.browserId,
+    remoteBrowserId: null,
     url: normalizeBrowserUrl(input.initialUrl),
     title: "",
     isLoading: false,
@@ -120,6 +126,19 @@ export function createBrowserRecord(input: {
     lastError: null,
     viewport: RESPONSIVE_BROWSER_VIEWPORT,
     createdAt: input.now,
+  };
+}
+
+export function createRemoteBrowserRecord(input: {
+  browserId: string;
+  initialUrl: string | null | undefined;
+  title?: string;
+  now: number;
+}): BrowserRecord {
+  return {
+    ...createBrowserRecord(input),
+    remoteBrowserId: input.browserId,
+    title: input.title ?? "",
   };
 }
 
@@ -149,6 +168,7 @@ export function applyBrowserPatch<S extends BrowserIndexState>(
 
   if (
     nextRecord.url === existing.url &&
+    nextRecord.remoteBrowserId === existing.remoteBrowserId &&
     nextRecord.title === existing.title &&
     nextRecord.isLoading === existing.isLoading &&
     nextRecord.canGoBack === existing.canGoBack &&
@@ -185,10 +205,9 @@ export function removeBrowserFromIndex<S extends BrowserIndexState>(
   return { ...state, browsersById: next };
 }
 
-export function sanitizeBrowsersForPersist(state: BrowserIndexState): {
-  browsersById: Record<string, BrowserRecord>;
-} {
+export function sanitizeBrowsersForPersist(state: BrowserIndexState): BrowserIndexState {
   return {
+    startUrl: state.startUrl ?? null,
     browsersById: Object.fromEntries(
       Object.entries(state.browsersById).map(([browserId, browser]) => [
         browserId,

@@ -43,6 +43,16 @@ const PersistedProjectRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // COMPAT(projectForgeAccount): added in v0.8.1, remove optional parsing after 2027-06-30.
+  // The forge CLI account every workspace in this project inherits. Whether a
+  // repository is work or private is a property of the repository, not of each
+  // branch cut from it. Null means the workspaces fall through to the machine's
+  // default. See server/forge-account-resolution.ts.
+  forgeConfigDir: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -102,6 +112,46 @@ const PersistedWorkspaceRecordSchema = z.object({
     .transform((value) => value ?? null),
   labels: z.array(z.string()).optional(),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
+  // COMPAT(workspaceForgeAccount): added in v0.8.1, remove optional parsing after 2027-06-30.
+  // Config directory of the forge CLI account this workspace speaks to, so a
+  // work and a private GitHub account can live on one machine. Null means the
+  // machine's default account. See server/workspace-forge-account.ts.
+  forgeConfigDir: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  // COMPAT(workspacePullRequestCuration): added in v0.8.1, remove optional parsing after
+  // 2027-06-30. Which change requests were attached to this workspace's set by hand and which
+  // were dropped from it. Decisions rather than a list, so a set that the daemon resolves
+  // differently tomorrow still honours what someone said about it today.
+  pullRequestCuration: z
+    .object({
+      added: z.array(z.number().int().positive()),
+      removed: z.array(z.number().int().positive()),
+    })
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  // COMPAT(curatedPullRequestFacts): added in v0.8.1, remove optional parsing after
+  // 2027-06-30. What the numbers above stand for. Decisions alone cannot be drawn: a
+  // stored `added: [1401]` with nothing to render it from is why a set assembled
+  // yesterday came back as "No pull requests yet".
+  pullRequestFacts: z
+    .array(
+      z.object({
+        number: z.number().int().positive(),
+        url: z.string(),
+        title: z.string().optional(),
+        state: z.enum(["open", "merged", "closed"]),
+        isDraft: z.boolean().optional(),
+        headRefName: z.string().optional(),
+        baseRefName: z.string().optional(),
+      }),
+    )
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;
@@ -648,6 +698,7 @@ export function createPersistedProjectRecord(input: {
   customName?: string | null;
   projectKey?: string | null;
   customIconRevision?: string | null;
+  forgeConfigDir?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
@@ -657,6 +708,7 @@ export function createPersistedProjectRecord(input: {
     customName: input.customName ?? null,
     projectKey: input.projectKey ?? null,
     customIconRevision: input.customIconRevision ?? null,
+    forgeConfigDir: input.forgeConfigDir ?? null,
     archivedAt: input.archivedAt ?? null,
   });
 }

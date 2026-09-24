@@ -2,6 +2,10 @@ import { Platform } from "react-native";
 import { getElectronHost } from "@/desktop/electron/host";
 import type { BrowserKeyboardPolicy } from "@/desktop/browser/shortcuts";
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type {
+  BrowserImportCookie,
+  BrowserImportSource,
+} from "@getpaseo/protocol/browser-import/rpc-schemas";
 
 type BrowserAutomationExecuteRequest = Extract<
   SessionOutboundMessage,
@@ -156,6 +160,11 @@ export interface DesktopBrowserBridge {
   focus?: (browserId: string) => Promise<boolean>;
   openDevTools?: (browserId: string) => Promise<unknown>;
   clearProfile?: (legacyBrowserIds: string[]) => Promise<void>;
+  listImportSources?: () => Promise<BrowserImportSource[]>;
+  /** Also copies the cookies into the desktop Paseo browser session. */
+  readImportCookies?: (
+    sourceId: string,
+  ) => Promise<{ ok: true; cookies: BrowserImportCookie[] } | { ok: false; error: string }>;
   executeAutomationCommand?: (
     request: BrowserAutomationExecuteRequest,
   ) => Promise<BrowserAutomationExecuteResponse["payload"]>;

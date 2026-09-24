@@ -63,8 +63,13 @@ const AUTOMATION_FIELDS = [
   "clearExpires",
 ] as const;
 const BROWSER_FIELDS = [
+  "goal",
   "browserId",
   "url",
+  "values",
+  "verify",
+  "maxSteps",
+  "minConfidence",
   "ref",
   "sourceRef",
   "targetRef",
@@ -149,6 +154,7 @@ const TOOL_SPECS: Readonly<Record<string, ToolDetailSpec>> = {
   respond_to_permission: { inputOrder: ["agentId", "requestId", "response"] },
   browser_list_tabs: {},
   browser_new_tab: { inputOrder: BROWSER_FIELDS },
+  browser_goal: { promptField: "goal", inputOrder: BROWSER_FIELDS },
   browser_snapshot: { inputOrder: BROWSER_FIELDS },
   browser_click: { inputOrder: BROWSER_FIELDS },
   browser_fill: { inputOrder: BROWSER_FIELDS },

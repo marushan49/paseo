@@ -122,6 +122,11 @@ export const ScheduleInspectResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     schedule: StoredScheduleSchema.nullable(),
+    // COMPAT(scheduleAutomationBlocked): added in v0.9.0, remove after 2027-06-30.
+    // Same host-wide reason already carried per schedule by list summaries:
+    // the resource policy can forbid automated loops while the record says
+    // active. Null means nothing blocks it.
+    automationBlockedReason: z.string().nullable().optional(),
     error: z.string().nullable(),
   }),
 });

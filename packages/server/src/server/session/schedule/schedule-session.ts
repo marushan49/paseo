@@ -1,6 +1,7 @@
 import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import type { ScheduleService } from "../../schedule/service.js";
+import { toScheduleSummary } from "../../agent/mcp-shared.js";
 
 export interface ScheduleSessionHost {
   emit(msg: SessionOutboundMessage): void;
@@ -29,8 +30,7 @@ export class ScheduleSession {
     SessionOutboundMessage,
     { type: "schedule/list/response" }
   >["payload"]["schedules"][number] {
-    const { runs: _runs, ...summary } = schedule;
-    return summary;
+    return toScheduleSummary(schedule, this.scheduleService.automationBlockedReason());
   }
 
   private emitScheduleRpcError(
@@ -122,6 +122,7 @@ export class ScheduleSession {
         payload: {
           requestId: request.requestId,
           schedule,
+          automationBlockedReason: this.scheduleService.automationBlockedReason(),
           error: null,
         },
       });

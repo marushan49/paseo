@@ -13,12 +13,14 @@ import {
   type AgentManagerEvent,
   type ManagedAgent,
 } from "./agent-manager.js";
+import { composeDaemonAppendSystemPrompt } from "./writing-block-instruction.js";
 import { AgentStorage } from "./agent-storage.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js";
+import { buildResourcePolicyPrompt } from "../resource-policy.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
@@ -2246,7 +2248,11 @@ test("createAgent injects daemon append system prompt at runtime only", async ()
   const record = await storage.get(snapshot.id);
 
   expect(client.createdConfigs[0]?.systemPrompt).toBe("Agent instructions.");
-  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe("Daemon instructions.");
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(
+    composeDaemonAppendSystemPrompt(
+      `Daemon instructions.\n\n${buildResourcePolicyPrompt("balanced")}`,
+    ),
+  );
   expect(snapshot.config).not.toHaveProperty("daemonAppendSystemPrompt");
   expect(record?.config?.systemPrompt).toBe("Agent instructions.");
   expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");
@@ -2280,7 +2286,11 @@ test("daemon append system prompt is injected into Pi configs", async () => {
     { workspaceId: undefined },
   );
 
-  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe("Daemon instructions.");
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(
+    composeDaemonAppendSystemPrompt(
+      `Daemon instructions.\n\n${buildResourcePolicyPrompt("balanced")}`,
+    ),
+  );
 });
 
 test("setAgentMode persists the selected mode across session reload", async () => {
@@ -2853,6 +2863,9 @@ test("createAgent passes daemon launch env through the provider launch context",
     provider: "codex",
     cwd: workdir,
     model: "gpt-5.4",
+    daemonAppendSystemPrompt: composeDaemonAppendSystemPrompt(
+      buildResourcePolicyPrompt("balanced"),
+    ),
   });
   expect(client.lastLaunchContext).toEqual({
     agentId: snapshot.id,
@@ -9059,7 +9072,8 @@ test("turn_failed surfaces provider code and diagnostic in system error message"
         item.type === "assistant_message" && item.text.includes("[System Error]"),
     );
   expect(systemError?.text).toContain("Provider execution failed");
-  expect(systemError?.text).toContain("code: 126");
+  // The code rides in the sentence now rather than on a line of its own.
+  expect(systemError?.text).toContain("(126)");
   expect(systemError?.text).toContain("No preset version installed for command claude");
 });
 
@@ -11243,4 +11257,233 @@ test("concurrent native restores run once before resuming the same agent", async
     await storage.flush();
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+class ProviderSwitchSession implements AgentSession {
+  readonly capabilities = TEST_CAPABILITIES;
+  readonly id = randomUUID();
+  readonly provider: AgentProvider;
+  private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
+
+  constructor(private readonly config: AgentSessionConfig) {
+    this.provider = config.provider;
+  }
+
+  async run(): Promise<AgentRunResult> {
+    return { sessionId: this.id, finalText: "", timeline: [] };
+  }
+
+  async startTurn(): Promise<{ turnId: string }> {
+    return { turnId: `turn-${this.id}` };
+  }
+
+  subscribe(callback: (event: AgentStreamEvent) => void): () => void {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
+  async *streamHistory(): AsyncGenerator<AgentStreamEvent> {}
+
+  async getRuntimeInfo() {
+    return {
+      provider: this.provider,
+      sessionId: this.id,
+      model: this.config.model ?? null,
+      modeId: this.config.modeId ?? null,
+    };
+  }
+
+  async getAvailableModes() {
+    return [];
+  }
+
+  async getCurrentMode() {
+    return null;
+  }
+
+  async setMode(): Promise<void> {}
+
+  getPendingPermissions() {
+    return [];
+  }
+
+  async respondToPermission(): Promise<void> {}
+
+  describePersistence(): AgentPersistenceHandle {
+    return { provider: this.provider, sessionId: this.id };
+  }
+
+  async interrupt(): Promise<void> {}
+
+  async close(): Promise<void> {}
+}
+
+class ProviderSwitchClient implements AgentClient {
+  readonly capabilities = TEST_CAPABILITIES;
+  readonly createdConfigs: AgentSessionConfig[] = [];
+
+  constructor(readonly provider: AgentProvider) {}
+
+  async isAvailable(): Promise<boolean> {
+    return true;
+  }
+
+  async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+    this.createdConfigs.push(config);
+    return new ProviderSwitchSession(config);
+  }
+
+  async resumeSession(
+    _handle: AgentPersistenceHandle,
+    config?: Partial<AgentSessionConfig>,
+  ): Promise<AgentSession> {
+    return new ProviderSwitchSession({
+      ...config,
+      provider: this.provider,
+      cwd: config?.cwd ?? process.cwd(),
+    });
+  }
+}
+
+interface ProviderSwitchFixture {
+  manager: AgentManager;
+  storage: AgentStorage;
+  agent: ManagedAgent;
+}
+
+async function createProviderSwitchFixture(options: {
+  agentId: string;
+  target: AgentClient;
+}): Promise<ProviderSwitchFixture> {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-provider-switch-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: {
+      codex: new ProviderSwitchClient("codex"),
+      claude: options.target,
+    },
+    registry: storage,
+    logger,
+    idFactory: () => options.agentId,
+  });
+
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+    undefined,
+    { workspaceId: "ws-provider-switch", labels: { "paseo.brain-switch": "keep" } },
+  );
+  await manager.setAgentMode(agent.id, "plan");
+  await manager.setAgentThinkingOption(agent.id, "high");
+
+  return { manager, storage, agent };
+}
+
+test("setAgentProvider replaces the runtime with the new provider and keeps the Paseo agent", async () => {
+  const target = new ProviderSwitchClient("claude");
+  const { manager, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000601",
+    target,
+  });
+  await manager.appendTimelineItem(agent.id, {
+    type: "assistant_message",
+    text: "said before the switch",
+  });
+  const timelineBeforeSwitch = manager.getTimeline(agent.id);
+
+  const switched = await manager.setAgentProvider(agent.id, "claude", "claude-opus-5");
+
+  expect(switched.id).toBe(agent.id);
+  expect(switched.provider).toBe("claude");
+  expect(switched.cwd).toBe(agent.cwd);
+  expect(switched.workspaceId).toBe("ws-provider-switch");
+  expect(switched.labels).toEqual({ "paseo.brain-switch": "keep" });
+  expect(switched.createdAt).toEqual(agent.createdAt);
+  // The switch appends its own marker; everything said before it survives.
+  expect(manager.getTimeline(agent.id).slice(0, timelineBeforeSwitch.length)).toEqual(
+    timelineBeforeSwitch,
+  );
+
+  // The new provider launches with the requested model and none of the old
+  // provider's mode or thinking selection.
+  expect(target.createdConfigs).toHaveLength(1);
+  expect(target.createdConfigs[0]).toMatchObject({
+    provider: "claude",
+    cwd: agent.cwd,
+    model: "claude-opus-5",
+  });
+  expect(target.createdConfigs[0]?.modeId).toBeUndefined();
+  expect(target.createdConfigs[0]?.thinkingOptionId).toBeUndefined();
+  expect(switched.config.model).toBe("claude-opus-5");
+  expect(switched.config.modeId).toBeUndefined();
+  expect(switched.config.thinkingOptionId).toBeUndefined();
+});
+
+test("setAgentProvider drops the previous provider session handle from the stored record", async () => {
+  const { manager, storage, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000602",
+    target: new ProviderSwitchClient("claude"),
+  });
+  const codexSessionId = agent.persistence?.sessionId;
+  expect(codexSessionId).toEqual(expect.any(String));
+
+  const switched = await manager.setAgentProvider(agent.id, "claude", "claude-opus-5");
+  await manager.flush();
+  await storage.flush();
+
+  const record = await storage.get(agent.id);
+  expect(record?.provider).toBe("claude");
+  expect(record?.persistence?.provider).toBe("claude");
+  expect(record?.persistence?.sessionId).toBe(switched.persistence?.sessionId);
+  // A leftover handle for the old provider would make the next resume attach to
+  // a foreign session, so no trace of it may survive anywhere in the record.
+  expect(JSON.stringify(record)).not.toContain(codexSessionId);
+});
+
+test("setAgentProvider leaves the agent closed on its old provider when the new runtime fails to start", async () => {
+  class UnavailableClaudeClient extends ProviderSwitchClient {
+    override async createSession(): Promise<AgentSession> {
+      throw new Error("claude runtime unavailable");
+    }
+  }
+
+  const { manager, storage, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000603",
+    target: new UnavailableClaudeClient("claude"),
+  });
+  const codexSessionId = agent.persistence?.sessionId;
+
+  await expect(manager.setAgentProvider(agent.id, "claude", "claude-opus-5")).rejects.toThrow(
+    "claude runtime unavailable",
+  );
+  await manager.flush();
+  await storage.flush();
+
+  expect(manager.getAgent(agent.id)).toBeNull();
+  const record = await storage.get(agent.id);
+  expect(record?.lastStatus).toBe("closed");
+  expect(record?.provider).toBe("codex");
+  expect(record?.persistence?.sessionId).toBe(codexSessionId);
+});
+
+test("setAgentProvider marks the provider cut in the timeline", async () => {
+  const { manager, agent } = await createProviderSwitchFixture({
+    agentId: "00000000-0000-4000-8000-000000000604",
+    target: new ProviderSwitchClient("claude"),
+  });
+  await manager.appendTimelineItem(agent.id, {
+    type: "assistant_message",
+    text: "said before the switch",
+  });
+
+  await manager.setAgentProvider(agent.id, "claude", "claude-opus-5");
+
+  const timeline = manager.getTimeline(agent.id);
+  expect(timeline).toHaveLength(2);
+  expect(timeline[1]).toEqual({
+    type: "notification",
+    level: "info",
+    message: "Switched provider: codex → claude",
+  });
 });

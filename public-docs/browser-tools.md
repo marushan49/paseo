@@ -18,6 +18,14 @@ Shared concepts:
 
 Arguments marked `?` are optional.
 
+## Goal execution
+
+| Tool           | Arguments                                                              | Purpose                                                                                   |
+| -------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `browser_goal` | `goal, browserId? \| url?, verify, values?, maxSteps?, minConfidence?` | Run a bounded Jev loop and pass only after every required text or URL check is satisfied. |
+
+Provide either `browserId` or `url`. Each `values` entry contains an `env` variable name and optional description; Paseo resolves the value locally and does not send it to TypeSafe. `verify` is a non-empty array of `{ "text": "..." }` or `{ "url": "..." }` checks.
+
 ## Tabs
 
 | Tool                | Arguments                  | Purpose                                                                   |

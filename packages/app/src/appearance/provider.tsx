@@ -65,6 +65,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     applyAppearance({
       uiFontFamily: settings.uiFontFamily,
       monoFontFamily: settings.monoFontFamily,
+      displayFontFamily: settings.displayFontFamily,
       uiBaseFontSize: settings.uiBaseFontSize,
       contentFontSize: settings.contentFontSize,
       codeFontSize: settings.codeFontSize,
@@ -77,6 +78,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     settings.theme,
     settings.uiFontFamily,
     settings.monoFontFamily,
+    settings.displayFontFamily,
     settings.uiBaseFontSize,
     settings.contentFontSize,
     settings.codeFontSize,

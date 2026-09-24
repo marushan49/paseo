@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
-import type { TerminalProfile } from "@getpaseo/protocol/messages";
+import type { ResourcePolicy, TerminalProfile } from "@getpaseo/protocol/messages";
 import {
   getTerminalProfileIcon,
   DEFAULT_TERMINAL_PROFILES,
@@ -27,6 +27,7 @@ import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-moda
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -65,7 +66,6 @@ import { formatLatency } from "@/utils/latency";
 import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { getProviderIcon } from "@/components/provider-icons";
-import { BrowserToolsOptInCard } from "./browser-tools-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
 
 const ThemedRestart = withUnistyles(RotateCw);
@@ -278,7 +278,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       {isConnected ? (
         <SettingsSection title={t("settings.hostSections.agents")}>
           <InjectPaseoToolsCard serverId={serverId} />
-          <BrowserToolsOptInCard serverId={serverId} />
+          <ResourcePolicyCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
         </SettingsSection>
       ) : (
@@ -889,6 +889,138 @@ function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
           value={config?.mcp.injectIntoAgents !== false}
           onValueChange={handleValueChange}
           accessibilityLabel={t("settings.host.orchestration.enableTools.accessibilityLabel")}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ScheduleAutomationRow({
+  policyForbidsLoops,
+  allowScheduledAutomation,
+  disabled,
+  onChange,
+}: {
+  policyForbidsLoops: boolean;
+  allowScheduledAutomation: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const hint = allowScheduledAutomation
+    ? t("settings.host.orchestration.resourcePolicy.schedules.onHint")
+    : t("settings.host.orchestration.resourcePolicy.schedules.offHint");
+  return (
+    <View style={styles.schedulesRow}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.host.orchestration.resourcePolicy.schedules.title")}
+        </Text>
+        <Text style={allowScheduledAutomation ? settingsStyles.rowHint : styles.schedulesWarning}>
+          {hint}
+        </Text>
+        {policyForbidsLoops && allowScheduledAutomation ? (
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.orchestration.resourcePolicy.schedules.economyException")}
+          </Text>
+        ) : null}
+      </View>
+      <Switch
+        value={allowScheduledAutomation}
+        onValueChange={onChange}
+        disabled={disabled}
+        accessibilityLabel={t("settings.host.orchestration.resourcePolicy.schedules.title")}
+        testID="host-page-schedule-automation-switch"
+      />
+    </View>
+  );
+}
+
+function ResourcePolicyCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, isLoading, patchConfig } = useDaemonConfig(serverId);
+  const [isSaving, setIsSaving] = useState(false);
+  const selectedPolicy: ResourcePolicy = config?.resourcePolicy ?? "balanced";
+
+  const options = useMemo(
+    () =>
+      (["economy", "balanced", "deep"] as const).map((value) => ({
+        value,
+        label: t(`settings.host.orchestration.resourcePolicy.options.${value}.label`),
+        testID: `host-page-resource-policy-${value}`,
+        disabled: isLoading || isSaving || config === null,
+      })),
+    [config, isLoading, isSaving, t],
+  );
+
+  // economy forbids automated loops, which used to take every schedule down
+  // with it silently. The switch below is the way out, so the card has to say
+  // what the policy currently does to schedules.
+  const policyForbidsLoops = selectedPolicy === "economy";
+  const allowScheduledAutomation = config?.allowScheduledAutomation ?? !policyForbidsLoops;
+
+  const handleSchedulesChange = useCallback(
+    (next: boolean) => {
+      setIsSaving(true);
+      void patchConfig({ allowScheduledAutomation: next })
+        .catch((error) => {
+          console.error("[HostPage] Failed to update scheduled automation", error);
+          Alert.alert(
+            t("common.errors.unableToSave"),
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => setIsSaving(false));
+    },
+    [patchConfig, t],
+  );
+
+  const handleValueChange = useCallback(
+    (next: ResourcePolicy) => {
+      setIsSaving(true);
+      void patchConfig({ resourcePolicy: next })
+        .catch((error) => {
+          console.error("[HostPage] Failed to update resource policy", error);
+          Alert.alert(
+            t("common.errors.unableToSave"),
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => setIsSaving(false));
+    },
+    [patchConfig, t],
+  );
+
+  if (!isConnected) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-resource-policy-card">
+      <View style={styles.resourcePolicyContent}>
+        <View>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.orchestration.resourcePolicy.title")}
+          </Text>
+          <Text style={settingsStyles.rowHint} testID="host-page-resource-policy-description">
+            {isLoading
+              ? t("settings.host.orchestration.resourcePolicy.loading")
+              : t(
+                  `settings.host.orchestration.resourcePolicy.options.${selectedPolicy}.description`,
+                )}
+          </Text>
+        </View>
+        <SegmentedControl
+          options={options}
+          value={selectedPolicy}
+          onValueChange={handleValueChange}
+          size="sm"
+          testID="host-page-resource-policy-control"
+        />
+        <ScheduleAutomationRow
+          policyForbidsLoops={policyForbidsLoops}
+          allowScheduledAutomation={allowScheduledAutomation}
+          disabled={isLoading || isSaving || config === null}
+          onChange={handleSchedulesChange}
         />
       </View>
     </View>
@@ -1765,6 +1897,24 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: theme.spacing[2],
+  },
+  schedulesRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[3],
+    paddingTop: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  schedulesWarning: {
+    color: theme.colors.statusDanger,
+    fontSize: theme.fontSize.sm,
+  },
+  resourcePolicyContent: {
+    alignItems: "flex-start",
+    gap: theme.spacing[3],
+    paddingVertical: theme.spacing[4],
+    paddingHorizontal: theme.spacing[4],
   },
   emptyCard: {
     padding: theme.spacing[4],

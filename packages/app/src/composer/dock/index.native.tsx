@@ -129,7 +129,9 @@ export function ComposerDock({
           </View>
         </View>
         <ComposerViewportContent style={dockStyles.composer}>
-          <View style={[dockStyles.composer, { paddingBottom: insets.bottom }]}>{composer}</View>
+          <View style={[dockStyles.composerFloat, { paddingBottom: insets.bottom }]}>
+            {composer}
+          </View>
         </ComposerViewportContent>
         {overlay}
       </KeyboardTranslateView>
@@ -142,6 +144,12 @@ const dockStyles = StyleSheet.create({
   surface: { flex: 1 },
   content: { flex: 1, justifyContent: "flex-end" },
   composer: { width: "100%", flexShrink: 1 },
+  composerFloat: {
+    width: "100%",
+    flexShrink: 1,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
   centeredViewport: { flex: 1, alignItems: "center", justifyContent: "center" },
   centered: { flexShrink: 1, width: "100%", maxWidth: MAX_CONTENT_WIDTH },
   // Reserve the composer's own capped height before the setup scroll view shrinks.

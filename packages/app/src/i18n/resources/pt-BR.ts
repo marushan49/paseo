@@ -328,7 +328,9 @@ export const ptBR: TranslationResources = {
     },
     actions: {
       copyCode: "Copiar código",
+      copyText: "Copiar texto",
       copyTurn: "Copiar turno",
+      copyFailed: "Falha ao copiar",
       copyMessage: "Copiar mensagem",
       forkMenu: "Bifurcar mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
@@ -338,6 +340,9 @@ export const ptBR: TranslationResources = {
       forkFailed: "Falha ao bifurcar o chat",
       openFile: "Abrir arquivo",
       copied: "Copiado",
+    },
+    writingBlock: {
+      untitled: "Texto",
     },
     attachments: {
       dismissImage: "Dispensar imagem",
@@ -632,6 +637,8 @@ export const ptBR: TranslationResources = {
         copyResumeCommand: "Copiar comando de retomada",
         copyAgentId: "Copiar ID do agente",
         copyTerminalId: "Copiar ID do terminal",
+        copyChatMarkdown: "Copiar conversa (Markdown)",
+        copyChatJson: "Copiar conversa (JSON)",
         copyFilePath: "Copiar caminho do arquivo",
         rename: "Renomear",
         closeAbove: "Fechar abas acima",
@@ -671,12 +678,18 @@ export const ptBR: TranslationResources = {
         toggle: "Alternar painel lateral",
         changes: "Alterações",
         files: "Arquivos",
+        evidence: "Evidências",
       },
       toasts: {
         copyFailed: "Falha ao copiar",
         agentIdCopiedLabel: "ID do agente",
         terminalIdCopiedLabel: "ID do terminal",
         resumeCommandCopiedLabel: "comando de retomada",
+        chatCopiedLabel: "Transcrição da conversa",
+        copyingChat: "Copiando conversa...",
+        copyChatFailed: "Falha ao copiar a conversa",
+        chatCopyEmpty: "Esta conversa está vazia",
+        chatCopyTruncated: "Conversa copiada sem as mensagens mais antigas",
         filePathCopiedLabel: "Caminho do arquivo",
         resumeIdUnavailable: "ID de retomada indisponível",
         resumeCommandUnavailable: "Comando de retomada indisponível",
@@ -986,10 +999,58 @@ export const ptBR: TranslationResources = {
         openFileIn: "Abrir {{fileName}} em {{target}}",
         failedOpen: "Falha ao abrir workspace",
       },
+      forgeAccount: {
+        scopeProject: "Projeto inteiro",
+        scopeWorkspace: "Apenas este espaço",
+        scopeProjectHint:
+          "Todos os espaços deste projeto usam esta conta, a menos que definam a sua.",
+        scopeWorkspaceHint: "Vale só para este espaço e substitui a conta do projeto.",
+        inherited: "{{host}} · herdada do projeto",
+        savedProject: "Todos os espaços deste projeto agora usam a conta em {{path}}",
+        clearedProject: "Este projeto voltou a usar a conta padrão",
+        title: "Conta do GitHub",
+        defaultOption: "Padrão da máquina",
+        defaultDetail: "O que o gh escolher neste host",
+        empty: "Nenhum login do GitHub encontrado neste host",
+        placeholder: "Caminho para um diretório de configuração do gh, por ex. ~/.config/gh-work",
+        confirm: "Salvar",
+        saved: "Este workspace agora atua como a conta em {{path}}",
+        cleared: "Este workspace voltou a usar a conta padrão",
+      },
       pr: {
         actions: {
           viewPullRequest: "Ver",
           openOn: "Abrir no {{brand}}",
+        },
+        set: {
+          toggleEmptyAccessibility: "Anexar um pull request a este workspace",
+          toggleOneAccessibility: "Mostrar o pull request #{{number}}",
+          addAction: "Adicionar",
+          scanAction: "Varrer chat",
+          emptyList: "Nenhum pull request ainda",
+          count: "{{count}} PRs",
+          failing: "{{count}} com falha",
+          running: "em execução",
+          passing: "aprovado",
+          draft: "rascunho",
+          toggleAccessibility: "Mostrar todos os {{count}} pull requests",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "Números de PR, ex.: 1346 ou 1346, 1350",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          attachNotFoundMany: "Nenhum pull request encontrado neste repositório: {{numbers}}.",
+          moreInCard: "+{{count}} mais",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
+          scanChatPullRequests: "Scan chat for PRs",
+          scanChatFound: "Found {{count}} pull requests in chat",
+          scanChatEmpty: "No pull requests found in chat",
+          scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Pull requests neste chat",
+          scanChatSubtitle: "{{count}} encontrados. Escolha os que pertencem a este espaço.",
+          scanChatMentions: "mencionado {{count}}x",
+          scanChatAttach: "Anexar {{count}}",
+          scanChatUnresolved: "Não encontrados na forja: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "passou",
@@ -1222,6 +1283,10 @@ export const ptBR: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Worktree: {{additions}} adicionadas, {{deletions}} removidas em relação à base, incluindo trabalho não commitado",
+      },
       status: {
         serviceRunning: "Serviço {{name}} em execução",
         serviceUnhealthy: "Serviço {{name}} com falha",
@@ -1886,6 +1951,14 @@ export const ptBR: TranslationResources = {
       emptyTitle: "Ainda não há pull request",
       emptyDescription: "Crie um pull request para este checkout para ver os detalhes aqui.",
     },
+    evidence: {
+      label: "Evidências",
+      subtitle: "Capturas de verificação",
+      emptyTitle: "Ainda sem evidências",
+      emptyDescription: "Execute uma receita de verificação para capturar telas e registros.",
+      loadFailed: "Não foi possível carregar as evidências.",
+      showInChat: "Mostrar no chat",
+    },
     diff: {
       changesLabel: "Alterações",
       diffLabel: "Diff",
@@ -2017,6 +2090,8 @@ export const ptBR: TranslationResources = {
       projects: "Projetos",
       connections: "Conexões",
       agents: "Agentes",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Metadados",
       workspaces: "Workspaces",
       providers: "Provedores",
@@ -2025,6 +2100,8 @@ export const ptBR: TranslationResources = {
       plugins: "Plugins",
       host: "Visão geral",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings["pt-BR"],
     metadataGeneration: {
       title: "Geração de metadados",
@@ -2189,6 +2266,14 @@ export const ptBR: TranslationResources = {
       detailLevel: {
         title: "Nível de detalhe",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Estrutura do chat",
         description: "Mostrar uma estrutura para navegar entre prompts",
@@ -2204,6 +2289,9 @@ export const ptBR: TranslationResources = {
         systemDefault: "Sistema padrão",
         interfaceFont: "Fonte da interface",
         interfaceFontHint: "Usada em todo o app. Deixe vazio para usar o padrão do sistema",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Família da fonte da interface",
         interfaceSize: "Tamanho da interface",
         interfaceSizeHint: "Usado na navegação, nos controles e nos rótulos",
@@ -2435,6 +2523,34 @@ export const ptBR: TranslationResources = {
           title: "Ativar ferramentas do Paseo",
           hint: "Agentes poderão gerenciar worktrees, agentes e agendamentos",
           accessibilityLabel: "Injetar ferramentas do Paseo",
+        },
+        resourcePolicy: {
+          schedules: {
+            title: "Executar agendamentos",
+            onHint: "Os agendamentos disparam na cadência definida neste host.",
+            offHint: "Os agendamentos não vão disparar. Nada roda no horário definido.",
+            economyException:
+              "Mantido como exceção ao economy, que do contrário para todo laço automático.",
+          },
+          title: "Uso de recursos",
+          loading: "Carregando a política de recursos...",
+          options: {
+            economy: {
+              label: "Econômico",
+              description:
+                "Uma leitura de status por execução. A sondagem e os agendamentos automáticos ficam desativados.",
+            },
+            balanced: {
+              label: "Equilibrado",
+              description:
+                "Verificações de status e trabalho automatizado limitados para o uso diário.",
+            },
+            deep: {
+              label: "Trabalho profundo",
+              description:
+                "Mais verificações de status limitadas para fluxos de trabalho longos e ativos.",
+            },
+          },
         },
         systemPrompt: {
           title: "Prompt do sistema",

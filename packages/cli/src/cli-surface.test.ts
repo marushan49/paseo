@@ -73,6 +73,17 @@ describe("canonical CLI surface", () => {
     expect(open?.helpInformation()).toContain("--server <server-id>");
   });
 
+  it("offers listing and running verify recipes against a workspace", () => {
+    const verify = createCli().commands.find((command) => command.name() === "verify");
+    const ls = verify?.commands.find((command) => command.name() === "ls");
+    const run = verify?.commands.find((command) => command.name() === "run");
+
+    expect(ls?.helpInformation()).toContain("--workspace <workspace-id>");
+    expect(run?.helpInformation()).toContain("<name>");
+    expect(run?.helpInformation()).toContain("--param <name=value>");
+    expect(run?.helpInformation()).toContain("--json");
+  });
+
   it("offers the complete local plugin lifecycle", () => {
     const plugin = createCli().commands.find((command) => command.name() === "plugin");
 

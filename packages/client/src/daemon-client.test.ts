@@ -6899,3 +6899,113 @@ test("reviewed plugin updates gate before requests and preserve exact proposal d
     ]);
   }
 });
+
+test("lists evidence runs through a correlated session request", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const listPromise = client.listEvidenceRuns("wks_1", "request-ev-1");
+
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toEqual({
+    type: "verify.evidence.run.list.request",
+    workspaceId: "wks_1",
+    requestId: "request-ev-1",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "verify.evidence.run.list.response",
+      payload: {
+        requestId: "request-ev-1",
+        workspaceId: "wks_1",
+        runs: [
+          {
+            runId: "evr_01",
+            workspaceId: "wks_1",
+            recipe: "verify-report",
+            seq: 1,
+            startedAt: "2026-09-17T10:00:00.000Z",
+            artifactCount: 2,
+          },
+        ],
+        error: null,
+      },
+    }),
+  );
+  await expect(listPromise).resolves.toEqual({
+    requestId: "request-ev-1",
+    workspaceId: "wks_1",
+    runs: [
+      {
+        runId: "evr_01",
+        workspaceId: "wks_1",
+        recipe: "verify-report",
+        seq: 1,
+        startedAt: "2026-09-17T10:00:00.000Z",
+        artifactCount: 2,
+      },
+    ],
+    error: null,
+  });
+});
+
+test("fetches a single evidence artifact through a correlated session request", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const getPromise = client.getEvidenceArtifact("wks_1", "evr_01", "screenshot-report");
+
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request.type).toBe("verify.evidence.artifact.get.request");
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "verify.evidence.artifact.get.response",
+      payload: {
+        requestId: request.requestId,
+        workspaceId: "wks_1",
+        artifact: {
+          name: "screenshot-report",
+          kind: "screenshot",
+          contentType: "image/png",
+          bytes: 4,
+          sha256: "deadbeef",
+          capturedAt: "2026-09-17T10:00:30.000Z",
+        },
+        dataBase64: "iVBORw0KGgo=",
+        error: null,
+      },
+    }),
+  );
+  const payload = await getPromise;
+  expect(payload.artifact?.name).toBe("screenshot-report");
+  expect(payload.dataBase64).toBe("iVBORw0KGgo=");
+  expect(payload.error).toBeNull();
+});

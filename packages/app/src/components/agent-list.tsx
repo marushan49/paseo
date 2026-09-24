@@ -7,12 +7,15 @@ import {
   FlatList,
   type ListRenderItem,
   type PressableStateCallbackType,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import type { MatchRange } from "@getpaseo/protocol/search/text-match";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { formatTimeAgo } from "@/utils/time";
 import { type AggregatedAgent } from "@/hooks/use-aggregated-agents";
@@ -24,6 +27,7 @@ import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { HighlightedText } from "@/components/ui/highlighted-text";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { findHighlightRanges } from "@/components/ui/highlighted-text-segments";
+import { useAppSettings } from "@/hooks/use-settings";
 
 interface AgentListProps {
   agents: AggregatedAgent[];
@@ -160,10 +164,51 @@ function SessionRowTrailingAttention({
   );
 }
 
+function buildSessionRowStyle(
+  isSelected: boolean,
+  isCard: boolean,
+): (state: PressableStateCallbackType) => StyleProp<ViewStyle> {
+  return ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
+    styles.row,
+    isCard && styles.rowCard,
+    isSelected && styles.rowSelected,
+    Boolean(hovered) && styles.rowHovered,
+    pressed && styles.rowPressed,
+  ];
+}
+
+function SessionAgentTitle({
+  title,
+  ranges,
+  testID,
+  isCard,
+  icon,
+}: {
+  title: string;
+  ranges: readonly MatchRange[];
+  testID: string;
+  isCard: boolean;
+  icon: ReactElement;
+}) {
+  return (
+    <View style={styles.agentTitleRow}>
+      <View style={styles.providerIconWrap}>{icon}</View>
+      <HighlightedText
+        text={title}
+        ranges={ranges}
+        style={[styles.sessionTitle, isCard && styles.sessionTitleCard]}
+        numberOfLines={1}
+        testID={testID}
+      />
+    </View>
+  );
+}
+
 function SessionRow({
   agent,
   search,
   isMobile,
+  isCard,
   selectedAgentId,
   showAttentionIndicator,
   showHostColumn,
@@ -173,6 +218,7 @@ function SessionRow({
   agent: AggregatedAgent;
   search?: string;
   isMobile: boolean;
+  isCard: boolean;
   selectedAgentId?: string;
   showAttentionIndicator: boolean;
   showHostColumn: boolean;
@@ -199,14 +245,9 @@ function SessionRow({
     [search, workspaceName, agent.title, branch, projectName],
   );
 
-  const pressableStyle = useCallback(
-    ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.row,
-      isSelected && styles.rowSelected,
-      Boolean(hovered) && styles.rowHovered,
-      pressed && styles.rowPressed,
-    ],
-    [isSelected],
+  const pressableStyle = useMemo(
+    () => buildSessionRowStyle(isSelected, isCard),
+    [isSelected, isCard],
   );
 
   const handlePress = useCallback(() => onPress(agent), [onPress, agent]);
@@ -216,22 +257,21 @@ function SessionRow({
     () => <Archive size={theme.fontSize.sm} color={theme.colors.foregroundMuted} />,
     [theme.fontSize.sm, theme.colors.foregroundMuted],
   );
+  const providerIcon = useMemo(
+    () => <ProviderIcon size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />,
+    [ProviderIcon, theme.iconSize.sm, theme.colors.foregroundMuted],
+  );
   const showDesktopAttention =
     !isMobile && showAttentionIndicator && Boolean(agent.requiresAttention);
 
   const agentTitle = (
-    <View style={styles.agentTitleRow}>
-      <View style={styles.providerIconWrap}>
-        <ProviderIcon size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-      </View>
-      <HighlightedText
-        text={agent.title || t("agentList.fallbackTitle")}
-        ranges={ranges.title}
-        style={styles.sessionTitle}
-        numberOfLines={1}
-        testID={`agent-row-title-${agent.serverId}-${agent.id}`}
-      />
-    </View>
+    <SessionAgentTitle
+      title={agent.title || t("agentList.fallbackTitle")}
+      ranges={ranges.title}
+      testID={`agent-row-title-${agent.serverId}-${agent.id}`}
+      isCard={isCard}
+      icon={providerIcon}
+    />
   );
 
   return (
@@ -343,6 +383,8 @@ export function AgentList({
 }: AgentListProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const isCard = settings.sessionCardStyle === "card";
   const insets = useSafeAreaInsets();
   const [actionAgent, setActionAgent] = useState<AggregatedAgent | null>(null);
   const isMobile = useIsCompactFormFactor();
@@ -443,6 +485,7 @@ export function AgentList({
           agent={item.agent}
           search={search}
           isMobile={isMobile}
+          isCard={isCard}
           selectedAgentId={selectedAgentId}
           showAttentionIndicator={showAttentionIndicator}
           showHostColumn={showHostColumn}
@@ -454,6 +497,7 @@ export function AgentList({
     [
       handleAgentLongPress,
       handleAgentPress,
+      isCard,
       isMobile,
       search,
       selectedAgentId,
@@ -496,7 +540,7 @@ export function AgentList({
       <FlatList
         data={flatItems}
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isCard && styles.listContentCard]}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
@@ -558,6 +602,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[6],
     gap: theme.spacing[1],
   },
+  listContentCard: {
+    gap: theme.spacing[2],
+  },
   sectionHeading: {
     marginTop: theme.spacing[2],
     flexDirection: "row",
@@ -584,6 +631,15 @@ const styles = StyleSheet.create((theme) => ({
       xs: theme.spacing[1],
       md: 0,
     },
+  },
+  rowCard: {
+    backgroundColor: theme.colors.surface1,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.xl,
+    paddingVertical: theme.spacing[3],
+    paddingHorizontal: theme.spacing[4],
+    marginBottom: 0,
   },
   rowContent: {
     flex: 1,
@@ -638,6 +694,9 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     fontWeight: "400",
     color: theme.colors.foregroundMuted,
+  },
+  sessionTitleCard: {
+    color: theme.colors.foreground,
   },
   sessionMetaText: {
     maxWidth: "100%",

@@ -2,110 +2,79 @@
   <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
 </p>
 
-<h1 align="center">Paseo</h1>
+<h1 align="center">Paseo · marushan49 fork</h1>
 
 <p align="center">
-  <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.ja.md">日本語</a> ·
-  <a href="README.ko.md">한국어</a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/getpaseo/paseo/stargazers">
-    <img src="https://img.shields.io/github/stars/getpaseo/paseo?style=flat&logo=github" alt="GitHub stars">
+  <a href="https://github.com/marushan49/paseo/releases">
+    <img src="https://img.shields.io/github/v/release/marushan49/paseo?include_prereleases&style=flat&logo=github" alt="Fork release">
   </a>
-  <a href="https://github.com/getpaseo/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/getpaseo/paseo?style=flat&logo=github" alt="GitHub release">
-  </a>
-  <a href="https://x.com/moboudra">
-    <img src="https://img.shields.io/badge/%40moboudra-555?logo=x" alt="X">
-  </a>
-  <a href="https://discord.gg/jz8T2uahpH">
-    <img src="https://img.shields.io/badge/Discord-555?logo=discord" alt="Discord">
-  </a>
-  <a href="https://www.reddit.com/r/PaseoAI/">
-    <img src="https://img.shields.io/badge/Reddit-555?logo=reddit" alt="Reddit">
+  <a href="https://github.com/getpaseo/paseo">
+    <img src="https://img.shields.io/badge/upstream-getpaseo%2Fpaseo-555?logo=github" alt="Upstream">
   </a>
 </p>
 
-<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, and Pi agents.</p>
+<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, and Pi agents, with a testing engine and Jev decisions built in.</p>
 
-<p align="center">
-  <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
-</p>
+This is a fork of [getpaseo/paseo](https://github.com/getpaseo/paseo). It tracks upstream releases (currently 0.9.1) and adds features that make agents cheaper to run and faster to verify. Everything upstream does still works the same way; the additions below are on top.
 
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
+## What this fork adds
 
-Run agents in parallel on your own machines. Ship from your phone or your desk.
+| Area                      | What you get                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Testing engine**        | `browser_test` runs UI and end-to-end checks inside the daemon and returns only the verdict: pass or fail, checks, log counts, and an evidence reference. Scripted steps cost no model tokens; `goal` steps hand the unscriptable part to Jev. Passing ad-hoc runs can be saved as recipes in `paseo.json` (`saveAs`). Every provider gets a rule to use it first for tests, and competing browser MCP servers (Playwright, Puppeteer, Chrome DevTools) are hidden from Paseo's Claude, Codex, and OpenCode sessions. See [browser docs](public-docs/browser.md#testing-engine). |
+| **System One (Jev)**      | `system_one_decide` gives every agent fast typed decisions. `browser_goal` drives a browser tab with Jev. Keys are checked before they are saved and fall through to the next configured key if TypeSafe rejects one. See [System One docs](public-docs/system-one.md).                                                                                                                                                                                                                                                                                                          |
+| **Model routing**         | Before each turn Jev picks the cheapest sufficient model and thinking depth from a per-provider ladder in `daemon.systemOne.routing`, for Claude, Codex, OpenCode, and any other provider you list. A model you pick by hand wins for that session.                                                                                                                                                                                                                                                                                                                              |
+| **Daemon-hosted browser** | Agent browser tabs run on the daemon host with persistent profiles, and mirror into the desktop, web, and mobile apps. Import cookies from Chrome, Brave, Edge, Arc, Vivaldi, Chromium, or Firefox under **Settings → Browser**, and set a start page for new tabs.                                                                                                                                                                                                                                                                                                              |
+| **Pull request sets**     | The sidebar groups a workspace's pull requests and lets you attach one by number. The daemon tries each GitHub account in `PASEO_GH_CONFIG_DIRS` until one can see the repository.                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Transcript copy**       | Copy a whole agent transcript as Markdown or JSON from the tab menu.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Rolling Android APK**   | Every push to `main` that touches the app rebuilds an arm64 APK at a fixed link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-- **Self-hosted:** Agents run on your machine with your full dev environment. Use your tools, your configs, and your skills.
-- **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, and Pi through the same interface. Pick the right model for each job.
-- **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
-- **Cross-device:** iOS, Android, desktop, web, and CLI. Start work at your desk, check in from your phone, script it from the terminal.
-- **Privacy-first:** Paseo doesn't have any telemetry, tracking, or forced log-ins.
+## Install
+
+### Desktop app
+
+Download the Linux `.deb` or macOS `.dmg` from the [fork releases](https://github.com/marushan49/paseo/releases). The app updates itself from this fork's releases, not from upstream.
+
+On macOS the fork is ad-hoc signed. After copying `Paseo.app` into `/Applications`, run:
+
+```bash
+xattr -cr /Applications/Paseo.app
+```
+
+### Android
+
+Install the rolling build of `main`:
+
+https://github.com/marushan49/paseo/releases/download/android-latest/paseo-android-latest.apk
+
+### Daemon from source
+
+The fork does not publish npm packages; `npm install -g @getpaseo/cli` installs upstream Paseo. Run the daemon from a checkout instead:
+
+```bash
+git clone https://github.com/marushan49/paseo.git
+cd paseo
+npm ci
+npm run build:server
+packages/cli/bin/paseo daemon run
+```
+
+You need at least one agent CLI installed and signed in: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [GitHub Copilot](https://github.com/features/copilot/cli/), [OpenCode](https://github.com/anomalyco/opencode), or [Pi](https://pi.dev). To connect from your phone, open **Settings → your host → Pair Device**.
+
+Upstream's [docs](https://paseo.sh/docs), [connectivity guide](https://paseo.sh/docs/connectivity), and [configuration reference](https://paseo.sh/docs/configuration) apply to the fork as well.
 
 ## Plugins
 
-Add themes, workspace panels, commands, settings screens, and coding-agent providers with trusted
-TypeScript plugins. Install from npm, Git, or a local directory with `paseo plugin install <source>`.
+Add themes, workspace panels, commands, settings screens, and coding-agent providers with trusted TypeScript plugins. Install from npm, Git, or a local directory with `paseo plugin install <source>`. Start with the [plugin quickstart](https://paseo.sh/docs/plugins). Plugins run with access to your daemon machine and inside connected clients; install only code you trust.
 
-Start with the [plugin quickstart](https://paseo.sh/docs/plugins). Plugins run with access to your daemon
-machine and inside connected clients; install only code you trust.
+## Staying current with upstream
 
-## Getting Started
-
-Paseo runs a local server called the daemon that manages your coding agents. Clients like the desktop app, mobile app, web app, and CLI connect to it.
-
-### Prerequisites
-
-You need at least one agent CLI installed and configured with your credentials:
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [Codex](https://github.com/openai/codex)
-- [GitHub Copilot](https://github.com/features/copilot/cli/)
-- [OpenCode](https://github.com/anomalyco/opencode)
-- [Pi](https://pi.dev)
-
-### Desktop app (recommended)
-
-Download it from [paseo.sh/download](https://paseo.sh/download) or the [GitHub releases page](https://github.com/getpaseo/paseo/releases). Open the app and the daemon starts automatically. Nothing else to install.
-
-To connect from your phone, open **Settings → your host → Pair Device**.
-
-### CLI / headless
-
-Install the CLI and start Paseo:
+Upstream releases are merged into `main` as they ship. Remote `origin` points at `getpaseo/paseo` and is fetch-only; `marushan49` is the fork:
 
 ```bash
-npm install -g @getpaseo/cli
-paseo
+git fetch origin --tags
+git merge v<version>
 ```
-
-Paseo starts locally, then asks whether to enable the end-to-end encrypted relay for device pairing. If you decline, connect directly over TCP, Tailscale, or another VPN. This path is useful for servers and remote machines.
-
-For full setup and configuration, see:
-
-- [Docs](https://paseo.sh/docs)
-- [Connectivity guide](https://paseo.sh/docs/connectivity)
-- [Configuration reference](https://paseo.sh/docs/configuration)
-
-### Docker
-
-Run the Paseo daemon and self-hosted web UI in Docker:
-
-```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
-```
-
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
 
 ## CLI
 
@@ -154,7 +123,7 @@ See the [SDK quickstart](https://paseo.sh/docs/sdk/quickstart), [recipes](https:
 Skills teach your agent to use Paseo to orchestrate other agents.
 
 ```bash
-npx skills add getpaseo/paseo
+npx skills add marushan49/paseo
 ```
 
 Then use them in any agent conversation:

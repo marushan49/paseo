@@ -18,6 +18,7 @@ import { useWorkspaceReadState } from "@/hooks/use-workspace-read-state";
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { isNative as platformIsNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useAppSettings } from "@/hooks/use-settings";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
   SidebarWorkspaceContextMenu,
@@ -34,6 +35,7 @@ import {
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
+import { useForgeAccountDialog } from "@/git/use-forge-account-dialog";
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
@@ -122,6 +124,13 @@ export function SidebarWorkspaceRow({
     setIsRenameOpen(false);
   }, []);
 
+  // Row-level like rename: the dialog must survive the hover-gated kebab
+  // menu unmounting when its item is selected.
+  const { forgeAccountDialog, openForgeAccountDialog } = useForgeAccountDialog({
+    serverId: workspace.serverId,
+    workspaceId: workspace.workspaceId,
+  });
+
   const archiveShortcutKeys = useShortcutKeys("archive-workspace");
   const { hasClearableAttention, canMarkUnread, clearAttention, markUnread } =
     useWorkspaceReadState({
@@ -174,6 +183,7 @@ export function SidebarWorkspaceRow({
         onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
         onMarkAsUnread={canMarkUnread ? handleMarkAsUnread : undefined}
         archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+        openForgeAccountDialog={openForgeAccountDialog}
       />
       <WorkspaceRenameModal
         visible={isRenameOpen}
@@ -181,6 +191,7 @@ export function SidebarWorkspaceRow({
         onClose={handleCloseRename}
         testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
       />
+      {forgeAccountDialog}
     </>
   );
 }
@@ -207,6 +218,7 @@ interface WorkspaceRowBodyProps {
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  openForgeAccountDialog?: () => void;
 }
 
 function WorkspaceRowBody({
@@ -231,9 +243,12 @@ function WorkspaceRowBody({
   onMarkAsRead,
   onMarkAsUnread,
   archiveShortcutKeys,
+  openForgeAccountDialog,
 }: WorkspaceRowBodyProps) {
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
+  const { settings } = useAppSettings();
+  const isCardCompact = isCompact && settings.sessionCardStyle === "card";
   const [isPressed, setIsPressed] = useState(false);
   const trailing = useSidebarWorkspaceTrailing();
   const draggable = Boolean(drag);
@@ -279,6 +294,7 @@ function WorkspaceRowBody({
           isPressed,
           selected,
           isHovered,
+          isCardCompact,
         });
         const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
         return (
@@ -308,6 +324,7 @@ function WorkspaceRowBody({
               archiveStatus={archiveStatus}
               archivePendingLabel={archivePendingLabel}
               archiveShortcutKeys={archiveShortcutKeys}
+              openForgeAccountDialog={openForgeAccountDialog}
               openInFileManagerPath={workspace.workspaceDirectory}
               disabled={isArchiving}
               aria-selected={selected}
@@ -345,6 +362,7 @@ function WorkspaceRowBody({
                   archiveStatus={archiveStatus}
                   archivePendingLabel={archivePendingLabel}
                   archiveShortcutKeys={archiveShortcutKeys}
+                  openForgeAccountDialog={openForgeAccountDialog}
                   onArchive={onArchive}
                   onCopyBranchName={onCopyBranchName}
                   onCopyPath={onCopyPath}
@@ -374,6 +392,7 @@ function WorkspaceRowTrailingActions({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  openForgeAccountDialog,
   onArchive,
   onMarkAsRead,
   onMarkAsUnread,
@@ -393,6 +412,7 @@ function WorkspaceRowTrailingActions({
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  openForgeAccountDialog?: () => void;
   onArchive?: () => void;
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
@@ -449,6 +469,7 @@ function WorkspaceRowTrailingActions({
                 archiveStatus={archiveStatus}
                 archivePendingLabel={archivePendingLabel}
                 archiveShortcutKeys={archiveShortcutKeys}
+                openForgeAccountDialog={openForgeAccountDialog}
               />
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>
@@ -463,14 +484,17 @@ function getWorkspaceRowStyle({
   isPressed,
   selected,
   isHovered,
+  isCardCompact,
 }: {
   isDragging: boolean;
   isPressed: boolean;
   selected: boolean;
   isHovered: boolean;
+  isCardCompact: boolean;
 }) {
   return [
     styles.workspaceRow,
+    isCardCompact && styles.workspaceRowCard,
     isHovered && styles.workspaceRowHovered,
     selected && styles.sidebarRowSelected,
     isDragging && styles.workspaceRowDragging,
@@ -487,7 +511,10 @@ const styles = StyleSheet.create((theme) => ({
   workspaceRow: {
     minHeight: 36,
     marginBottom: theme.spacing[1],
-    paddingVertical: theme.spacing[2],
+    paddingVertical: {
+      xs: theme.spacing[3],
+      md: theme.spacing[2],
+    },
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
@@ -496,6 +523,14 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[1],
     userSelect: "none",
+  },
+  workspaceRowCard: {
+    backgroundColor: theme.colors.surface1,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.xl,
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[4],
   },
   workspaceRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,

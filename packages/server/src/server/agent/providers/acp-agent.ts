@@ -125,6 +125,7 @@ import {
   truncateForDiagnostic,
 } from "./diagnostic-utils.js";
 import { withTimeout } from "../../../utils/promise-timeout.js";
+import { composeSystemPromptParts } from "../system-prompt.js";
 
 const ACP_AUTO_ACCEPT_FEATURE_ID = "auto_accept";
 
@@ -1666,6 +1667,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly initialHandle?: AgentPersistenceHandle;
 
   private readonly config: AgentSessionConfig;
+  private pendingSessionInstructions: string | null = null;
   private child: ChildProcessWithoutNullStreams | null = null;
   private connection: ClientSideConnection | null = null;
   private agentCapabilities: ACPAgentCapabilities | null = null;
@@ -1744,6 +1746,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         }),
       );
       this.sessionId = response.sessionId;
+      // ACP has no system-prompt channel, so fresh sessions get it with the first turn.
+      this.pendingSessionInstructions =
+        composeSystemPromptParts(this.config.systemPrompt, this.config.daemonAppendSystemPrompt) ??
+        null;
       this.bootstrapThreadEventPending = true;
       this.applySessionState(response);
       await this.applyConfiguredOverrides();
@@ -1835,6 +1841,16 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return result;
   }
 
+  private withPendingSessionInstructions(blocks: ContentBlock[]): ContentBlock[] {
+    const instructions = this.pendingSessionInstructions;
+    if (!instructions) return blocks;
+    this.pendingSessionInstructions = null;
+    return [
+      { type: "text", text: `<paseo-instructions>\n${instructions}\n</paseo-instructions>` },
+      ...blocks,
+    ];
+  }
+
   async startTurn(
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
@@ -1863,7 +1879,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       .prompt({
         sessionId: this.sessionId,
         messageId,
-        prompt: toACPContentBlocks(prompt),
+        prompt: this.withPendingSessionInstructions(toACPContentBlocks(prompt)),
       })
       .then((response) => {
         this.handlePromptResponse(response, turnId);

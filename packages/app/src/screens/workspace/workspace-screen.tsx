@@ -18,6 +18,8 @@ import { BackHandler, Keyboard, Pressable, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
+import { copyAgentTranscript } from "@/agent-transcript/copy";
+import type { TranscriptFormat } from "@/agent-transcript/serialize";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -189,6 +191,7 @@ import {
 import { findAdjacentPane } from "@/utils/split-navigation";
 import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { getIsElectron, isNative, isWeb } from "@/constants/platform";
+import { useHostFeature } from "@/runtime/host-features";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { useWorkspaceTerminals } from "@/screens/workspace/terminals/use-workspace-terminals";
@@ -313,6 +316,7 @@ function getFallbackTabOptionLabel(
     changes: string;
     files: string;
     pullRequest: string;
+    evidence: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -342,8 +346,14 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
   }
+  if (tab.target.kind === "evidence") {
+    return labels.evidence;
+  }
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
+  }
+  if (tab.target.kind === "plugin") {
+    return tab.target.panelId;
   }
   return labels.agent;
 }
@@ -360,6 +370,8 @@ function getFallbackTabOptionDescription(
     changes: string;
     files: string;
     pullRequest: string;
+    evidence: string;
+    evidenceDescription: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -395,6 +407,9 @@ function getFallbackTabOptionDescription(
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
   }
+  if (tab.target.kind === "evidence") {
+    return labels.evidenceDescription;
+  }
   if (tab.target.kind === "plugin") {
     return tab.target.panelId;
   }
@@ -411,6 +426,7 @@ interface MobileWorkspaceTabSwitcherProps {
   normalizedWorkspaceId: string;
   onSelectSwitcherTab: (key: string) => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -518,6 +534,7 @@ function MobileWorkspaceTabOption({
   active,
   onPress,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -537,6 +554,7 @@ function MobileWorkspaceTabOption({
   active: boolean;
   onPress: () => void;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
+  onCopyChat: (agentId: string, format: TranscriptFormat) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
@@ -551,6 +569,8 @@ function MobileWorkspaceTabOption({
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
     () => ({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
+      copyChatMarkdown: t("workspace.tabs.menu.copyChatMarkdown"),
+      copyChatJson: t("workspace.tabs.menu.copyChatJson"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),
@@ -574,6 +594,7 @@ function MobileWorkspaceTabOption({
     tabCount,
     menuTestIDBase,
     onCopyResumeCommand,
+    onCopyChat,
     onCopyAgentId,
     onCopyTerminalId,
     onCopyFilePath,
@@ -597,6 +618,7 @@ function MobileWorkspaceTabOption({
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      evidence: t("panels.evidence.label"),
     }),
     [t],
   );
@@ -646,6 +668,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
   normalizedWorkspaceId,
   onSelectSwitcherTab,
   onCopyResumeCommand,
+  onCopyChat,
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
@@ -703,6 +726,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
           active={active}
           onPress={onPress}
           onCopyResumeCommand={onCopyResumeCommand}
+          onCopyChat={onCopyChat}
           onCopyAgentId={onCopyAgentId}
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
@@ -722,6 +746,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
       normalizedServerId,
       normalizedWorkspaceId,
       onCopyResumeCommand,
+      onCopyChat,
       onCopyAgentId,
       onCopyTerminalId,
       onCopyFilePath,
@@ -1618,6 +1643,70 @@ function WorkspaceScreenContent({
     [normalizedServerId, normalizedWorkspaceId],
   );
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
+  const canOpenRemoteBrowserTabs = useHostFeature(normalizedServerId, "remoteBrowser");
+  useEffect(() => {
+    if (
+      !isRouteFocused ||
+      !isConnected ||
+      !client ||
+      !persistenceKey ||
+      !canOpenRemoteBrowserTabs
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const syncRemoteTabs = async () => {
+      try {
+        const response = await client.executeRemoteBrowserCommand({
+          workspaceId: normalizedWorkspaceId,
+          command: { command: "list_tabs", args: {} },
+        });
+        if (cancelled || !response.ok || response.result.command !== "list_tabs") return;
+
+        for (const tab of response.result.tabs) {
+          if (tab.workspaceId && tab.workspaceId !== normalizedWorkspaceId) continue;
+          useBrowserStore.getState().upsertRemoteBrowser({
+            browserId: tab.browserId,
+            url: tab.url,
+            title: tab.title,
+          });
+          const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[persistenceKey];
+          const isOpen = layout
+            ? collectAllTabs(layout.root).some(
+                (candidate) =>
+                  candidate.target.kind === "browser" &&
+                  candidate.target.browserId === tab.browserId,
+              )
+            : false;
+          if (!isOpen) {
+            openTab({
+              workspaceKey: persistenceKey,
+              target: { kind: "browser", browserId: tab.browserId },
+              intent: "background",
+            });
+          }
+        }
+      } catch {
+        // Connection state owns user-visible errors; this refresh is opportunistic.
+      }
+    };
+
+    void syncRemoteTabs();
+    const interval = setInterval(() => void syncRemoteTabs(), 1_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [
+    canOpenRemoteBrowserTabs,
+    client,
+    isConnected,
+    isRouteFocused,
+    normalizedWorkspaceId,
+    openTab,
+    persistenceKey,
+  ]);
   const replaceWorkspaceTabTarget = useWorkspaceLayoutStore((state) => state.replaceTab);
   const openWorkspaceTabFocused = useCallback(
     (workspaceKey: string, target: WorkspaceTabTarget, placement?: WorkspaceTabPlacement) =>
@@ -2365,6 +2454,8 @@ function WorkspaceScreenContent({
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      evidence: t("panels.evidence.label"),
+      evidenceDescription: t("panels.evidence.subtitle"),
     }),
     [t],
   );
@@ -2401,7 +2492,7 @@ function WorkspaceScreenContent({
 
   const handleCreateBrowserTab = useCallback(
     (input?: { paneId?: string }) => {
-      if (!persistenceKey || !getIsElectron()) {
+      if (!persistenceKey) {
         return;
       }
       const { browserId } = createWorkspaceBrowser();
@@ -2462,7 +2553,7 @@ function WorkspaceScreenContent({
 
   const handleOpenUrlInBrowserTab = useCallback(
     (url: string) => {
-      if (!persistenceKey || !getIsElectron()) {
+      if (!persistenceKey) {
         return;
       }
       const { browserId } = createWorkspaceBrowser({ initialUrl: url });
@@ -2743,6 +2834,46 @@ function WorkspaceScreenContent({
       }
     },
     [normalizedServerId, toast, t],
+  );
+
+  const handleCopyChat = useCallback(
+    async (agentId: string, format: TranscriptFormat) => {
+      if (!agentId) return;
+      if (!client || !isConnected) {
+        toast.error(t("workspace.terminal.hostDisconnected"));
+        return;
+      }
+
+      const agent =
+        useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
+
+      // A full export pages through the whole history, so it is not instant.
+      toast.show(t("workspace.tabs.toasts.copyingChat"), { durationMs: null });
+      try {
+        const result = await copyAgentTranscript({
+          agentId,
+          agentName: agent?.title ?? null,
+          provider: agent?.provider ?? null,
+          format,
+          fetchPage: (options) => client.fetchAgentTimeline(agentId, options),
+          writeToClipboard: async (text) => {
+            await Clipboard.setStringAsync(text);
+          },
+        });
+        if (result.status === "empty") {
+          toast.error(t("workspace.tabs.toasts.chatCopyEmpty"));
+          return;
+        }
+        toast.copied(
+          result.truncated
+            ? t("workspace.tabs.toasts.chatCopyTruncated")
+            : t("workspace.tabs.toasts.chatCopiedLabel"),
+        );
+      } catch {
+        toast.error(t("workspace.tabs.toasts.copyChatFailed"));
+      }
+    },
+    [client, isConnected, normalizedServerId, toast, t],
   );
 
   const handleReloadAgent = useCallback(
@@ -3851,7 +3982,7 @@ function WorkspaceScreenContent({
     () => createTerminalMutation.isPending || pendingTerminalCreateInput !== null,
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
-  const showCreateBrowserTab = getIsElectron();
+  const showCreateBrowserTab = [getIsElectron(), canOpenRemoteBrowserTabs].some(Boolean);
   const newTabLauncher = useMemo<NewTabLauncher>(
     () => ({
       showChanges: isGitCheckout,
@@ -3971,6 +4102,7 @@ function WorkspaceScreenContent({
         onNavigateTab={navigateToTabId}
         onCloseTab={handleCloseTabById}
         onCopyResumeCommand={handleCopyResumeCommand}
+        onCopyChat={handleCopyChat}
         onCopyAgentId={handleCopyAgentId}
         onCopyTerminalId={handleCopyTerminalId}
         onCopyFilePath={handleCopyFilePath}
@@ -4007,6 +4139,7 @@ function WorkspaceScreenContent({
     navigateToTabId,
     handleCloseTabById,
     handleCopyResumeCommand,
+    handleCopyChat,
     handleCopyAgentId,
     handleCopyTerminalId,
     handleCopyFilePath,
@@ -4050,6 +4183,7 @@ function WorkspaceScreenContent({
           normalizedWorkspaceId={normalizedWorkspaceId}
           onSelectSwitcherTab={handleSelectSwitcherTab}
           onCopyResumeCommand={handleCopyResumeCommand}
+          onCopyChat={handleCopyChat}
           onCopyAgentId={handleCopyAgentId}
           onCopyTerminalId={handleCopyTerminalId}
           onCopyFilePath={handleCopyFilePath}
@@ -4074,6 +4208,7 @@ function WorkspaceScreenContent({
             onNavigateTab={navigateToTabId}
             onCloseTab={handleCloseTabById}
             onCopyResumeCommand={handleCopyResumeCommand}
+            onCopyChat={handleCopyChat}
             onCopyAgentId={handleCopyAgentId}
             onCopyTerminalId={handleCopyTerminalId}
             onCopyFilePath={handleCopyFilePath}

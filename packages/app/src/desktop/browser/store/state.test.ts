@@ -52,6 +52,7 @@ describe("createBrowserRecord", () => {
 
     expect(record).toEqual({
       browserId: "b1",
+      remoteBrowserId: null,
       url: "http://localhost:8081",
       title: "",
       isLoading: false,
@@ -187,5 +188,15 @@ describe("normalizeBrowserIndexState", () => {
     expect(
       normalizeBrowserIndexState({ browsersById: { b1: legacy } }).browsersById.b1?.viewport,
     ).toEqual({ mode: "responsive" });
+  });
+});
+
+describe("start page persistence", () => {
+  it("keeps the start page and still reads state persisted before it existed", () => {
+    expect(sanitizeBrowsersForPersist({ browsersById: {}, startUrl: "https://a.test" })).toEqual({
+      browsersById: {},
+      startUrl: "https://a.test",
+    });
+    expect(normalizeBrowserIndexState({ browsersById: {} })).toEqual({ browsersById: {} });
   });
 });

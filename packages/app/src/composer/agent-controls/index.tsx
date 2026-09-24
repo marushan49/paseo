@@ -59,9 +59,16 @@ import {
   getAgentControlHintKey,
   resolveAgentModelSelection,
 } from "@/composer/agent-controls/utils";
+import {
+  reducePendingThinkingSelection,
+  resolveDisplayedThinkingOptionId,
+  type PendingThinkingSelection,
+} from "@/composer/agent-controls/pending-thinking";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { readMeasuredWidth } from "@/hooks/use-container-width";
 import { useToast } from "@/contexts/toast-context";
+import { confirmDialog } from "@/utils/confirm-dialog";
+import { requestSwitchAgentProvider } from "./switch-provider";
 import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import {
@@ -195,6 +202,22 @@ function findOptionLabel(
   }
   const selected = options.find((option) => option.id === selectedId);
   return selected?.label ?? fallback;
+}
+
+/**
+ * The pill reads the agent's thinking option, so an option the model does not
+ * list still has to show up as itself. Falling back to the first entry labelled
+ * an agent on "Xhigh" as "Off" and never moved off it.
+ */
+function resolveThinkingPillLabel(
+  options: AgentControlOption[],
+  selectedId: string | undefined,
+  unknownLabel: string,
+): string {
+  if (!selectedId) {
+    return options[0]?.label ?? unknownLabel;
+  }
+  return findOptionLabel(options, selectedId, formatThinkingOptionLabel({ id: selectedId }));
 }
 
 function toCommandCenterModes(modeControl: AgentModeControlValue | null) {
@@ -437,6 +460,18 @@ function resolveSnapshotModeIds(
   return entry.modes.map((mode) => mode.id);
 }
 
+function resolveModelLabel(
+  providers: ProviderSelectorProvider[],
+  provider: string,
+  modelId: string,
+): string {
+  const selection = providers.find((entry) => entry.id === provider)?.modelSelection;
+  if (selection?.kind !== "models") {
+    return modelId;
+  }
+  return selection.rows.find((row) => row.modelId === modelId)?.modelLabel ?? modelId;
+}
+
 function buildAgentProviderDefinitions(
   agentProvider: string | undefined,
   snapshotEntries: ReturnType<typeof useProvidersSnapshot>["entries"],
@@ -534,10 +569,10 @@ function ControlledAgentControls({
     () => toThinkingControlOptions(thinkingOptions),
     [thinkingOptions],
   );
-  const displayThinking = findOptionLabel(
+  const displayThinking = resolveThinkingPillLabel(
     formattedThinkingOptions,
     selectedThinkingOptionId,
-    formattedThinkingOptions[0]?.label ?? t("agentControls.thinking.unknown"),
+    t("agentControls.thinking.unknown"),
   );
 
   const hasAnyControl = resolveHasAnyControl({
@@ -1576,14 +1611,25 @@ export const AgentControls = memo(function AgentControls({
     [agent?.provider, models],
   );
   const agentModelSelectorProviders = useMemo(() => {
-    if (snapshotSelectedEntry) {
-      return buildSelectableProviderSelectorProviders([snapshotSelectedEntry]);
-    }
-    return buildProviderSelectorProviders({
-      providerDefinitions: agentProviderDefinitions,
-      modelsByProvider: agentProviderModels,
-    });
-  }, [agentProviderDefinitions, agentProviderModels, snapshotSelectedEntry]);
+    const own = snapshotSelectedEntry
+      ? buildSelectableProviderSelectorProviders([snapshotSelectedEntry])
+      : buildProviderSelectorProviders({
+          providerDefinitions: agentProviderDefinitions,
+          modelsByProvider: agentProviderModels,
+        });
+    // The other enabled providers are offered too: picking one of their models
+    // moves the agent to that provider instead of changing its model.
+    const others = buildSelectableProviderSelectorProviders(
+      (snapshotEntries ?? []).filter((entry) => entry.provider !== agent?.provider),
+    );
+    return [...own, ...others];
+  }, [
+    agent?.provider,
+    agentProviderDefinitions,
+    agentProviderModels,
+    snapshotEntries,
+    snapshotSelectedEntry,
+  ]);
 
   const modelSelection = resolveAgentModelSelection({
     models,
@@ -1593,7 +1639,10 @@ export const AgentControls = memo(function AgentControls({
   });
 
   const modelOptions = useMemo<AgentControlOption[]>(() => {
-    return (models ?? []).map((model) => ({ id: model.id, label: model.label }));
+    return (models ?? []).map((model) => ({
+      id: model.id,
+      label: model.label,
+    }));
   }, [models]);
 
   const thinkingOptions = useMemo<AgentControlOption[]>(() => {
@@ -1605,6 +1654,19 @@ export const AgentControls = memo(function AgentControls({
 
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
+
+  const confirmedThinkingId = modelSelection.selectedThinkingId;
+  const [pendingThinking, setPendingThinking] = useState<PendingThinkingSelection | null>(null);
+  useEffect(() => {
+    setPendingThinking((current) => reducePendingThinkingSelection(current, confirmedThinkingId));
+  }, [confirmedThinkingId]);
+  useEffect(() => {
+    setPendingThinking(null);
+  }, [agentId]);
+  const displayedThinkingId = resolveDisplayedThinkingOptionId(
+    pendingThinking,
+    confirmedThinkingId,
+  );
 
   const handleSelectModel = useCallback(
     async (modelId: string) => {
@@ -1627,9 +1689,46 @@ export const AgentControls = memo(function AgentControls({
     },
     [agentId, agentProvider, client, toast, updatePreferences],
   );
-  const handleSelectCommandCenterModel = useCallback(
-    (_provider: AgentProvider, modelId: string) => handleSelectModel(modelId),
-    [handleSelectModel],
+  const resolveProviderLabel = useCallback(
+    (provider: string) =>
+      agentModelSelectorProviders.find((entry) => entry.id === provider)?.label ?? provider,
+    [agentModelSelectorProviders],
+  );
+  const handleSelectProviderAndModel = useCallback(
+    (provider: AgentProvider, modelId: string) => {
+      if (!agentProvider || provider === agentProvider) {
+        void handleSelectModel(modelId);
+        return;
+      }
+      if (!client) {
+        return;
+      }
+      void requestSwitchAgentProvider(
+        {
+          agentId,
+          fromProviderLabel: resolveProviderLabel(agentProvider),
+          toProvider: provider,
+          toProviderLabel: resolveProviderLabel(provider),
+          modelId,
+          modelLabel: resolveModelLabel(agentModelSelectorProviders, provider, modelId),
+        },
+        {
+          confirm: confirmDialog,
+          setAgentProvider: (switchInput) =>
+            client.setAgentProvider(switchInput.agentId, switchInput.provider, switchInput.modelId),
+          reportError: (error) => toast.error(toErrorMessage(error)),
+        },
+      );
+    },
+    [
+      agentId,
+      agentModelSelectorProviders,
+      agentProvider,
+      client,
+      handleSelectModel,
+      resolveProviderLabel,
+      toast,
+    ],
   );
 
   // A running agent is one provider's process, so only that provider's profiles
@@ -1657,6 +1756,10 @@ export const AgentControls = memo(function AgentControls({
       if (!client || !agentProvider) {
         return;
       }
+      setPendingThinking({
+        requested: thinkingOptionId,
+        baseline: confirmedThinkingId,
+      });
       if (activeModelId) {
         void updatePreferences((current) =>
           mergeProviderPreferences({
@@ -1677,11 +1780,12 @@ export const AgentControls = memo(function AgentControls({
         .setAgentThinkingOption(agentId, thinkingOptionId)
         .then((notice) => showProviderNoticeToast(toast, notice))
         .catch((error) => {
+          setPendingThinking(null);
           console.warn("[AgentControls] setAgentThinkingOption failed", error);
           toast.error(toErrorMessage(error));
         });
     },
-    [activeModelId, agentId, agentProvider, client, toast, updatePreferences],
+    [activeModelId, agentId, agentProvider, client, confirmedThinkingId, toast, updatePreferences],
   );
 
   const handleSetFeature = useCallback(
@@ -1720,11 +1824,11 @@ export const AgentControls = memo(function AgentControls({
         providers: agentModelSelectorProviders,
         selectedProvider: agentProvider,
         selectedModelId: activeModelId,
-        select: handleSelectCommandCenterModel,
+        select: handleSelectProviderAndModel,
       },
       thinking: {
         options: modelSelection.thinkingOptions,
-        selectedId: modelSelection.selectedThinkingId,
+        selectedId: displayedThinkingId,
         select: handleSelectThinkingOption,
       },
       modes: commandCenterModes,
@@ -1740,11 +1844,11 @@ export const AgentControls = memo(function AgentControls({
       agentModelSelectorProviders,
       agentProvider,
       commandCenterModes,
-      handleSelectCommandCenterModel,
+      handleSelectProviderAndModel,
       handleSelectThinkingOption,
       handleSetFeature,
       modeProviderDefinitions,
-      modelSelection.selectedThinkingId,
+      displayedThinkingId,
       modelSelection.thinkingOptions,
       serverId,
     ],
@@ -1783,13 +1887,14 @@ export const AgentControls = memo(function AgentControls({
         modelOptions={modelOptions}
         selectedModelId={modelSelection.activeModelId ?? undefined}
         onSelectModel={handleSelectModel}
+        onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}
         onApplyAgentProfile={agentProfiles?.applyProfile}
         onEditAgentProfiles={handleEditAgentProfiles}
         onCreateAgentProfile={profileActions.create}
         onEditAgentProfile={profileActions.edit}
         thinkingOptions={thinkingOptions.length > 0 ? thinkingOptions : undefined}
-        selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
+        selectedThinkingOptionId={displayedThinkingId ?? undefined}
         onSelectThinkingOption={handleSelectThinkingOption}
         features={agent.features}
         onSetFeature={handleSetFeature}

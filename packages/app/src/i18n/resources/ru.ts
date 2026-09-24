@@ -328,7 +328,9 @@ export const ru: TranslationResources = {
     },
     actions: {
       copyCode: "Скопировать код",
+      copyText: "Скопировать текст",
       copyTurn: "Скопировать ответ",
+      copyFailed: "Не удалось скопировать",
       copyMessage: "Копировать сообщение",
       forkMenu: "Форкнуть чат отсюда",
       forkInNewTab: "Создать форк в новой вкладке",
@@ -338,6 +340,9 @@ export const ru: TranslationResources = {
       forkFailed: "Не удалось создать форк чата",
       openFile: "Открыть файл",
       copied: "Скопировано",
+    },
+    writingBlock: {
+      untitled: "Текст",
     },
     attachments: {
       dismissImage: "Закрыть изображение",
@@ -634,6 +639,8 @@ export const ru: TranslationResources = {
         copyResumeCommand: "Копировать команду продолжения",
         copyAgentId: "Скопировать идентификатор агента",
         copyTerminalId: "Скопировать идентификатор терминала",
+        copyChatMarkdown: "Скопировать чат (Markdown)",
+        copyChatJson: "Скопировать чат (JSON)",
         copyFilePath: "Скопировать путь к файлу",
         rename: "Переименовать",
         closeAbove: "Закрыть вкладки выше",
@@ -673,12 +680,18 @@ export const ru: TranslationResources = {
         toggle: "Переключить боковую панель",
         changes: "Изменения",
         files: "Файлы",
+        evidence: "Доказательства",
       },
       toasts: {
         copyFailed: "Не удалось скопировать",
         agentIdCopiedLabel: "ID агента",
         terminalIdCopiedLabel: "Идентификатор терминала",
         resumeCommandCopiedLabel: "команда продолжения",
+        chatCopiedLabel: "Расшифровка чата",
+        copyingChat: "Копирование чата...",
+        copyChatFailed: "Не удалось скопировать чат",
+        chatCopyEmpty: "Этот чат пуст",
+        chatCopyTruncated: "Чат скопирован без самых старых сообщений",
         filePathCopiedLabel: "Путь к файлу",
         resumeIdUnavailable: "ID возобновления недоступен",
         resumeCommandUnavailable: "Команда возобновления недоступна",
@@ -980,10 +993,60 @@ export const ru: TranslationResources = {
         openFileIn: "Открыть {{fileName}} в {{target}}",
         failedOpen: "Не удалось открыть рабочее пространство",
       },
+      forgeAccount: {
+        scopeProject: "Весь проект",
+        scopeWorkspace: "Только это рабочее пространство",
+        scopeProjectHint:
+          "Все рабочие пространства проекта используют эту учётную запись, если не задали свою.",
+        scopeWorkspaceHint: "Действует только здесь и переопределяет учётную запись проекта.",
+        inherited: "{{host}} · унаследовано от проекта",
+        savedProject:
+          "Все рабочие пространства проекта теперь используют учётную запись из {{path}}",
+        clearedProject: "Проект снова использует учётную запись по умолчанию",
+        title: "Учётная запись GitHub",
+        defaultOption: "По умолчанию для машины",
+        defaultDetail: "То, что выберет gh на этом хосте",
+        empty: "На этом хосте не найдено входов в GitHub",
+        placeholder: "Путь к каталогу конфигурации gh, например ~/.config/gh-work",
+        confirm: "Сохранить",
+        saved: "Это рабочее пространство теперь работает под учётной записью из {{path}}",
+        cleared: "Рабочее пространство снова использует учётную запись по умолчанию",
+      },
       pr: {
         actions: {
           viewPullRequest: "Просмотреть",
           openOn: "Открыть на {{brand}}",
+        },
+        set: {
+          toggleEmptyAccessibility: "Прикрепить пулреквест к этому рабочему пространству",
+          toggleOneAccessibility: "Показать пулреквест #{{number}}",
+          addAction: "Добавить",
+          scanAction: "Сканировать чат",
+          emptyList: "Пулреквестов пока нет",
+          count: "{{count}} PR",
+          failing: "{{count}} с ошибкой",
+          running: "выполняется",
+          passing: "успешно",
+          draft: "черновик",
+          toggleAccessibility: "Показать все {{count}} пул-реквестов",
+          attachPullRequest: "Attach pull request…",
+          attachTitle: "Attach pull request",
+          attachPlaceholder: "Номера PR, например 1346 или 1346, 1350",
+          attachConfirm: "Attach",
+          attachNotFound: "No pull request #{{number}} found in this repository.",
+          attachNotFoundMany: "В этом репозитории не найдены pull request: {{numbers}}.",
+          moreInCard: "ещё {{count}}",
+          removePullRequest: "Remove pull request #{{number}} from this workspace",
+          scanChatPullRequests: "Scan chat for PRs",
+          scanChatFound: "Found {{count}} pull requests in chat",
+          scanChatEmpty: "No pull requests found in chat",
+          scanChatNoAgent: "No agent chat found for this workspace",
+          scanChatTitle: "Пул-реквесты в этом чате",
+          scanChatSubtitle:
+            "Найдено: {{count}}. Выберите те, что относятся к этому рабочему пространству.",
+          scanChatMentions: "упомянут {{count}} раз",
+          scanChatAttach: "Прикрепить {{count}}",
+          scanChatUnresolved: "Не найдены на форже: {{numbers}}",
         },
         checksSummary: {
           passedLabel: "успешно",
@@ -1214,6 +1277,10 @@ export const ru: TranslationResources = {
       },
     },
     workspace: {
+      diffStat: {
+        accessibility:
+          "Рабочее дерево: {{additions}} добавлено, {{deletions}} удалено относительно базы, включая незакоммиченное",
+      },
       status: {
         serviceRunning: "Сервис {{name}} запущен",
         serviceUnhealthy: "Сервис {{name}} работает некорректно",
@@ -1886,6 +1953,14 @@ export const ru: TranslationResources = {
       emptyTitle: "PR пока нет",
       emptyDescription: "Создайте PR для этой рабочей копии, чтобы увидеть здесь сведения о нём.",
     },
+    evidence: {
+      label: "Доказательства",
+      subtitle: "Материалы проверки",
+      emptyTitle: "Пока нет материалов",
+      emptyDescription: "Запустите рецепт проверки, чтобы сохранить снимки экрана и журналы.",
+      loadFailed: "Не удалось загрузить материалы.",
+      showInChat: "Показать в чате",
+    },
     diff: {
       changesLabel: "Изменения",
       diffLabel: "Дифф",
@@ -2017,6 +2092,8 @@ export const ru: TranslationResources = {
       projects: "Проекты",
       connections: "Подключения",
       agents: "Агенты",
+      systemOne: "System One",
+      browser: "Browser",
       metadata: "Метаданные",
       workspaces: "Рабочие пространства",
       providers: "Провайдеры",
@@ -2025,6 +2102,8 @@ export const ru: TranslationResources = {
       plugins: "Плагины",
       host: "Обзор",
     },
+    systemOne: en.settings.systemOne,
+    browser: en.settings.browser,
     plugins: pluginSettings.ru,
     metadataGeneration: {
       title: "Генерация метаданных",
@@ -2192,6 +2271,14 @@ export const ru: TranslationResources = {
       detailLevel: {
         title: "Уровень детализации",
       },
+      cards: {
+        title: "Cards",
+        sessionStyle: "Session style",
+        sessionStyleHint: "Cards group sessions like Claude. Rows are the legacy dense list",
+        sessionStyleAccessibility: "Session style: {{value}}",
+        card: "Cards",
+        row: "Rows",
+      },
       chatOutline: {
         title: "Оглавление чата",
         description: "Показывать оглавление для перехода между запросами",
@@ -2209,6 +2296,9 @@ export const ru: TranslationResources = {
         interfaceFont: "Шрифт интерфейса",
         interfaceFontHint:
           "Используется во всём приложении. Оставьте поле пустым, чтобы использовать системный шрифт.",
+        displayFont: "Display font",
+        displayFontHint: "Serif for hub titles. Leave empty for the system serif",
+        displayFontAccessibility: "Display font family",
         interfaceFontAccessibility: "Семейство интерфейсных шрифтов",
         interfaceSize: "Размер интерфейса",
         interfaceSizeHint: "Используется для навигации, элементов управления и подписей",
@@ -2442,6 +2532,34 @@ export const ru: TranslationResources = {
           title: "Включить инструменты Paseo",
           hint: "Агенты смогут управлять worktree, агентами и расписаниями.",
           accessibilityLabel: "Добавить инструменты Paseo",
+        },
+        resourcePolicy: {
+          schedules: {
+            title: "Выполнять расписания",
+            onHint: "Расписания срабатывают на этом хосте по своему интервалу.",
+            offHint: "Расписания не сработают. В заданное время ничего не запустится.",
+            economyException:
+              "Оставлено как исключение из economy, который иначе останавливает все автоматические циклы.",
+          },
+          title: "Использование ресурсов",
+          loading: "Загрузка политики ресурсов...",
+          options: {
+            economy: {
+              label: "Экономный",
+              description:
+                "Одно чтение статуса за запуск. Автоматический опрос и расписания отключены.",
+            },
+            balanced: {
+              label: "Сбалансированный",
+              description:
+                "Ограниченные проверки статуса и автоматическая работа для повседневного использования.",
+            },
+            deep: {
+              label: "Глубокая работа",
+              description:
+                "Больше ограниченных проверок статуса для длительных активных процессов.",
+            },
+          },
         },
         systemPrompt: {
           title: "Системный промпт",

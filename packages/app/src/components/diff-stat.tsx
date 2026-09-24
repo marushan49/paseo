@@ -6,11 +6,23 @@ interface DiffStatProps {
   additions: number;
   deletions: number;
   testID?: string;
+  /**
+   * What these two numbers measure. The sidebar's workspace figure counts the whole branch
+   * against its base, uncommitted work included, while a change request line counts that one
+   * change request — the same glyphs, two different questions, so the one that is not obvious
+   * says which it is.
+   */
+  accessibilityLabel?: string;
 }
 
-export function DiffStat({ additions, deletions, testID }: DiffStatProps) {
+export function DiffStat({ additions, deletions, testID, accessibilityLabel }: DiffStatProps) {
   return (
-    <View style={styles.row} testID={testID}>
+    <View
+      style={styles.row}
+      testID={testID}
+      accessibilityRole={accessibilityLabel ? "text" : undefined}
+      accessibilityLabel={accessibilityLabel}
+    >
       <Text style={styles.additions}>+{formatDiffCount(additions)}</Text>
       <Text style={styles.deletions}>-{formatDiffCount(deletions)}</Text>
     </View>

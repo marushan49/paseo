@@ -16,6 +16,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 import type { ScheduleDerivedState } from "@/schedules/schedule-derivation";
+import { formatScheduleLastRun } from "@/schedules/schedule-derivation";
 import {
   formatCadence,
   formatNextRun,
@@ -82,6 +83,8 @@ function stateBadge(state: ScheduleDerivedState): {
   switch (state) {
     case "active":
       return { label: "Active", variant: "success" };
+    case "blocked":
+      return { label: "Not running", variant: "error" };
     case "paused":
       return { label: "Paused", variant: "muted" };
     case "expired":
@@ -96,6 +99,17 @@ function stateBadge(state: ScheduleDerivedState): {
 // Meta reads left-to-right as identity → history → future: how often, when it
 // was created, when it last ran, and (only while it can still run) when it runs
 // next. Status lives on the badge, never repeated here.
+/** What the row says in red: why it will not run beats why the last run failed. */
+function resolveRowError(schedule: ScheduleSummary, state: ScheduleDerivedState): string | null {
+  if (state === "blocked") {
+    return schedule.automationBlockedReason ?? null;
+  }
+  if (schedule.lastRun?.status === "failed") {
+    return schedule.lastRun.error;
+  }
+  return null;
+}
+
 function buildMeta(
   schedule: ScheduleSummary,
   state: ScheduleDerivedState,
@@ -105,13 +119,18 @@ function buildMeta(
   const parts = [
     formatCadence(schedule.cadence),
     `Created ${formatTimeAgo(new Date(schedule.createdAt))}`,
-    schedule.lastRunAt ? `Last run ${formatTimeAgo(new Date(schedule.lastRunAt))}` : "Never run",
+    formatScheduleLastRun(schedule),
   ];
   if (state === "active") {
     const next = formatNextRun(schedule.nextRunAt);
     if (next) {
       parts.push(`Next run ${next}`);
     }
+  }
+  // Promising a next run that the host will not start is the whole defect this
+  // state exists to fix, so the reason takes that slot instead.
+  if (state === "blocked" && schedule.automationBlockedReason) {
+    parts.push(schedule.automationBlockedReason);
   }
   if (serverName && !singleHost) {
     parts.unshift(serverName);
@@ -169,6 +188,7 @@ export function ScheduleRow({
   const productName = scheduleProductName(schedule);
   const badge = stateBadge(state);
   const meta = buildMeta(schedule, state, serverName, singleHost ?? false);
+  const lastRunError = resolveRowError(schedule, state);
   const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
@@ -209,6 +229,15 @@ export function ScheduleRow({
             <Text style={settingsStyles.rowHint} numberOfLines={1}>
               {meta}
             </Text>
+            {lastRunError ? (
+              <Text
+                style={styles.lastRunError}
+                numberOfLines={1}
+                testID={`schedule-row-error-${schedule.id}`}
+              >
+                {lastRunError}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -409,6 +438,11 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[1],
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  },
+  lastRunError: {
+    marginTop: theme.spacing[1],
+    color: theme.colors.statusDanger,
+    fontSize: theme.fontSize.sm,
   },
   trailing: {
     flexDirection: "row",

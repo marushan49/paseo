@@ -203,6 +203,7 @@ function AddCustomModelSubSheet({
       onClose={onClose}
       desktopMaxWidth={420}
       snapPoints={ADD_SNAP_POINTS}
+      keyboardBehavior="interactive"
       testID="add-custom-model-sheet"
     >
       <View style={sheetStyles.formGroup}>
@@ -695,6 +696,7 @@ export function ProviderDiagnosticSheet({
           onRefreshModels: handleRefreshModels,
         })}
         snapPoints={MAIN_SNAP_POINTS}
+        keyboardBehavior="interactive"
       >
         <ProviderModalBody
           discoveredCount={discoveredModels.length}

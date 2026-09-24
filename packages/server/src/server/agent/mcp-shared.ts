@@ -8,6 +8,7 @@ import { selectItemsByProjectedLimit } from "./timeline-projection.js";
 import type { AgentStorage } from "./agent-storage.js";
 import { serializeAgentSnapshot } from "../messages.js";
 import { StoredScheduleSchema } from "@getpaseo/protocol/schedule/types";
+import type { ScheduleLastRun } from "@getpaseo/protocol/schedule/types";
 import type { AgentProvider } from "./agent-sdk-types.js";
 
 export const AgentProviderEnum = z.string();
@@ -253,7 +254,31 @@ export function parseDurationString(input: string): number {
   return totalMs;
 }
 
-export function toScheduleSummary(schedule: z.infer<typeof StoredScheduleSchema>) {
-  const { runs: _runs, ...summary } = schedule;
-  return summary;
+export function toScheduleSummary(
+  schedule: z.infer<typeof StoredScheduleSchema>,
+  automationBlockedReason: string | null = null,
+) {
+  const { runs, ...summary } = schedule;
+  return { ...summary, lastRun: latestScheduleRun(runs), automationBlockedReason };
+}
+
+// Runs are append-only, so the newest is the last one. Its output is left out:
+// a run's report can be pages long and the caller asked for a list.
+function latestScheduleRun(
+  runs: z.infer<typeof StoredScheduleSchema>["runs"],
+): ScheduleLastRun | null {
+  const run = runs.at(-1);
+  if (!run) {
+    return null;
+  }
+  return {
+    id: run.id,
+    scheduledFor: run.scheduledFor,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    status: run.status,
+    agentId: run.agentId,
+    workspaceId: run.workspaceId ?? null,
+    error: run.error,
+  };
 }

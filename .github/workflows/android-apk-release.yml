@@ -5,6 +5,18 @@ on:
     tags:
       - "v*"
       - "android-v*"
+    # Rolling APK for the fixed download link; only app-relevant changes.
+    branches:
+      - main
+    paths:
+      - "packages/app/**"
+      - "packages/client/**"
+      - "packages/protocol/**"
+      - "packages/highlight/**"
+      - "packages/plugin/**"
+      - "packages/expo-two-way-audio/**"
+      - "package-lock.json"
+      - ".github/workflows/android-apk-release.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -14,7 +26,7 @@ on:
 
 concurrency:
   group: android-apk-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
   SOURCE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
@@ -32,7 +44,12 @@ jobs:
 
       - name: Resolve release tag
         shell: bash
-        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            printf 'RELEASE_TAG=android-latest\nIS_PRERELEASE=true\n' >> "$GITHUB_ENV"
+          else
+            node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+          fi
 
       - name: Ensure GitHub release exists
         env:
@@ -40,6 +57,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ "$RELEASE_TAG" == "android-latest" ]]; then
+            git push --force origin "$GITHUB_SHA:refs/tags/android-latest"
+            gh release view android-latest --repo "${{ github.repository }}" >/dev/null 2>&1 ||
+              gh release create android-latest --repo "${{ github.repository }}" --prerelease \
+                --title "Paseo Android (latest main)" \
+                --notes "Rolling arm64 APK from main: https://github.com/${{ github.repository }}/releases/download/android-latest/paseo-android-latest.apk"
+            exit 0
+          fi
 
           if node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
             exit 0
@@ -67,17 +93,25 @@ jobs:
     permissions:
       contents: write
       packages: read
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, paseo-android]
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
         with:
+          # The dedicated release runner keeps generated native state warm.
+          clean: false
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Resolve release tag
         shell: bash
-        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            printf 'RELEASE_TAG=android-latest\nIS_PRERELEASE=true\n' >> "$GITHUB_ENV"
+          else
+            node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -92,52 +126,86 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          distribution: temurin
+          java-version: "17"
 
-      - name: Build Android APK on EAS
-        id: eas_build
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Gradle User Home persists on the dedicated runner. Uploading it to
+          # GitHub would archive gigabytes after every release.
+          cache-disabled: true
+
+      - name: Build app JavaScript dependencies
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          # build:app-deps is the exact set Metro resolves for the app bundle
+          # (highlight, client, plugin, expo-two-way-audio). Anything less
+          # fails bundling inside Gradle after tens of minutes.
+          npm run build:app-deps
+          # Fail in seconds instead of ~40 minutes into Gradle when a dist
+          # output is missing.
+          node scripts/verify-app-dist.mjs
+
+      - name: Generate Android project
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fingerprint="$({
+            git ls-files -s \
+              package-lock.json \
+              packages/app/app.config.js \
+              packages/app/package.json \
+              packages/app/plugins \
+              packages/app/assets \
+              packages/app/native-release-version.js
+          } | sha256sum | cut -d' ' -f1)"
+
+          cd packages/app
+          if [[ -f "android/.paseo-prebuild-fingerprint" ]] && \
+             [[ "$(<"android/.paseo-prebuild-fingerprint")" == "$fingerprint" ]]; then
+            APP_VARIANT=production npx expo prebuild --platform android --non-interactive
+          else
+            APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
+          fi
+          printf '%s\n' "$fingerprint" > "android/.paseo-prebuild-fingerprint"
+
+      - name: Build Android APK
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
           cd packages/app
+          cd android
+          APP_VARIANT=production ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -x lint \
+            -x lintVitalAnalyzeRelease \
+            -x lintVitalRelease \
+            -x generateReleaseLintModel \
+            -x generateReleaseLintVitalModel \
+            --build-cache \
+            --parallel \
+            --max-workers=4 \
+            --console=plain \
+            --stacktrace
 
-          build_json="$(npx eas build --platform android --profile production-apk --non-interactive --wait --json)"
-          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
-
-          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
-          if [ -z "$build_id" ]; then
-            echo "Failed to determine EAS build ID."
-            cat "$RUNNER_TEMP/eas-build.json"
-            exit 1
-          fi
-
-          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve APK artifact URL
+      - name: Resolve APK artifact
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
-          cd packages/app
-
-          build_view_json="$(npx eas build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
-          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
-
-          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
-          if [ -z "$artifact_url" ]; then
-            echo "Failed to determine APK artifact URL."
-            cat "$RUNNER_TEMP/eas-build-view.json"
-            exit 1
-          fi
-
           asset_name="paseo-${RELEASE_TAG}-android.apk"
+          [[ "$RELEASE_TAG" == "android-latest" ]] && asset_name="paseo-android-latest.apk"
           asset_path="$RUNNER_TEMP/$asset_name"
-
-          curl --fail --location --output "$asset_path" "$artifact_url"
+          cp packages/app/android/app/build/outputs/apk/release/app-release.apk "$asset_path"
 
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
           echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"

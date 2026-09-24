@@ -54,6 +54,11 @@ import {
   runGitCommand,
   type RunGitCommand,
 } from "../utils/run-git-command.js";
+import {
+  mergeRelatedPullRequests,
+  type RelatedPullRequest,
+  type RelatedPullRequestFacts,
+} from "../utils/related-pull-requests.js";
 import { branchNameFromRef } from "../utils/worktree-metadata.js";
 import { listPaseoWorktrees, type PaseoWorktreeInfo } from "../utils/worktree.js";
 import { READ_ONLY_GIT_ENV } from "./checkout-git-utils.js";
@@ -198,6 +203,12 @@ export interface WorkspaceGitRuntimeSnapshot {
       reviewDecision?: "approved" | "changes_requested" | "pending" | null;
       forgeSpecific?: ForgeSpecificStatusFacts;
     } | null;
+    /**
+     * Every change request that belongs with `pullRequest` — its GitHub stack plus anything
+     * else opened from the same head. Absent when the adapter cannot resolve a set, which
+     * leaves the row rendering the single change request above.
+     */
+    relatedPullRequests?: RelatedPullRequest[];
     error: { message: string } | null;
   };
 }
@@ -395,6 +406,12 @@ interface WorkspaceGitServiceDependencies {
 interface WorkspaceGitServiceOptions {
   logger: pino.Logger;
   paseoHome: string;
+  /**
+   * Branches of the other workspaces in the same project, so a row can report
+   * the session's change requests and not just the one its own branch opened.
+   * Injected to keep this service free of a workspace-registry dependency.
+   */
+  resolveSessionBranches?: (cwd: string) => Promise<readonly string[]> | readonly string[];
   worktreesRoot?: string;
   fileObserver?: FileObserver;
   deps?: Partial<WorkspaceGitServiceDependencies>;
@@ -587,6 +604,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly logger: pino.Logger;
   private readonly paseoHome: string;
   private readonly worktreesRoot: string | undefined;
+  private readonly sessionBranchesResolver: WorkspaceGitServiceOptions["resolveSessionBranches"];
   private readonly fileObserver: FileObserver;
   private readonly deps: WorkspaceGitServiceDependencies;
   private readonly forgeResolver: ForgeResolver;
@@ -638,6 +656,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.logger = options.logger.child({ module: "workspace-git-service" });
     this.paseoHome = options.paseoHome;
     this.worktreesRoot = options.worktreesRoot;
+    this.sessionBranchesResolver = options.resolveSessionBranches;
     this.fileObserver = options.fileObserver ?? createFileObserver();
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
@@ -646,6 +665,69 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.forgeResolver = createForgeResolver({
       createService: (forge) => this.deps.forgeOverrides?.[forge] ?? createForgeService(forge),
     });
+  }
+
+  /**
+   * The set that belongs with the change request the poll just read. Adapters without stacks
+   * omit the method, and a failure here must not cost the status the poll already earned —
+   * the row falls back to its single change request.
+   */
+  private async resolveSessionBranches(cwd: string): Promise<string[]> {
+    if (!this.sessionBranchesResolver) {
+      return [];
+    }
+    try {
+      return [...(await this.sessionBranchesResolver(cwd))];
+    } catch (error) {
+      this.logger.warn({ err: error, cwd }, "Failed to resolve the session's branches");
+      return [];
+    }
+  }
+
+  private async resolveRelatedPullRequests(input: {
+    service: {
+      getRelatedPullRequests?: (options: {
+        cwd: string;
+        number: number;
+        headRef: string;
+        headSha?: string;
+      }) => Promise<RelatedPullRequestFacts[]>;
+    };
+    cwd: string;
+    status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"];
+    headRef: string;
+    headSha?: string;
+  }): Promise<RelatedPullRequest[] | undefined> {
+    const number = input.status?.number;
+    if (!input.service.getRelatedPullRequests) {
+      return undefined;
+    }
+    // A workspace whose own branch has no change request still belongs to a
+    // session that has several, so the set is worth resolving without one.
+    const siblingHeadRefs = await this.resolveSessionBranches(input.cwd);
+    if (number === undefined && siblingHeadRefs.length === 0) {
+      return undefined;
+    }
+    try {
+      const facts = await input.service.getRelatedPullRequests({
+        cwd: input.cwd,
+        number: number ?? 0,
+        headRef: input.headRef,
+        ...(input.headSha ? { headSha: input.headSha } : {}),
+        ...(siblingHeadRefs.length > 0 ? { siblingHeadRefs } : {}),
+      });
+      const merged = mergeRelatedPullRequests({
+        ...(number === undefined ? {} : { currentNumber: number }),
+        branch: facts,
+      });
+      return merged.length > 0 ? merged : undefined;
+    } catch (error) {
+      this.logger.warn(
+        { err: error, cwd: input.cwd, number },
+        "Failed to resolve related pull requests",
+      );
+      return undefined;
+    }
   }
 
   resolveForge(cwd: string): Promise<ForgeResolution | null> {
@@ -2804,13 +2886,38 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           if (!this.isActiveObservedWorkspaceTarget(target)) {
             return;
           }
+          // Publish the fresh status immediately so the row never waits on the
+          // set, but keep the set the row already has: dropping it here and
+          // restoring it a moment later made every tick flip the row between
+          // one change request and its whole set.
           this.rememberForgePrStatusSnapshot(
             target,
-            buildForgeSnapshotFromStatus(status, resolution.forge),
+            buildForgeSnapshotFromStatus(
+              status,
+              resolution.forge,
+              target.latestForge?.relatedPullRequests,
+            ),
             {
               notify: true,
             },
           );
+          void (async () => {
+            const related = await this.resolveRelatedPullRequests({
+              service: resolution.service,
+              cwd: target.cwd,
+              status,
+              headRef: pollTarget.headRef,
+              ...(pollTarget.headSha ? { headSha: pollTarget.headSha } : {}),
+            });
+            if (!related || !this.isActiveObservedWorkspaceTarget(target)) {
+              return;
+            }
+            this.rememberForgePrStatusSnapshot(
+              target,
+              buildForgeSnapshotFromStatus(status, resolution.forge, related),
+              { notify: true },
+            );
+          })();
         },
         onError: (error) => {
           this.logger.warn(
@@ -2884,9 +2991,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         if (!closed && this.isActiveObservedWorkspaceTarget(target)) {
           latestStatus = status;
           consecutiveErrors = 0;
-          this.rememberForgePrStatusSnapshot(target, buildForgeSnapshotFromStatus(status, forge), {
-            notify: true,
+          const related = await this.resolveRelatedPullRequests({
+            service,
+            cwd: target.cwd,
+            status,
+            headRef: pollTarget.headRef,
+            ...(pollTarget.headSha ? { headSha: pollTarget.headSha } : {}),
           });
+          this.rememberForgePrStatusSnapshot(
+            target,
+            buildForgeSnapshotFromStatus(status, forge, related),
+            { notify: true },
+          );
         }
       } catch (error) {
         consecutiveErrors += 1;
@@ -3832,11 +3948,13 @@ function buildForgeSnapshot(
   authState: ForgeAuthState,
   pullRequest: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   error: WorkspaceGitRuntimeSnapshot["forge"]["error"],
+  relatedPullRequests?: RelatedPullRequest[],
 ): WorkspaceGitRuntimeSnapshot["forge"] {
   return {
     featuresEnabled: authState === "authenticated",
     authState,
     pullRequest,
+    ...(relatedPullRequests && relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
     error,
   };
 }
@@ -3927,8 +4045,9 @@ function buildUnresolvedRemoteForgeSnapshot(
 function buildForgeSnapshotFromStatus(
   status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   forge: string,
+  relatedPullRequests?: RelatedPullRequest[],
 ): WorkspaceGitRuntimeSnapshot["forge"] {
-  return { ...buildForgeSnapshot("authenticated", status, null), forge };
+  return { ...buildForgeSnapshot("authenticated", status, null, relatedPullRequests), forge };
 }
 
 function buildWorkspaceForgePrStatusPollKey({

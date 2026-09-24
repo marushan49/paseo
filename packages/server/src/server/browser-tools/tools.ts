@@ -1,7 +1,18 @@
 import { z } from "zod";
 import { BrowserAutomationBrowserIdSchema } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+import {
+  PaseoRecipeStepSchema,
+  type PaseoRecipeStep,
+} from "@getpaseo/protocol/paseo-config-schema";
 import type { BrowserToolsBroker } from "./broker.js";
+import { ensureValidJson } from "../json-utils.js";
+import type { VerifySession } from "../verify/verify-session.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
+import {
+  JevBrowserGoalRunner,
+  type JevBrowserGoalInput,
+  type JevBrowserGoalResult,
+} from "./jev-goal-runner.js";
 import type {
   PaseoToolConfig,
   PaseoToolExecutionContext,
@@ -25,6 +36,8 @@ export interface RegisterBrowserToolsOptions {
     ) => Promise<PaseoToolResult>,
   ) => void;
   broker: Pick<BrowserToolsBroker, "execute">;
+  goalRunner?: Pick<JevBrowserGoalRunner, "run">;
+  verify?: Pick<VerifySession, "runForAgent">;
   callerAgentId?: string;
   resolveCallerAgent: () => CallerAgentContext | null;
 }
@@ -62,8 +75,93 @@ const BrowserWaitInputSchema = z
   .refine((input) => Number(Boolean(input.text)) + Number(Boolean(input.url)) === 1, {
     message: "browser_wait requires exactly one of text or url",
   });
+const BrowserGoalVerificationSchema = z.union([
+  z.object({ text: z.string().min(1) }).strict(),
+  z.object({ url: z.string().min(1) }).strict(),
+]);
+const BrowserGoalInputSchema = z
+  .object({
+    goal: z.string().trim().min(1),
+    browserId: BrowserAutomationBrowserIdSchema.optional(),
+    url: BrowserHttpUrlInputSchema.optional(),
+    values: z
+      .record(
+        z.string().min(1),
+        z
+          .object({
+            env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+            description: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    verify: z.array(BrowserGoalVerificationSchema).min(1),
+    maxSteps: z.number().int().min(1).max(30).optional(),
+    minConfidence: z.number().min(0).max(1).optional(),
+  })
+  .refine((input) => Boolean(input.browserId || input.url), {
+    message: "browser_goal requires browserId or url",
+  });
 
 export function registerBrowserTools(options: RegisterBrowserToolsOptions): void {
+  if (options.verify) {
+    const verify = options.verify;
+    options.registerTool(
+      "browser_test",
+      {
+        title: "Test in Paseo's testing engine",
+        description:
+          "Paseo's testing engine. Use it first for every UI, end-to-end, or 'does it work in the browser' check instead of driving browser_* tools step by step. Call with no arguments to list the workspace's saved recipes; pass `recipe` to run one; or pass `steps` for an ad-hoc run. Steps run inside the daemon without model tokens: navigate (url, or service + path), click/fill/assert-visible (role + name), wait-text, assert-text, assert-console-errors, assert-failed-requests, screenshot, ensure-authenticated. Use a `goal` step ({ action: \"goal\", goal, verify: [{ text } | { url }] }) for parts you cannot script: Jev drives them in fast bounded steps. Returns only pass/fail, checks, log counts, and an evidence reference; open the browser_* tools only to debug a failed run. Pass `saveAs` with ad-hoc steps to store a passing run as a recipe in paseo.json, so the next run is fully scripted.",
+        inputSchema: {
+          recipe: z.string().trim().min(1).optional(),
+          steps: z.array(PaseoRecipeStepSchema).min(1).max(60).optional(),
+          params: z.record(z.string(), z.string()).optional(),
+          saveAs: z
+            .string()
+            .regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
+            .optional()
+            .describe("With steps: save the run as this recipe in paseo.json if it passes."),
+        },
+      },
+      async (input: {
+        recipe?: string;
+        steps?: PaseoRecipeStep[];
+        params?: Record<string, string>;
+        saveAs?: string;
+      }) => {
+        const context = resolveBrowserToolContext(options);
+        if (!context.workspaceId) {
+          return requireWorkspaceContext(context) as PaseoToolResult;
+        }
+        try {
+          const outcome = await verify.runForAgent({ workspaceId: context.workspaceId, ...input });
+          const structuredContent = ensureValidJson(
+            outcome.kind === "list"
+              ? { recipes: outcome.recipes }
+              : {
+                  ...outcome.result,
+                  ...(outcome.savedRecipe ? { savedRecipe: outcome.savedRecipe } : {}),
+                },
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+            structuredContent,
+            ...(outcome.kind === "run" && outcome.result.status === "fail"
+              ? { isError: true }
+              : {}),
+          };
+        } catch (error) {
+          return {
+            content: [
+              { type: "text", text: error instanceof Error ? error.message : "Test run failed." },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+  }
+
   options.registerTool(
     "browser_list_tabs",
     {
@@ -96,7 +194,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Create browser tab",
       description:
-        "Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host, opened in the background without switching the user's view. Pass an http(s) URL or a scheme-less host URL, which is treated as http; the returned browserId is used by tab-scoped tools.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Create a new Paseo browser tab in this agent's workspace on the most recently connected browser automation host, opened in the background without switching the user's view. Pass the final target URL here, with any token, query, or hash, so the page opens directly; opening a blank tab and navigating afterwards loses one-time tokens. http(s) and scheme-less host URLs (treated as http) are accepted; the returned browserId is used by tab-scoped tools.",
       inputSchema: {
         url: BrowserHttpUrlInputSchema.optional(),
       },
@@ -121,11 +219,47 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
   );
 
   options.registerTool(
+    "browser_goal",
+    {
+      title: "Run browser goal with Jev",
+      description:
+        "Run a bounded Jev decision loop against an existing Paseo browser tab or a new http(s) URL. Paseo sends the page's accessibility element summary, goal, and recent action metadata to TypeSafe, but not screenshots or values loaded locally from environment-variable names in the values map. Every successful run must pass the explicit text or URL checks in verify.",
+      inputSchema: BrowserGoalInputSchema,
+    },
+    async (input: JevBrowserGoalInput) => {
+      const context = resolveBrowserToolContext(options);
+      const missingWorkspace = requireWorkspaceContext(context);
+      if (missingWorkspace) {
+        return missingWorkspace;
+      }
+
+      try {
+        const runner = options.goalRunner ?? new JevBrowserGoalRunner({ broker: options.broker });
+        const result = await runner.run(input, context);
+        return browserGoalToolResult(result, context);
+      } catch (error) {
+        return browserToolResult({
+          payload: {
+            requestId: "browser-goal",
+            ok: false,
+            error: {
+              code: "browser_unknown_error",
+              message: error instanceof Error ? error.message : "Browser goal failed.",
+              retryable: false,
+            },
+          },
+          context,
+        });
+      }
+    },
+  );
+
+  options.registerTool(
     "browser_snapshot",
     {
       title: "Snapshot browser page",
       description:
-        "Return a model-readable snapshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Return a model-readable snapshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
       inputSchema: {
         browserId: BrowserAutomationBrowserIdSchema,
       },
@@ -153,7 +287,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Click browser element",
       description:
-        "Click an element in a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Click an element in a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs; refs come from the latest browser_snapshot of the same tab and expire when the page changes.",
       inputSchema: {
         ref: BrowserRefInputSchema,
         browserId: BrowserAutomationBrowserIdSchema,
@@ -315,7 +449,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Navigate browser",
       description:
-        "Navigate a Paseo browser tab to a URL. Use browserId from browser_new_tab or browser_list_tabs; pass an http(s) URL or a scheme-less host URL, which is treated as http.",
+        "TESTING: for any test, E2E, or verification of a flow, call browser_test instead — one call replaces this step-by-step loop. Use this tool for debugging a failed browser_test run or non-test browsing. Navigate a Paseo browser tab to a URL. Use browserId from browser_new_tab or browser_list_tabs; pass an http(s) URL or a scheme-less host URL, which is treated as http.",
       inputSchema: { url: BrowserHttpUrlInputSchema, browserId: BrowserAutomationBrowserIdSchema },
     },
     async ({ url, browserId }) => {
@@ -391,13 +525,14 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
     {
       title: "Capture browser screenshot",
       description:
-        "Capture a PNG screenshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs. Set fullPage to true to capture the full page.",
+        "Capture a PNG screenshot of a Paseo browser tab. Use browserId from browser_new_tab or browser_list_tabs. Set fullPage to true to capture the full page. The screenshot is stored as evidence and only a reference is returned — no image tokens. Set reveal to true only when you must visually inspect the page yourself.",
       inputSchema: {
         browserId: BrowserAutomationBrowserIdSchema,
         fullPage: z.boolean().default(false),
+        reveal: z.boolean().default(false),
       },
     },
-    async ({ browserId, fullPage }) => {
+    async ({ browserId, fullPage, reveal }) => {
       const context = resolveBrowserToolContext(options);
       const payload = await options.broker.execute({
         agentId: context.agentId,
@@ -409,6 +544,7 @@ export function registerBrowserTools(options: RegisterBrowserToolsOptions): void
           args: {
             browserId,
             fullPage: fullPage ?? false,
+            reveal: reveal ?? false,
           },
         },
       });
@@ -801,6 +937,37 @@ function browserToolResult(params: {
   };
 }
 
+function browserGoalToolResult(
+  result: JevBrowserGoalResult,
+  context: { agentId?: string; cwd?: string; workspaceId?: string },
+): PaseoToolResult {
+  const trace = result.steps
+    .map((step) => {
+      const target = step.target ? ` target=${step.target}` : "";
+      const value = step.value ? ` value=${step.value}` : "";
+      return `- ${step.step}. ${step.operation}${target}${value} (${step.outcome}, confidence=${step.confidence.toFixed(2)}, ${step.latencyMs}ms)`;
+    })
+    .join("\n");
+  return {
+    content: [
+      {
+        type: "text",
+        text: [
+          `Browser goal ${result.status}: ${result.message}`,
+          `Title: ${result.title || "Untitled"}`,
+          `URL: ${result.url}`,
+          ...(trace ? ["", trace] : []),
+        ].join("\n"),
+      },
+    ],
+    structuredContent: {
+      ok: result.status === "passed",
+      result,
+      context: { ...context, browserId: result.browserId },
+    },
+  };
+}
+
 function browserToolStructuredResult(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): Extract<BrowserToolsResponsePayload, { ok: true }>["result"] | Record<string, unknown> {
@@ -823,7 +990,7 @@ function browserToolSuccessContent(
 function browserToolImageContent(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): PaseoToolResult["content"][number] | null {
-  if (result.command !== "screenshot") {
+  if (result.command !== "screenshot" || !result.dataBase64) {
     return null;
   }
 
@@ -887,7 +1054,7 @@ function summarizeBrowserSuccess(
 
   if (payload.result.command === "new_tab") {
     return withDialogs(
-      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools.`,
+      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools. If you are testing, stop and use browser_test with steps instead.`,
     );
   }
 
@@ -926,7 +1093,8 @@ function summarizeBrowserMediaSuccess(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): string | null {
   if (result.command === "screenshot") {
-    return `Captured browser screenshot (${result.width}x${result.height}).`;
+    const base = `Captured browser screenshot (${result.width}x${result.height}).`;
+    return result.evidenceRef ? `${base} Evidence: ${result.evidenceRef}` : base;
   }
   if (result.command === "upload") {
     const count = result.filePaths.length;
@@ -991,7 +1159,9 @@ function summarizeBrowserRefActionSuccess(
   result: Extract<BrowserToolsResponsePayload, { ok: true }>["result"],
 ): string | null {
   if (result.command === "click") {
-    return `Clicked browser element ${result.ref}.`;
+    return result.ref
+      ? `Clicked browser element ${result.ref}.`
+      : `Clicked browser at (${result.x}, ${result.y}).`;
   }
 
   if (result.command === "fill") {
@@ -1009,11 +1179,15 @@ function summarizeBrowserControlSuccess(
   }
 
   if (result.command === "hover") {
-    return `Hovered browser element ${result.ref}.`;
+    return result.ref
+      ? `Hovered browser element ${result.ref}.`
+      : `Hovered browser at (${result.x}, ${result.y}).`;
   }
 
   if (result.command === "drag") {
-    return `Dragged browser element ${result.sourceRef} to ${result.targetRef}.`;
+    return result.sourceRef && result.targetRef
+      ? `Dragged browser element ${result.sourceRef} to ${result.targetRef}.`
+      : `Dragged browser from (${result.sourceX}, ${result.sourceY}) to (${result.targetX}, ${result.targetY}).`;
   }
 
   if (result.command === "scroll") {

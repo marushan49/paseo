@@ -12,6 +12,7 @@ import {
   Pin,
   PinOff,
   Tag,
+  UserRound,
 } from "lucide-react-native";
 import { isWeb } from "@/constants/platform";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
@@ -59,6 +60,7 @@ const ThemedCircleCheck = withUnistyles(CircleCheck);
 const ThemedPin = withUnistyles(Pin);
 const ThemedPinOff = withUnistyles(PinOff);
 const ThemedTag = withUnistyles(Tag);
+const ThemedUserRound = withUnistyles(UserRound);
 
 const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapping} />;
 const renameLeadingIcon = <ThemedPencil size={14} uniProps={foregroundMutedColorMapping} />;
@@ -97,6 +99,11 @@ export interface SidebarWorkspaceMenuProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
+  /**
+   * Opens the per-workspace GitHub account dialog. Rendered at row level for the same reason
+   * the other dialogs are: the kebab unmounts on select.
+   */
+  openForgeAccountDialog?: () => void;
   /**
    * Lifted so the row that reveals the kebab can keep it mounted while its menu is up. See
    * `useOpenKebabMenuVisibility`.
@@ -145,6 +152,7 @@ function SidebarWorkspaceMenuItems({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openForgeAccountDialog,
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
@@ -153,6 +161,10 @@ function SidebarWorkspaceMenuItems({
   );
   const labelLeading = useMemo(
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
+    [],
+  );
+  const forgeAccountLeadingIcon = useMemo(
+    () => <ThemedUserRound size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
 
@@ -186,6 +198,16 @@ function SidebarWorkspaceMenuItems({
           onSelect={onRename}
         >
           {t("sidebar.workspace.actions.rename")}
+        </WorkspaceMenuItem>
+      ) : null}
+      {openForgeAccountDialog ? (
+        <WorkspaceMenuItem
+          surface={surface}
+          testID={`sidebar-workspace-menu-forge-account-${workspaceKey}`}
+          leading={forgeAccountLeadingIcon}
+          onSelect={openForgeAccountDialog}
+        >
+          {t("workspace.forgeAccount.title")}
         </WorkspaceMenuItem>
       ) : null}
       {onMarkAsRead ? (
@@ -267,6 +289,7 @@ export function SidebarWorkspaceMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openForgeAccountDialog,
   open,
   onOpenChange,
 }: SidebarWorkspaceMenuProps) {
@@ -313,6 +336,7 @@ export function SidebarWorkspaceMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openForgeAccountDialog={openForgeAccountDialog}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -346,6 +370,7 @@ export function SidebarWorkspaceContextMenu({
   isPinned,
   onTogglePin,
   openInFileManagerPath,
+  openForgeAccountDialog,
   accessibilityLabel,
   highlightStyle,
   ...triggerProps
@@ -390,7 +415,6 @@ export function SidebarWorkspaceContextMenu({
     [workspace],
   );
   const pages = useWorkspaceLabelMenuPages(workspaceTarget);
-
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
       <ContextMenuTrigger
@@ -426,6 +450,7 @@ export function SidebarWorkspaceContextMenu({
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
+          openForgeAccountDialog={openForgeAccountDialog}
         />
       </ContextMenuContent>
     </ContextMenu>

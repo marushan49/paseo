@@ -33,6 +33,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 3,
       menuTestIDBase: "workspace-tab-context-agent_123",
       onCopyResumeCommand,
+      onCopyChat: vi.fn(),
       onCopyAgentId,
       onCopyTerminalId: vi.fn(),
       onCopyFilePath,
@@ -47,6 +48,8 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(entries.filter((entry) => entry.kind === "item").map((entry) => entry.label)).toEqual([
       "Copy resume command",
       "Copy agent id",
+      "Copy chat (Markdown)",
+      "Copy chat (JSON)",
       "Rename",
       "Close to the left",
       "Close to the right",
@@ -64,6 +67,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 3,
       menuTestIDBase: "workspace-tab-menu-agent_123",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
@@ -78,12 +82,50 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(entries.filter((entry) => entry.kind === "item").map((entry) => entry.label)).toEqual([
       "Copy resume command",
       "Copy agent id",
+      "Copy chat (Markdown)",
+      "Copy chat (JSON)",
       "Rename",
       "Close tabs above",
       "Close tabs below",
       "Close other tabs",
       "Reload agent",
       "Close",
+    ]);
+  });
+
+  it("passes the chosen transcript format to the copy-chat handler", () => {
+    const onCopyChat = vi.fn();
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: createAgentTab(),
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-agent_123",
+      onCopyResumeCommand: vi.fn(),
+      onCopyChat,
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const select = (key: string) => {
+      const entry = entries.find((item) => item.kind === "item" && item.key === key);
+      if (entry?.kind !== "item") throw new Error(`missing menu entry: ${key}`);
+      entry.onSelect();
+    };
+
+    select("copy-chat-markdown");
+    select("copy-chat-json");
+
+    expect(onCopyChat.mock.calls).toEqual([
+      ["agent-123", "markdown"],
+      ["agent-123", "json"],
     ]);
   });
 
@@ -100,6 +142,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase: "workspace-tab-menu-draft_123",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
@@ -129,6 +172,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase: "workspace-tab-context-agent_123",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
@@ -159,6 +203,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase: "workspace-tab-context-agent_123",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
@@ -195,6 +240,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase: "workspace-tab-context-terminal_abc",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId,
       onCopyFilePath: vi.fn(),
@@ -246,6 +292,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase: "workspace-tab-context-file_abc",
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath,
@@ -289,6 +336,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       index: 0,
       tabCount: 1,
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
@@ -320,6 +368,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       tabCount: 1,
       menuTestIDBase,
       onCopyResumeCommand: vi.fn(),
+      onCopyChat: vi.fn(),
       onCopyAgentId: vi.fn(),
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
