@@ -51,6 +51,8 @@ import {
 } from "./features/notifications.js";
 import { createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
+import { readImportCookiesIntoSession } from "./features/browser-cookie-import.js";
+import { listBrowserImportSources } from "@getpaseo/server/browser-import";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { setupApplicationMenu } from "./features/menu.js";
@@ -525,6 +527,15 @@ ipcMain.handle("paseo:browser:clear-profile", async (_event, rawLegacyBrowserIds
     },
   });
 });
+
+ipcMain.handle("paseo:browser:list-import-sources", () => listBrowserImportSources());
+
+ipcMain.handle("paseo:browser:read-import-cookies", (_event, sourceId: unknown) =>
+  readImportCookiesIntoSession({
+    sourceId,
+    cookies: session.fromPartition(PASEO_BROWSER_PROFILE_PARTITION).cookies,
+  }),
+);
 
 const browserCapture = createBrowserCaptureService<Electron.NativeImage>({
   findGuest: getPaseoBrowserWebContentsForHostWindow,

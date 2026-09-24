@@ -6,6 +6,7 @@ import { getIsElectron } from "@/constants/platform";
 import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-section";
 import { BrowserStartPageSection } from "@/desktop/browser/settings/browser-start-page-section";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { BrowserImportSection } from "./browser-import-section";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
 
 export function HostBrowserPage({ serverId }: { serverId: string }) {
@@ -32,6 +33,7 @@ export function HostBrowserPage({ serverId }: { serverId: string }) {
           />
         </SettingsCard>
       </SettingsSection>
+      <BrowserImportSection serverId={serverId} isLocalDaemon={isLocalDaemon} />
       {getIsElectron() && isLocalDaemon ? <BrowserDataSection /> : null}
     </View>
   );

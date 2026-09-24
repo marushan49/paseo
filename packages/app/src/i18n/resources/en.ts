@@ -2201,6 +2201,21 @@ export const en = {
         unset: "Not set (example.com)",
         save: "Save",
       },
+      import: {
+        title: "Import from browser",
+        info: "Copies cookies from Chrome, Chromium, Brave, Edge, Arc, Vivaldi, or Firefox into the Paseo browser so agents can test while signed in. Passwords are not imported.",
+        action: "Import",
+        importing: "Importing...",
+        loading: "Loading...",
+        empty: "No browsers found",
+        onHost: "On the host",
+        onThisDevice: "On this device",
+        success: "Imported {{cookieCount}} cookies for {{domainCount}} domains",
+        unsupported: {
+          label: "Update the host",
+          hint: "This host does not support browser import yet",
+        },
+      },
     },
     plugins: {
       title: "Plugins",

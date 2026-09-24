@@ -128,6 +128,9 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       ipcRenderer.invoke("paseo:browser:open-devtools", browserId),
     clearProfile: (legacyBrowserIds: string[]) =>
       ipcRenderer.invoke("paseo:browser:clear-profile", legacyBrowserIds),
+    listImportSources: () => ipcRenderer.invoke("paseo:browser:list-import-sources"),
+    readImportCookies: (sourceId: string) =>
+      ipcRenderer.invoke("paseo:browser:read-import-cookies", sourceId),
     executeAutomationCommand: (request: Record<string, unknown>) =>
       ipcRenderer.invoke("paseo:browser:execute-automation-command", request),
     captureElement: (
