@@ -69,7 +69,11 @@ export interface ShadowRecord {
   confidence: number;
   actual: ShadowStep;
   hit: boolean;
+  /** Jev's second choice also counts; tells whether prefetching two candidates would pay off. */
+  top2Hit: boolean;
   jevMs: number;
+  /** Time the agent's model spent deciding this step: from the previous event to its start. */
+  thinkMs: number | null;
   /** Time between the prediction being ready and the real step starting; negative means too late. */
   leadMs: number;
   /** How long the real step took; a hit that was ready in time could have saved up to this. */
@@ -78,6 +82,7 @@ export interface ShadowRecord {
 
 interface PendingPrediction {
   predicted: ShadowStep;
+  top2: ShadowStep[];
   confidence: number;
   jevMs: number;
   readyAt: number;
@@ -85,6 +90,7 @@ interface PendingPrediction {
 
 interface OpenCall {
   startedAt: number;
+  thinkMs: number | null;
   prediction: Promise<PendingPrediction | null> | null;
 }
 
@@ -93,6 +99,7 @@ interface AgentShadowState {
   recent: Array<{ step: ShadowStep; ok: boolean }>;
   pending: Promise<PendingPrediction | null> | null;
   openCalls: Map<string, OpenCall>;
+  lastEventAt: number | null;
 }
 
 export interface ShadowAgent {
@@ -121,13 +128,17 @@ export class ShadowPredictor {
     } else if (event.type === "turn_completed") {
       const prediction = state.pending;
       state.pending = null;
-      void this.record(agent, prediction, "end_turn", this.now(), null);
+      const now = this.now();
+      const thinkMs = state.lastEventAt === null ? null : now - state.lastEventAt;
+      state.lastEventAt = null;
+      void this.record(agent, prediction, "end_turn", now, null, thinkMs);
     }
   }
 
   private observeItem(agent: ShadowAgent, state: AgentShadowState, item: AgentTimelineItem): void {
     if (item.type === "user_message") {
       if (!state.task) state.task = item.text.slice(0, MAX_TASK_CHARS);
+      state.lastEventAt = this.now();
       state.pending = this.predict(agent, state);
       return;
     }
@@ -135,7 +146,9 @@ export class ShadowPredictor {
     const call = item as unknown as ToolCallItem;
     let open = state.openCalls.get(call.callId);
     if (!open) {
-      open = { startedAt: this.now(), prediction: state.pending };
+      const startedAt = this.now();
+      const thinkMs = state.lastEventAt === null ? null : startedAt - state.lastEventAt;
+      open = { startedAt, thinkMs, prediction: state.pending };
       state.pending = null;
       state.openCalls.set(call.callId, open);
     }
@@ -144,8 +157,16 @@ export class ShadowPredictor {
     // The finished event carries the full detail; the running one may not.
     const step = classifyToolCall(call);
     state.recent = [...state.recent, { step, ok: call.status === "completed" }].slice(-MAX_RECENT);
+    state.lastEventAt = this.now();
     state.pending = this.predict(agent, state);
-    void this.record(agent, open.prediction, step, open.startedAt, this.now() - open.startedAt);
+    void this.record(
+      agent,
+      open.prediction,
+      step,
+      open.startedAt,
+      this.now() - open.startedAt,
+      open.thinkMs,
+    );
   }
 
   private async record(
@@ -154,6 +175,7 @@ export class ShadowPredictor {
     actual: ShadowStep,
     startedAt: number,
     stepMs: number | null,
+    thinkMs: number | null,
   ): Promise<void> {
     const prediction = await pending;
     if (!prediction) return;
@@ -165,7 +187,9 @@ export class ShadowPredictor {
       confidence: prediction.confidence,
       actual,
       hit: prediction.predicted === actual,
+      top2Hit: prediction.top2.includes(actual),
       jevMs: prediction.jevMs,
+      thinkMs,
       leadMs: startedAt - prediction.readyAt,
       stepMs,
     });
@@ -193,8 +217,13 @@ export class ShadowPredictor {
         },
       });
       const answer = parseChoiceAnswer(decision.answers.next, Object.keys(SHADOW_STEPS));
+      const top2 = Object.entries(answer.probabilities)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 2)
+        .map(([step]) => step as ShadowStep);
       return {
         predicted: answer.choice as ShadowStep,
+        top2,
         confidence: answer.confidence,
         jevMs: this.now() - startedAt,
         readyAt: this.now(),
@@ -216,7 +245,7 @@ export class ShadowPredictor {
   private stateFor(agentId: string): AgentShadowState {
     let state = this.agents.get(agentId);
     if (!state) {
-      state = { task: "", recent: [], pending: null, openCalls: new Map() };
+      state = { task: "", recent: [], pending: null, openCalls: new Map(), lastEventAt: null };
       this.agents.set(agentId, state);
     }
     return state;

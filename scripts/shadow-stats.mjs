@@ -27,9 +27,18 @@ function summarize(rows) {
   const saved = (filter) =>
     inTime.filter(filter).reduce((sum, row) => sum + Math.min(row.stepMs, row.leadMs), 0) / 1000;
   const pct = (part, whole) => (whole === 0 ? "-" : `${Math.round((part / whole) * 100)}%`);
+  const thinkMs = rows.map((row) => row.thinkMs).filter((value) => typeof value === "number");
+  const toolMs = rows.map((row) => row.stepMs).filter((value) => typeof value === "number");
+  const sum = (values) => values.reduce((total, value) => total + value, 0);
+  // Upper bound: Jev predicts the kind of step, not its arguments.
+  const predictable = rows.filter((row) => row.hit && row.confidence >= 0.9);
   return {
     steps: rows.length,
     hitRate: pct(hits.length, rows.length),
+    top2Rate: pct(rows.filter((row) => row.top2Hit).length, rows.length),
+    medianThinkMs: median(thinkMs),
+    llmShareOfTime: pct(sum(thinkMs), sum(thinkMs) + sum(toolMs)),
+    predictableDecisionsMax: pct(predictable.length, rows.length),
     hitRateConfident: pct(confident.filter((row) => row.hit).length, confident.length),
     readyInTime: pct(inTime.length, hits.length),
     medianJevMs: median(rows.map((row) => row.jevMs)),

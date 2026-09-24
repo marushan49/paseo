@@ -94,8 +94,10 @@ describe("ShadowPredictor", () => {
         predicted: "verify",
         actual: "verify",
         hit: true,
+        top2Hit: true,
         leadMs: 500,
         stepMs: 3_000,
+        thinkMs: 500,
       }),
       expect.objectContaining({
         predicted: "end_turn",
