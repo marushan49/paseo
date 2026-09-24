@@ -53,6 +53,10 @@ interface RemoteGestureState {
   longPressTimer: ReturnType<typeof setTimeout> | null;
 }
 
+// Frequent enough to watch an agent work, cheap enough for a phone on cellular.
+const FRAME_REFRESH_MS = 1_000;
+const RESIZE_SETTLE_MS = 150;
+
 const REMOTE_SPECIAL_KEYS = new Set([
   "Backspace",
   "Delete",
@@ -129,6 +133,11 @@ function RemoteBrowserPane({
   const [frame, setFrame] = useState<Frame | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [draftUrl, setDraftUrl] = useState(browser?.url ?? "https://example.com");
+  // The address field shows the tab's live URL, except while the user edits it.
+  const [shownUrl, setShownUrl] = useState(draftUrl);
+  const isEditingUrlRef = useRef(false);
+  const requestedSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const remoteInputRef = useRef<EditingTextInputHandle | null>(null);
@@ -207,6 +216,12 @@ function RemoteBrowserPane({
       );
       if (!existingRecord) {
         upsertRemoteBrowser({ browserId: tab.browserId, url: tab.url, title: tab.title });
+      } else if (existingRecord.url !== tab.url || existingRecord.title !== tab.title) {
+        updateBrowser(existingRecord.browserId, { url: tab.url, title: tab.title });
+      }
+      if (tab.browserId === remoteBrowserIdRef.current && !isEditingUrlRef.current) {
+        setDraftUrl(tab.url);
+        setShownUrl(tab.url);
       }
       const localBrowserId = existingRecord?.browserId ?? tab.browserId;
       const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
@@ -227,7 +242,7 @@ function RemoteBrowserPane({
         });
       }
     }
-  }, [execute, serverId, upsertRemoteBrowser, workspaceId]);
+  }, [execute, serverId, updateBrowser, upsertRemoteBrowser, workspaceId]);
 
   const ensureRemoteTab = useCallback(async () => {
     if (remoteBrowserIdRef.current) {
@@ -255,6 +270,7 @@ function RemoteBrowserPane({
       url: result.url,
     });
     setDraftUrl(result.url);
+    setShownUrl(result.url);
     await refreshFrame();
   }, [browserId, draftUrl, execute, refreshFrame, updateBrowser]);
 
@@ -290,7 +306,7 @@ function RemoteBrowserPane({
           }
         });
       }
-    }, 2500);
+    }, FRAME_REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -314,6 +330,7 @@ function RemoteBrowserPane({
         if (result.command === "navigate") {
           updateBrowser(browserId, { url: result.url });
           setDraftUrl(result.url);
+          setShownUrl(result.url);
         }
         await refreshFrame();
       });
@@ -511,6 +528,34 @@ function RemoteBrowserPane({
     setViewportSize({ width, height });
   }, []);
 
+  // The Linux tab keeps its own viewport; without this it stays 1280x800 and the
+  // frame is stretched into whatever shape the pane has.
+  useEffect(() => {
+    const width = Math.round(viewportSize.width);
+    const height = Math.round(viewportSize.height);
+    if (!remoteBrowserId || width < 50 || height < 50) return;
+    const last = requestedSizeRef.current;
+    if (last && last.width === width && last.height === height) return;
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    resizeTimerRef.current = setTimeout(() => {
+      resizeTimerRef.current = null;
+      requestedSizeRef.current = { width, height };
+      enqueueRemoteOperation(async () => {
+        await execute({ command: "resize", args: { browserId: remoteBrowserId, width, height } });
+        await refreshFrame();
+      });
+    }, RESIZE_SETTLE_MS);
+  }, [enqueueRemoteOperation, execute, refreshFrame, remoteBrowserId, viewportSize]);
+
+  const handleUrlFocus = useCallback(() => {
+    isEditingUrlRef.current = true;
+    onFocusPane?.();
+  }, [onFocusPane]);
+
+  const handleUrlBlur = useCallback(() => {
+    isEditingUrlRef.current = false;
+  }, []);
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -626,6 +671,7 @@ function RemoteBrowserPane({
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
       if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
       if (hoverRefreshTimerRef.current) clearTimeout(hoverRefreshTimerRef.current);
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       pendingScrollRef.current = null;
       pendingHoverRef.current = null;
       const timer = gestureRef.current.longPressTimer;
@@ -649,11 +695,12 @@ function RemoteBrowserPane({
         <AdaptiveTextInput
           autoCapitalize="none"
           autoCorrect={false}
-          initialValue={draftUrl}
+          initialValue={shownUrl}
           onChangeText={setDraftUrl}
-          onFocus={onFocusPane}
+          onFocus={handleUrlFocus}
+          onBlur={handleUrlBlur}
           onSubmitEditing={handleNavigate}
-          resetKey={remoteBrowserId ?? "initial"}
+          resetKey={`${remoteBrowserId ?? "initial"}|${shownUrl}`}
           style={styles.urlInput}
         />
       </View>

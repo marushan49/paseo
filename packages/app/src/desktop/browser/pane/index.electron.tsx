@@ -88,6 +88,7 @@ type ElectronWebview = HTMLElement & {
   stop?: () => void;
   loadURL?: (url: string) => Promise<void>;
   getURL?: () => string;
+  getTitle?: () => string;
   isLoading?: () => boolean;
   executeJavaScript?: (code: string) => Promise<unknown>;
   focus?: () => void;
@@ -779,6 +780,11 @@ export function BrowserPane({
       syncNavigationState();
     };
     const handleNavigate = (event: Event) => {
+      // did-navigate-in-page also fires for iframes; Jira's about:blank frames would
+      // otherwise replace the tab's address.
+      if ((event as Event & { isMainFrame?: boolean }).isMainFrame === false) {
+        return;
+      }
       const nextUrl =
         typeof (event as Event & { url?: unknown }).url === "string"
           ? ((event as Event & { url?: string }).url ?? "")
@@ -870,6 +876,17 @@ export function BrowserPane({
 
     if (isPresentedRef.current) {
       rememberResolvedBrowserWebviewSize(browserId, webview);
+    }
+    if (residentWebview) {
+      // An agent-opened tab loads while no pane listens, so its address and title
+      // were never recorded.
+      syncNavigationState();
+      try {
+        const title = webview.getTitle?.();
+        if (title) updateBrowserRef.current(browserIdRef.current, { title });
+      } catch {
+        // guest not attached yet; dom-ready syncs it
+      }
     }
     sizeObserver?.observe(host);
     sizeObserver?.observe(clip);

@@ -476,6 +476,28 @@ async function runRemoteRegression({ page, client, browserId, artifactDir }) {
   ) {
     failures.push(`remote browser viewport is readable: received ${JSON.stringify(viewport)}`);
   }
+  const frameBox = await page.getByTestId(`remote-browser-frame-${browserId}`).boundingBox();
+  let followed = null;
+  for (let attempt = 0; attempt < 20 && frameBox; attempt += 1) {
+    followed = await readViewport(client, browserId);
+    if (
+      Math.abs(followed.width - frameBox.width) <= 2 &&
+      Math.abs(followed.height - frameBox.height) <= 2
+    ) {
+      break;
+    }
+    await delay(250);
+  }
+  if (
+    !frameBox ||
+    !followed ||
+    Math.abs(followed.width - frameBox.width) > 2 ||
+    Math.abs(followed.height - frameBox.height) > 2
+  ) {
+    failures.push(
+      `remote viewport follows the pane: pane ${JSON.stringify(frameBox)}, viewport ${JSON.stringify(followed)}`,
+    );
+  }
   const listed = await callBrowserTool(client, "browser_list_tabs");
   assert(
     listed.tabs.some((tab) => tab.browserId === browserId),
