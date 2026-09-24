@@ -3131,6 +3131,10 @@ class ClaudeAgentSession implements AgentSession {
     // Preserve claudeSessionId across query recreation so buildOptions() passes
     // resume: sessionId and the new query continues the existing conversation.
     this.persistence = null;
+    // A new query is built from the current config, so a change requested while no
+    // query existed is already applied; a stale flag would restart it at once and
+    // drop the input the first turn is about to write to.
+    this.queryRestartNeeded = false;
 
     const input = createAsyncMessageInput<SDKUserMessage>();
     const options = await this.buildOptions();

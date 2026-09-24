@@ -742,6 +742,29 @@ describe("ClaudeAgentSession features", () => {
     await session.close();
   });
 
+  test("a thinking change before the first query does not restart the query it builds", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-5-5",
+    });
+    const events: Array<{ type: string }> = [];
+    session.subscribe((event) => events.push(event as { type: string }));
+
+    await session.setThinkingOption?.("low");
+    await session.startTurn("hello");
+
+    expect(queryFactory).toHaveBeenCalledTimes(1);
+    expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    await session.close();
+  });
+
   test("hides competing browser MCP servers the daemon blocks", async () => {
     const { queryFactory } = createQueryMock();
     const client = new ClaudeAgentClient({
