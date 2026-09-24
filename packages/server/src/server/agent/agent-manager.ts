@@ -1,4 +1,5 @@
 import { projectTimelineRows } from "./timeline-projection.js";
+import type { TurnRouter } from "../system-one/model-routing.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
@@ -745,6 +746,8 @@ export class AgentManager {
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
   private resolveBlockedMcpServers: () => readonly string[] = () => [];
+  private turnRouter: TurnRouter | null = null;
+  private readonly routedModels = new Map<string, string | null>();
   private resourcePolicy: ResourcePolicy;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -874,6 +877,47 @@ export class AgentManager {
    */
   getMcpAuthToken(): string | null {
     return this.mcpAuthToken;
+  }
+
+  setTurnRouter(router: TurnRouter | null): void {
+    this.turnRouter = router;
+  }
+
+  /**
+   * Lets System One pick model and thinking for the next turn. Call it before the
+   * turn is registered so queued steers and replacements keep their order.
+   * Fail-open: a routing problem must never block the user's turn.
+   */
+  async routeNextTurn(agentId: string, prompt: AgentPromptInput): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!this.turnRouter || !agent || agent.config.internal) return;
+    const lastRouted = this.routedModels.get(agent.id);
+    // A model picked by hand after routing started wins for the rest of the session.
+    if (lastRouted !== undefined && lastRouted !== (agent.config.model ?? null)) return;
+    try {
+      const route = await this.turnRouter({
+        provider: agent.provider,
+        cwd: agent.cwd,
+        model: agent.config.model,
+        thinkingOptionId: agent.config.thinkingOptionId,
+        prompt,
+      });
+      if (route?.model && route.model !== agent.config.model) {
+        await this.setAgentModel(agent.id, route.model);
+      }
+      if (route?.thinkingOptionId && route.thinkingOptionId !== agent.config.thinkingOptionId) {
+        await this.setAgentThinkingOption(agent.id, route.thinkingOptionId);
+      }
+      this.routedModels.set(agent.id, agent.config.model ?? null);
+      if (route) {
+        this.logger.info(
+          { agentId: agent.id, provider: agent.provider, route },
+          "System One routed turn",
+        );
+      }
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: agent.id }, "System One turn routing failed");
+    }
   }
 
   setBlockedMcpServers(resolver: () => readonly string[]): void {

@@ -1,4 +1,5 @@
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
+import { createSystemOneTurnRouter } from "./system-one/model-routing.js";
 import { isSystemOneExcluded } from "./system-one/scope.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
@@ -1545,6 +1546,9 @@ export async function createPaseoDaemon(
     agentProviderRuntime.setPaseoToolCatalog(enabled ? createAgentToolCatalog({}) : null);
   };
   agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
+  agentManager.setTurnRouter(
+    createSystemOneTurnRouter({ paseoHome: config.paseoHome, daemonConfigStore }),
+  );
   agentManager.setBlockedMcpServers(() =>
     browserToolsPolicy.isEnabled() ? COMPETING_BROWSER_MCP_SERVERS : [],
   );

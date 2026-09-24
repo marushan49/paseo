@@ -29,6 +29,20 @@ Good uses include routing a task, ranking a short candidate set, checking releva
 
 Never place API keys, passwords, tokens, private keys, or other secrets in the state or questions.
 
+Paseo can also let Jev pick the model and thinking depth for every turn, for any provider. List a ladder per provider in `daemon.systemOne.routing`, cheapest first:
+
+```json
+"systemOne": {
+  "enabled": true,
+  "routing": {
+    "claude": { "models": ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5-5"], "thinking": ["low", "medium", "high", "xhigh"] },
+    "codex": { "models": ["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"], "thinking": ["low", "medium", "high", "xhigh"] }
+  }
+}
+```
+
+Before each turn Jev picks the cheapest sufficient rung; when it is unsure, the current setting stays. A model you pick by hand during a session wins for the rest of that session, and Paseo's internal helper agents are never routed. Routing never blocks a turn: if Jev fails, the turn runs on the current model.
+
 To keep a project's code away from TypeSafe entirely, list its directory in `daemon.systemOne.excludedPaths` in `$PASEO_HOME/config.json` (for example `["~/work/company"]`). Agents working below those paths get a refusal from `system_one_decide` and `browser_goal`, and `goal` steps in `browser_test` fail; scripted test steps still run. Paseo reads the list on every decision, so edits apply without a restart.
 
 ## Browser goals
