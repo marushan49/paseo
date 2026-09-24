@@ -391,3 +391,66 @@ function refFor(yaml: string, role: string, name: string): string | null {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+describe.skipIf(!BROWSER_AVAILABLE)("DaemonPlaywrightHost cookie import", () => {
+  let paseoHome = "";
+  let host: DaemonPlaywrightHost | null = null;
+  let app: VerifyFixtureApp | null = null;
+
+  beforeAll(async () => {
+    paseoHome = mkdtempSync(join(tmpdir(), "paseo-cookie-import-test-"));
+    host = new DaemonPlaywrightHost({ paseoHome, logger: pino({ enabled: false }) });
+    app = await startVerifyFixtureApp();
+  }, 60_000);
+
+  afterAll(async () => {
+    await host?.close();
+    await app?.close();
+    rmSync(paseoHome, { recursive: true, force: true });
+  });
+
+  async function openReport(profile: string): Promise<{ browserId: string; url: string }> {
+    const created = await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      profile,
+      command: { command: "new_tab", args: { url: `${app?.url}/report` } },
+    });
+    if (!created?.ok || created.result.command !== "new_tab") expect.unreachable();
+    return { browserId: created.result.browserId, url: created.result.url };
+  }
+
+  it("signs already open and later launched profiles in with imported cookies", async () => {
+    const early = await openReport("early");
+    expect(new URL(early.url).pathname).toBe("/login");
+
+    const result = await host?.importCookies([
+      {
+        name: "verify_auth",
+        value: "1",
+        domain: "127.0.0.1",
+        path: "/",
+        expires: -1,
+        httpOnly: true,
+        secure: false,
+        sameSite: "Lax",
+      },
+    ]);
+    expect(result).toEqual({ cookieCount: 1, domainCount: 1 });
+
+    const navigated = await host?.executeLocal({
+      workspaceId: WORKSPACE_ID,
+      profile: "early",
+      command: {
+        command: "navigate",
+        args: { browserId: early.browserId, url: `${app?.url}/report` },
+      },
+    });
+    expect(navigated).toMatchObject({ ok: true, result: { command: "navigate" } });
+    if (navigated?.ok && navigated.result.command === "navigate") {
+      expect(new URL(navigated.result.url).pathname).toBe("/report");
+    }
+
+    const late = await openReport("late");
+    expect(new URL(late.url).pathname).toBe("/report");
+  });
+});

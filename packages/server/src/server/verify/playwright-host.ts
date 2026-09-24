@@ -1,5 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Logger } from "pino";
 import {
@@ -18,6 +19,8 @@ import type {
   BrowserAutomationExecuteRequest,
   BrowserAutomationNetworkLogEntry,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+import type { BrowserImportCookie } from "@getpaseo/protocol/browser-import/rpc-schemas";
+import { writeFileAtomic } from "../atomic-file.js";
 import type { BrowserHostClient } from "../browser-tools/broker.js";
 import { browserToolsFailure, type BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { resolveBrowserExecutable } from "./browser-capability.js";
@@ -37,6 +40,18 @@ export const MAX_VERIFY_LOG_ENTRIES = 200;
 const MAX_EVALUATE_JSON_BYTES = 65_536;
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const DEFAULT_VERIFY_VIEWPORT = { width: 1280, height: 720 };
+const IMPORTED_COOKIES_FILE = "imported-cookies.json";
+const IMPORTED_COOKIES_MARKER = ".paseo-imported-cookies-version";
+
+interface ImportedCookieStore {
+  version: string;
+  cookies: BrowserImportCookie[];
+}
+
+export interface ImportCookiesResult {
+  cookieCount: number;
+  domainCount: number;
+}
 
 export const DAEMON_PLAYWRIGHT_COMMANDS: readonly BrowserAutomationCommandName[] = [
   "list_tabs",
@@ -102,6 +117,7 @@ export class DaemonPlaywrightHost {
   private readonly paseoHome: string;
   private readonly logger: Logger;
   private readonly contexts = new Map<string, BrowserContext>();
+  private readonly contextProfileDirs = new Map<BrowserContext, string>();
   private readonly tabs = new Map<string, DaemonBrowserTab>();
   private executablePath: string | null = null;
   private useNoSandboxFallback = false;
@@ -194,6 +210,7 @@ export class DaemonPlaywrightHost {
     this.tabs.clear();
     const contexts = [...this.contexts.values()];
     this.contexts.clear();
+    this.contextProfileDirs.clear();
     for (const context of contexts) {
       await context.close().catch(() => undefined);
     }
@@ -863,12 +880,73 @@ export class DaemonPlaywrightHost {
     mkdirSync(userDataDir, { recursive: true });
     const context = await this.launchPersistentContext(userDataDir);
     this.contexts.set(key, context);
+    this.contextProfileDirs.set(context, userDataDir);
     context.on("close", () => {
+      this.contextProfileDirs.delete(context);
       if (this.contexts.get(key) === context) {
         this.contexts.delete(key);
       }
     });
+    const store = await this.readImportedCookieStore();
+    if (store) {
+      await this.applyImportedCookies({ context, userDataDir, store });
+    }
     return context;
+  }
+
+  /**
+   * Merges cookies into the host-wide import store and applies them to every open profile.
+   * Profiles launched later pick the store up once, tracked by a version marker in their
+   * userDataDir, so cookies the site rotates afterwards are not overwritten on each launch.
+   */
+  public async importCookies(cookies: BrowserImportCookie[]): Promise<ImportCookiesResult> {
+    const nowSeconds = Date.now() / 1000;
+    const merged = new Map<string, BrowserImportCookie>();
+    for (const cookie of [...((await this.readImportedCookieStore())?.cookies ?? []), ...cookies]) {
+      if (cookie.expires !== -1 && cookie.expires < nowSeconds) continue;
+      merged.set(`${cookie.domain}\t${cookie.path}\t${cookie.name}`, cookie);
+    }
+    const store: ImportedCookieStore = { version: randomUUID(), cookies: [...merged.values()] };
+    await writeFileAtomic(this.importedCookieStorePath(), JSON.stringify(store), { mode: 0o600 });
+    for (const [context, userDataDir] of this.contextProfileDirs) {
+      await this.applyImportedCookies({ context, userDataDir, store });
+    }
+    return {
+      cookieCount: cookies.length,
+      domainCount: new Set(cookies.map((cookie) => cookie.domain.replace(/^\./, ""))).size,
+    };
+  }
+
+  private importedCookieStorePath(): string {
+    return path.join(this.paseoHome, "browser-profiles", IMPORTED_COOKIES_FILE);
+  }
+
+  private async readImportedCookieStore(): Promise<ImportedCookieStore | null> {
+    const raw = await readFile(this.importedCookieStorePath(), "utf8").catch(() => null);
+    return raw ? (JSON.parse(raw) as ImportedCookieStore) : null;
+  }
+
+  private async applyImportedCookies(input: {
+    context: BrowserContext;
+    userDataDir: string;
+    store: ImportedCookieStore;
+  }): Promise<void> {
+    const markerPath = path.join(input.userDataDir, IMPORTED_COOKIES_MARKER);
+    const applied = await readFile(markerPath, "utf8").catch(() => null);
+    if (applied === input.store.version) return;
+    try {
+      await input.context.addCookies(input.store.cookies);
+    } catch {
+      // One cookie Chromium rejects fails the whole batch; retry singly and drop the rejects.
+      let rejected = 0;
+      for (const cookie of input.store.cookies) {
+        await input.context.addCookies([cookie]).catch(() => {
+          rejected += 1;
+        });
+      }
+      this.logger.warn({ rejected }, "Chromium rejected some imported cookies");
+    }
+    await writeFile(markerPath, input.store.version);
   }
 
   private async launchPersistentContext(userDataDir: string): Promise<BrowserContext> {

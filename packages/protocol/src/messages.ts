@@ -93,6 +93,12 @@ import {
   VerifyRecipeRunResponseSchema,
 } from "./verify/rpc-schemas.js";
 import {
+  BrowserImportCookiesRequestSchema,
+  BrowserImportCookiesResponseSchema,
+  BrowserImportListSourcesRequestSchema,
+  BrowserImportListSourcesResponseSchema,
+} from "./browser-import/rpc-schemas.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -3514,6 +3520,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VerifyEvidenceRunListRequestSchema,
   VerifyRecipeListRequestSchema,
   VerifyRecipeRunRequestSchema,
+  BrowserImportListSourcesRequestSchema,
+  BrowserImportCookiesRequestSchema,
   SubscribeTerminalRequestSchema,
   UnsubscribeTerminalRequestSchema,
   TerminalInputSchema,
@@ -3775,6 +3783,8 @@ export const ServerInfoStatusPayloadSchema = z
         pluginSettings: z.boolean().optional(),
         pluginTimelineItems: z.boolean().optional(),
         verifyRecipes: z.boolean().optional(),
+        // COMPAT(browserCookieImport): added in v0.9.0, remove gate after 2027-03-24.
+        browserCookieImport: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
@@ -7035,6 +7045,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   VerifyEvidenceRunListResponseSchema,
   VerifyRecipeListResponseSchema,
   VerifyRecipeRunResponseSchema,
+  BrowserImportListSourcesResponseSchema,
+  BrowserImportCookiesResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,

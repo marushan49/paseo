@@ -5,6 +5,10 @@ import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
 import type { EvidenceStore } from "./verify/evidence-store.js";
 import { VerifySession } from "./verify/verify-session.js";
+import {
+  handleBrowserImportCookies,
+  handleBrowserImportListSources,
+} from "./browser-import/browser-import-session.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import { relative } from "node:path";
@@ -726,6 +730,7 @@ export class Session {
   );
   private readonly browserToolsBroker: SessionOptions["browserToolsBroker"];
   private readonly verifySession: VerifySession | null;
+  private readonly verifyHost: DaemonPlaywrightHost | null | undefined;
   private readonly clientId: string;
   private readonly authorization: SessionAuthorization;
   private appVersion: string | null;
@@ -1202,6 +1207,7 @@ export class Session {
       buildWorkspaceDescriptor: (input) => this.buildWorkspaceDescriptor(input),
     });
     this.verifySession = this.createVerifySession(options);
+    this.verifyHost = options.verifyHost;
 
     this.voiceSessions = new VoiceSessions(
       {
@@ -3172,7 +3178,26 @@ export class Session {
   }
 
   private dispatchAutomationMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    return this.dispatchVerifyMessage(msg) ?? this.dispatchScheduleMessage(msg);
+    return (
+      this.dispatchVerifyMessage(msg) ??
+      this.dispatchBrowserImportMessage(msg) ??
+      this.dispatchScheduleMessage(msg)
+    );
+  }
+
+  private dispatchBrowserImportMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    const deps = {
+      host: this.verifyHost,
+      emit: (message: SessionOutboundMessage) => this.emit(message),
+    };
+    switch (msg.type) {
+      case "browser.import.list_sources.request":
+        return handleBrowserImportListSources(msg, deps);
+      case "browser.import.import_cookies.request":
+        return handleBrowserImportCookies(msg, deps);
+      default:
+        return undefined;
+    }
   }
 
   private async handleVerifyRecipeListRequest(request: VerifyRecipeListRequest): Promise<void> {

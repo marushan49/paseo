@@ -2661,6 +2661,36 @@ export class DaemonClient {
     });
   }
 
+  async listBrowserImportSources(
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "browser.import.list_sources.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "browser.import.list_sources.request" },
+      responseType: "browser.import.list_sources.response",
+    });
+  }
+
+  async importBrowserCookies(
+    source: Extract<
+      SessionInboundMessage,
+      { type: "browser.import.import_cookies.request" }
+    >["source"],
+    requestId?: string,
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "browser.import.import_cookies.response" }>["payload"]
+  > {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "browser.import.import_cookies.request", source },
+      responseType: "browser.import.import_cookies.response",
+      // A daemon on macOS may wait on the user's Keychain prompt.
+      timeout: 180_000,
+    });
+  }
+
   async listVerifyRecipes(
     workspaceId: string,
     requestId?: string,

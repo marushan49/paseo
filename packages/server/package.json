@@ -43,6 +43,11 @@
       "source": "./src/utils/spawn.ts",
       "default": "./dist/server/utils/spawn.js"
     },
+    "./browser-import": {
+      "types": "./dist/server/server/browser-import/browser-cookie-import.d.ts",
+      "source": "./src/server/browser-import/browser-cookie-import.ts",
+      "default": "./dist/server/server/browser-import/browser-cookie-import.js"
+    },
     "./auth": {
       "types": "./dist/server/server/auth.d.ts",
       "source": "./src/server/auth.ts",
