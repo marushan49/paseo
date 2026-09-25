@@ -111,7 +111,11 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
-import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store";
+import {
+  createWorkspaceBrowser,
+  markRemoteBrowserClosed,
+  useBrowserStore,
+} from "@/desktop/browser/store";
 import { getDesktopHost } from "@/desktop/host";
 import { buildProviderCommand } from "@/utils/provider-command-templates";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -1990,13 +1994,32 @@ function WorkspaceScreenContent({
       }
       if (input.target?.kind === "browser") {
         const { browserId } = input.target;
+        const remoteBrowserId = useBrowserStore.getState().browsersById[browserId]?.remoteBrowserId;
+        if (remoteBrowserId) {
+          markRemoteBrowserClosed(remoteBrowserId);
+          void client
+            ?.executeRemoteBrowserCommand({
+              workspaceId: normalizedWorkspaceId,
+              command: { command: "close_tab", args: { browserId: remoteBrowserId } },
+            })
+            .catch((error) =>
+              console.warn("[Workspace] Failed to close daemon browser tab", error),
+            );
+        }
         useBrowserStore.getState().removeBrowser(browserId);
         removeResidentBrowserWebview(browserId);
         void getDesktopHost()?.browser?.unregisterWorkspaceBrowser?.(browserId);
       }
       closeWorkspaceTab(persistenceKey, normalizedTabId);
     },
-    [closeWorkspaceTab, hideWorkspaceAgent, persistenceKey, unpinWorkspaceAgent],
+    [
+      client,
+      closeWorkspaceTab,
+      hideWorkspaceAgent,
+      normalizedWorkspaceId,
+      persistenceKey,
+      unpinWorkspaceAgent,
+    ],
   );
 
   const focusedPaneTabState = useMemo(

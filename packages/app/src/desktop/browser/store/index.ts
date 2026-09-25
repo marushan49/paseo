@@ -35,6 +35,18 @@ interface BrowserStoreState extends BrowserIndexState {
   setStartUrl: (url: string | null) => void;
 }
 
+// The remote tab sync reopens every daemon tab missing from the layout, so a tab the user
+// closed must stay skipped while (and after) the daemon closes it.
+const closedRemoteBrowserIds = new Set<string>();
+
+export function markRemoteBrowserClosed(remoteBrowserId: string): void {
+  closedRemoteBrowserIds.add(remoteBrowserId);
+}
+
+export function isRemoteBrowserClosed(remoteBrowserId: string): boolean {
+  return closedRemoteBrowserIds.has(remoteBrowserId);
+}
+
 function createBrowserId(): string {
   let browserId: string;
   if (typeof globalThis.crypto?.randomUUID === "function") {

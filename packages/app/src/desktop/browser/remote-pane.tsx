@@ -19,6 +19,7 @@ import { isWeb } from "@/constants/platform";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import {
   getBrowserRecord,
+  isRemoteBrowserClosed,
   normalizeWorkspaceBrowserUrl,
   useBrowserStore,
 } from "@/desktop/browser/store";
@@ -183,6 +184,7 @@ function RemoteBrowserPane({
     const layoutStore = useWorkspaceLayoutStore.getState();
     for (const tab of result.tabs) {
       if (tab.workspaceId && tab.workspaceId !== workspaceId) continue;
+      if (isRemoteBrowserClosed(tab.browserId)) continue;
       const existingRecord = Object.values(useBrowserStore.getState().browsersById).find(
         (candidate) => candidate.remoteBrowserId === tab.browserId,
       );
