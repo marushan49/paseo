@@ -46,6 +46,8 @@ The tools are part of the [Paseo MCP toolset](/docs/mcp), so **Enable Paseo tool
 
 Browser tabs are hosted by the Paseo daemon on the machine where your workspace runs. The app shows a remote viewport and forwards clicks, keyboard input, scrolling, hover, and long-press drags, so Mac, Android, and the web client can use the same Linux browser profile. The desktop app remains a compatibility fallback for older daemons.
 
+While a `browser_goal` or `browser_test` run drives a tab, a status bar above the viewport shows the step, the phase, the chosen action with its accessibility target, and Jev's confidence; the browser tab shows a running dot. A recipe also shows its next step. Jev chooses its next step only after it looks at the page again, so a goal run shows **Re-check page** until it has chosen. Tap the bar for the step overview. Your input to the viewport is blocked during a run. **Take over** pauses the run after the current action and hands input back to you; **Resume** continues from a fresh snapshot of the page as you left it. The status stream carries only structured action data: no screenshots, filled values, or model reasoning.
+
 ## How an agent sees a page
 
 The primary tool is `browser_snapshot`, which returns the page as an accessibility tree — headings, text, form state, and hierarchy — instead of raw HTML:

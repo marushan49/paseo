@@ -50,6 +50,8 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { useProviderSubagentStore } from "@/subagents/provider-store";
+import { useBrowserActivityStore } from "@/desktop/browser/activity";
+import { useHostFeature } from "@/runtime/host-features";
 
 // Re-export types from session-store and draft-store for backward compatibility
 export type { DraftInput } from "@/stores/draft-store";
@@ -759,6 +761,25 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     voiceRuntime,
     voiceAudioEngine,
   ]);
+
+  const supportsBrowserActivity = useHostFeature(serverId, "browserActivity");
+  useEffect(() => {
+    if (!supportsBrowserActivity) return;
+    const feed = client.observeEvents(["browser.activity"]);
+    const unsubscribe = feed.subscribe({
+      snapshot: () => useBrowserActivityStore.getState().resetServer(serverId),
+      update: (message) => {
+        if (message.type !== "browser.activity") return;
+        useBrowserActivityStore.getState().apply(serverId, message.payload);
+      },
+    });
+    return () => {
+      unsubscribe();
+      void feed
+        .release()
+        .catch((error) => console.warn("[Session] Failed to release browser activity", error));
+    };
+  }, [client, serverId, supportsBrowserActivity]);
 
   const _cancelAgentRun = useCallback(
     (agentId: string) => {

@@ -8,6 +8,7 @@ import type {
   BrowserAutomationConsoleLogEntry,
   BrowserAutomationNetworkLogEntry,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+import type { BrowserActivityStep } from "@getpaseo/protocol/browser-activity/rpc-schemas";
 
 import {
   assertCredentialOriginAllowed,
@@ -23,6 +24,11 @@ import { interpolateRecipeParams } from "./recipe-params.js";
 import { JevBrowserGoalRunner } from "../browser-tools/jev-goal-runner.js";
 import type { TypeSafeDecisionSource } from "../browser-tools/jev-client.js";
 import { SYSTEM_ONE_EXCLUDED_MESSAGE } from "../system-one/scope.js";
+import type {
+  BrowserActivityHub,
+  BrowserActivityReporter,
+  BrowserActivityRun,
+} from "../browser-tools/browser-activity.js";
 
 export interface RecipeCheckResult {
   name: string;
@@ -60,6 +66,7 @@ export interface RecipeRunnerOptions {
   env?: NodeJS.ProcessEnv;
   /** Enables `goal` steps; absent when System One is not available. */
   goal?: { decisionSource: TypeSafeDecisionSource; minConfidence: () => number };
+  activity?: BrowserActivityHub;
 }
 
 export interface RunRecipeInput {
@@ -86,6 +93,7 @@ interface RunContext {
   trace: RecipeStepTrace[];
   rawArtifactBytes: number;
   allowGoal: boolean;
+  activity: BrowserActivityRun | null;
 }
 
 const DEFAULT_WAIT_TEXT_TIMEOUT_MS = 15_000;
@@ -139,9 +147,11 @@ export class RecipeRunner {
   private readonly resolveServiceUrl: RecipeRunnerOptions["resolveServiceUrl"];
   private readonly env: NodeJS.ProcessEnv;
   private readonly goal: RecipeRunnerOptions["goal"];
+  private readonly activity: BrowserActivityHub | undefined;
 
   public constructor(options: RecipeRunnerOptions) {
     this.goal = options.goal;
+    this.activity = options.activity;
     this.host = options.host;
     this.evidence = options.evidence;
     this.resolveServiceUrl = options.resolveServiceUrl;
@@ -184,23 +194,38 @@ export class RecipeRunner {
       trace: [],
       rawArtifactBytes: 0,
       allowGoal: input.allowGoal ?? true,
+      activity: null,
     };
     const startedAt = Date.now();
     let failedCheck: RecipeCheckResult | null = null;
-    for (const step of interpolated.recipe.steps) {
-      const stepStartedAt = Date.now();
-      const check = await this.runStep(context, step);
-      context.trace.push({ action: step.action, ok: check.ok, ms: Date.now() - stepStartedAt });
-      if (!check.ok) {
-        failedCheck = check;
-        context.checks.push(check);
-        break;
+    const recipeSteps = interpolated.recipe.steps;
+    let plan = recipeSteps.map((step) => describeRecipeStep(step, context.redactor));
+    try {
+      for (const [index, step] of recipeSteps.entries()) {
+        await this.reportStep({ context, recipeName: input.recipeName, plan, index });
+        plan = withStatus(plan, index, "active");
+        const stepStartedAt = Date.now();
+        const check = await this.runStep(context, step);
+        context.trace.push({ action: step.action, ok: check.ok, ms: Date.now() - stepStartedAt });
+        plan = withStatus(plan, index, check.ok ? "done" : "failed");
+        if (!check.ok) {
+          failedCheck = check;
+          context.checks.push(check);
+          break;
+        }
+        if (check.name.length > 0) {
+          context.checks.push(check);
+        }
       }
-      if (check.name.length > 0) {
-        context.checks.push(check);
-      }
+    } catch (error) {
+      context.activity?.finish({
+        status: "failed",
+        message: context.redactor.redact(error instanceof Error ? error.message : String(error)),
+      });
+      throw error;
     }
     const status = failedCheck ? "fail" : "pass";
+    finishActivity(context, failedCheck, recipeSteps.length);
     await this.writeRunEvidence({ context, recipeName: input.recipeName, status, startedAt });
     await this.evidence.finishRun({ runId: manifest.runId, status });
     const counts = await this.finalLogCounts(context);
@@ -228,6 +253,45 @@ export class RecipeRunner {
     };
     result.agentBytes = Buffer.byteLength(JSON.stringify({ ...result, agentBytes: 0 }), "utf8");
     return result;
+  }
+
+  /**
+   * Opens the activity run once a tab exists, then pauses between steps on takeover.
+   * Every step after a pause resolves its refs from a new snapshot; the extra snapshot here
+   * also confirms the tab survived the takeover before the recipe continues.
+   */
+  private async reportStep(input: {
+    context: RunContext;
+    recipeName: string;
+    plan: BrowserActivityStep[];
+    index: number;
+  }): Promise<void> {
+    const { context, plan, index } = input;
+    if (!context.activity && context.browserId && this.activity) {
+      context.activity = this.activity.start({
+        workspaceId: context.workspaceId,
+        browserId: context.browserId,
+        kind: "recipe",
+        label: input.recipeName,
+        totalSteps: plan.length,
+        steps: plan,
+      });
+    }
+    const activity = context.activity;
+    if (!activity || !context.browserId) return;
+    if (await activity.checkpoint()) {
+      activity.update({ phase: "observing" });
+      await this.execute(context, { command: "snapshot", args: { browserId: context.browserId } });
+    }
+    const current = plan[index];
+    const next = plan[index + 1];
+    activity.update({
+      phase: current && isCheckStep(current.operation) ? "verifying" : "executing",
+      step: index + 1,
+      action: current ? { ...current, status: "active" } : null,
+      next: next ?? null,
+      steps: withStatus(plan, index, "active"),
+    });
   }
 
   private async writeRunEvidence(input: {
@@ -385,6 +449,7 @@ export class RecipeRunner {
           minConfidence: this.goal.minConfidence(),
         },
         { workspaceId: context.workspaceId },
+        context.activity ? goalStepReporter(context.activity, step.goal) : undefined,
       );
       context.route = result.url;
       const detail = `${result.status} after ${result.steps.length} Jev steps: ${result.message}`;
@@ -1025,6 +1090,98 @@ export class RecipeRunner {
       command,
     });
   }
+}
+
+function finishActivity(
+  context: RunContext,
+  failedCheck: RecipeCheckResult | null,
+  stepCount: number,
+): void {
+  context.activity?.finish(
+    failedCheck
+      ? {
+          status: "failed",
+          message: context.redactor.redact(
+            `${failedCheck.name}: ${failedCheck.detail ?? "failed"}`,
+          ),
+        }
+      : { status: "passed", message: `All ${stepCount} steps passed.` },
+  );
+}
+
+// Jev's live action stands in for the goal step; the recipe keeps its own step index and plan.
+function goalStepReporter(run: BrowserActivityRun, goal: string): BrowserActivityReporter {
+  const goalStep: BrowserActivityStep = { operation: "goal", detail: goal, status: "active" };
+  return {
+    update: (patch) =>
+      run.update({
+        phase: patch.phase,
+        ...(patch.action !== undefined ? { action: patch.action ?? goalStep } : {}),
+      }),
+    checkpoint: () => run.checkpoint(),
+  };
+}
+
+function isCheckStep(operation: string): boolean {
+  return operation.startsWith("assert-") || operation === "wait-text";
+}
+
+function withStatus(
+  plan: BrowserActivityStep[],
+  index: number,
+  status: BrowserActivityStep["status"],
+): BrowserActivityStep[] {
+  return plan.map((step, stepIndex) => (stepIndex === index ? { ...step, status } : step));
+}
+
+// Names what a step does without values: fills show the credential slot, URLs drop query and hash.
+function describeRecipeStep(step: PaseoRecipeStep, redactor: SecretRedactor): BrowserActivityStep {
+  const base = { operation: step.action, status: "pending" as const };
+  const redact = (text: string) => redactor.redact(text);
+  switch (step.action) {
+    case "navigate":
+      return { ...base, detail: redact(describeTarget(step)) };
+    case "ensure-authenticated":
+      return { ...base, valueSlot: step.credential, detail: redact(describeTarget(step.check)) };
+    case "click":
+    case "assert-visible":
+      return { ...base, target: { role: step.role, name: redact(step.name) } };
+    case "fill":
+      return {
+        ...base,
+        target: { role: step.role, name: redact(step.name) },
+        ...(step.credential && step.credentialField
+          ? { valueSlot: `${step.credential}.${step.credentialField}` }
+          : {}),
+      };
+    case "wait-text":
+    case "assert-text":
+      return { ...base, detail: redact(step.text) };
+    case "assert-console-errors":
+    case "assert-failed-requests":
+      return { ...base, detail: `max ${step.max}` };
+    case "screenshot":
+      return { ...base, detail: step.name };
+    case "goal":
+      return { ...base, detail: redact(step.goal) };
+  }
+}
+
+function describeTarget(target: { url?: string; service?: string; path?: string }): string {
+  if (target.service) {
+    return `${target.service}${stripQuery(target.path ?? "/")}`;
+  }
+  if (!target.url) return "";
+  try {
+    const url = new URL(target.url);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return stripQuery(target.url);
+  }
+}
+
+function stripQuery(value: string): string {
+  return value.split(/[?#]/, 1)[0] ?? "";
 }
 
 function setupFailure(input: {

@@ -98,6 +98,7 @@ import {
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import type { BrowserActivityHub } from "./browser-tools/browser-activity.js";
 import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
 import type { EvidenceStore } from "./verify/evidence-store.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
@@ -594,6 +595,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly providerUsageService: ProviderUsageService;
   private unsubscribeTerminalActivity: (() => void) | null = null;
   private readonly browserToolsBroker: BrowserToolsBroker | null;
+  private readonly browserActivity: BrowserActivityHub | undefined;
   private readonly verifyHost: DaemonPlaywrightHost | null;
   private readonly verifyEvidence: EvidenceStore | null;
   private readonly hubRelationships: HubRelationshipManagement | null;
@@ -672,6 +674,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     resourcePolicyRuntime?: Pick<ResourcePolicyRuntime, "checkStatusRead">,
+    browserActivity?: BrowserActivityHub,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -685,6 +688,7 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.browserToolsBroker = browserToolsBroker ?? null;
+    this.browserActivity = browserActivity;
     const verify = resolveVerifyDependencies(verifyHost, verifyEvidence);
     this.verifyHost = verify.host;
     this.verifyEvidence = verify.evidence;
@@ -1456,6 +1460,7 @@ export class VoiceAssistantWebSocketServer {
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       browserToolsBroker: this.browserToolsBroker,
+      browserActivity: this.browserActivity,
       verifyHost: this.verifyHost,
       verifyEvidence: this.verifyEvidence,
       clientId: options.clientId,
@@ -1759,6 +1764,7 @@ export class VoiceAssistantWebSocketServer {
         pluginTimelineItems: true,
         verifyRecipes: true,
         ...(this.verifyHost ? { browserCookieImport: true } : {}),
+        ...(this.browserActivity ? { browserActivity: true } : {}),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.

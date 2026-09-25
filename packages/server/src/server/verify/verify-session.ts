@@ -31,6 +31,7 @@ import type { EvidenceRunManifest, EvidenceStore } from "./evidence-store.js";
 import type { EvidenceArtifactEntry } from "./evidence-store.js";
 import type { DaemonPlaywrightHost } from "./playwright-host.js";
 import { RecipeRunner, type RecipeRunnerOptions, type VerifyRunResult } from "./recipe-runner.js";
+import type { BrowserActivityHub } from "../browser-tools/browser-activity.js";
 
 export interface VerifySessionOptions {
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
@@ -42,6 +43,7 @@ export interface VerifySessionOptions {
   goal?: RecipeRunnerOptions["goal"];
   /** False where System One is excluded for the workspace directory. */
   isGoalAllowed?: (cwd: string) => boolean;
+  activity?: BrowserActivityHub;
 }
 
 export type AgentVerifyResult =
@@ -119,6 +121,7 @@ export class VerifySession {
       evidence: options.evidence,
       resolveServiceUrl: ({ workspaceId, service }) => this.resolveServiceUrl(workspaceId, service),
       ...(options.goal ? { goal: options.goal } : {}),
+      activity: options.activity,
     });
   }
 

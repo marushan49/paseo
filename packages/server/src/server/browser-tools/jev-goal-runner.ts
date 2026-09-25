@@ -1,5 +1,11 @@
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "./broker.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
+import type { BrowserActivityStep } from "@getpaseo/protocol/browser-activity/rpc-schemas";
+import {
+  NOOP_BROWSER_ACTIVITY,
+  type BrowserActivityHub,
+  type BrowserActivityReporter,
+} from "./browser-activity.js";
 import {
   parseChoiceAnswer,
   TypeSafeSystemOneClient,
@@ -94,6 +100,7 @@ interface JevBrowserGoalRunnerOptions {
   broker: Pick<BrowserToolsBroker, "execute">;
   decisionSource?: TypeSafeDecisionSource;
   delay?: (milliseconds: number) => Promise<void>;
+  activity?: BrowserActivityHub;
 }
 
 interface ObservedElement {
@@ -129,33 +136,92 @@ export class JevBrowserGoalRunner {
   private readonly broker: Pick<BrowserToolsBroker, "execute">;
   private readonly decisionSource: TypeSafeDecisionSource;
   private readonly delay: (milliseconds: number) => Promise<void>;
+  private readonly activity: BrowserActivityHub | undefined;
 
   public constructor(options: JevBrowserGoalRunnerOptions) {
     this.broker = options.broker;
+    this.activity = options.activity;
     this.decisionSource = options.decisionSource ?? new TypeSafeSystemOneClient();
     this.delay =
       options.delay ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   }
 
+  /** A caller-owned `reporter` (a recipe goal step) keeps the run open after the goal ends. */
   public async run(
     input: JevBrowserGoalInput,
     context: JevBrowserGoalContext,
+    reporter?: BrowserActivityReporter,
   ): Promise<JevBrowserGoalResult> {
-    const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS;
-    const minConfidence = input.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
     const values = resolveBrowserValues(input.values ?? {});
     const redactions = Object.values(values)
       .map((entry) => entry.value)
       .filter((value) => value.length > 0);
     const browserId = await this.prepareBrowser(input, context);
+    const ownRun =
+      reporter || !this.activity || !context.workspaceId
+        ? null
+        : this.activity.start({
+            workspaceId: context.workspaceId,
+            browserId,
+            kind: "goal",
+            label: redactValues(input.goal, redactions),
+          });
+    try {
+      const result = await this.decideUntilDone({
+        input,
+        context,
+        browserId,
+        values,
+        redactions,
+        activity: reporter ?? ownRun ?? NOOP_BROWSER_ACTIVITY,
+      });
+      ownRun?.finish({
+        status: result.status === "passed" ? "passed" : "failed",
+        message: result.message,
+      });
+      return result;
+    } catch (error) {
+      ownRun?.finish({
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  private async decideUntilDone(params: {
+    input: JevBrowserGoalInput;
+    context: JevBrowserGoalContext;
+    browserId: string;
+    values: Record<string, ResolvedJevBrowserValue>;
+    redactions: string[];
+    activity: BrowserActivityReporter;
+  }): Promise<JevBrowserGoalResult> {
+    const { input, context, browserId, values, redactions, activity } = params;
+    const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS;
+    const minConfidence = input.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
     const steps: JevBrowserGoalTraceEntry[] = [];
+    const activitySteps: BrowserActivityStep[] = [];
     const excludedActions = new Map<string, Set<string>>();
     const rejectedDoneStates = new Set<string>();
     let lastModel: string | undefined;
+    activity.update({ phase: "observing", step: 1 });
     let page = await this.observe(browserId, context);
+    // The only pause point: after an action and before the snapshot the next decision uses.
+    const observeNext = async (nextStep: number): Promise<BrowserPage> => {
+      await activity.checkpoint();
+      activity.update({
+        phase: "observing",
+        step: Math.min(nextStep, maxSteps),
+        action: null,
+        steps: [...activitySteps],
+      });
+      return this.observe(browserId, context);
+    };
 
     for (let step = 1; step <= maxSteps; step += 1) {
+      activity.update({ phase: "deciding", step, action: null });
       const stateKey = `${page.url}\n${page.snapshot}`;
       const excluded = excludedActions.get(stateKey) ?? new Set<string>();
       const plan = buildOperationPlan({
@@ -177,6 +243,12 @@ export class JevBrowserGoalRunner {
       // DONE mutates nothing and the verify checks decide it, so even an unsure DONE
       // is checked instead of ending the run; the confidence gate guards actions.
       if (operation.choice === "DONE") {
+        const doneAction: BrowserActivityStep = {
+          operation: "DONE",
+          confidence: operation.confidence,
+          status: "active",
+        };
+        activity.update({ phase: "verifying", action: doneAction });
         const verified = await this.verify(browserId, input.verify, context);
         if (verified) {
           return resultFor("passed", page, steps, "Goal completed and verified.", lastModel);
@@ -189,7 +261,8 @@ export class JevBrowserGoalRunner {
           latencyMs: decision.latencyMs,
           outcome: "verification_failed",
         });
-        page = await this.observe(browserId, context);
+        activitySteps.push({ ...doneAction, status: "failed" });
+        page = await observeNext(step + 1);
         continue;
       }
 
@@ -225,6 +298,21 @@ export class JevBrowserGoalRunner {
       }
       excluded.add(actionKey);
       excludedActions.set(stateKey, excluded);
+      const element = page.elements.find((candidate) => candidate.ref === selected.target);
+      const action: BrowserActivityStep = {
+        operation: operation.choice,
+        ...(element
+          ? { target: { role: element.role, name: redactValues(element.name, redactions) } }
+          : {}),
+        ...(selected.valueName ? { valueSlot: selected.valueName } : {}),
+        confidence: operation.confidence,
+        ...(selected.targetConfidence !== undefined
+          ? { targetConfidence: selected.targetConfidence }
+          : {}),
+        status: "active",
+      };
+      activity.update({ phase: "selected", action });
+      activity.update({ phase: "executing", action });
       const payload = await this.executeAction({
         operation: operation.choice,
         browserId,
@@ -243,10 +331,12 @@ export class JevBrowserGoalRunner {
         }),
       );
 
+      activitySteps.push({ ...action, status: payload.ok ? "done" : "failed" });
+
       if (!payload.ok && payload.error.code !== "browser_stale_ref") {
         return resultFor("blocked", page, steps, payload.error.message, lastModel);
       }
-      page = await this.observe(browserId, context);
+      page = await observeNext(step + 1);
     }
 
     return resultFor("limit", page, steps, `Stopped after ${maxSteps} steps.`, lastModel);

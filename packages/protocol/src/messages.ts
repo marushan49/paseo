@@ -99,6 +99,11 @@ import {
   BrowserImportListSourcesResponseSchema,
 } from "./browser-import/rpc-schemas.js";
 import {
+  BrowserActivityControlRequestSchema,
+  BrowserActivityControlResponseSchema,
+  BrowserActivityMessageSchema,
+} from "./browser-activity/rpc-schemas.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -3297,6 +3302,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   "activity_log",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
+  "browser.activity",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3535,6 +3541,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VerifyRecipeRunRequestSchema,
   BrowserImportListSourcesRequestSchema,
   BrowserImportCookiesRequestSchema,
+  BrowserActivityControlRequestSchema,
   SubscribeTerminalRequestSchema,
   UnsubscribeTerminalRequestSchema,
   TerminalInputSchema,
@@ -3799,6 +3806,8 @@ export const ServerInfoStatusPayloadSchema = z
         verifyRecipes: z.boolean().optional(),
         // COMPAT(browserCookieImport): added in v0.9.0, remove gate after 2027-03-24.
         browserCookieImport: z.boolean().optional(),
+        // COMPAT(browserActivity): added in v0.9.1, remove gate after 2027-03-25.
+        browserActivity: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
@@ -7061,6 +7070,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   VerifyRecipeRunResponseSchema,
   BrowserImportListSourcesResponseSchema,
   BrowserImportCookiesResponseSchema,
+  BrowserActivityMessageSchema,
+  BrowserActivityControlResponseSchema,
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,

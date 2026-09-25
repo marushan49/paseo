@@ -23,6 +23,13 @@ import {
   useBrowserStore,
 } from "@/desktop/browser/store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import {
+  isBrowserRunLocked,
+  useBrowserActivity,
+  useBrowserActivityStore,
+} from "@/desktop/browser/activity";
+import { BrowserActivityBar } from "@/desktop/browser/activity-bar";
+import { getRemotePoint, type RemotePoint } from "@/desktop/browser/remote-point";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import type { BrowserAutomationCommand } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 
@@ -38,11 +45,6 @@ interface Frame {
   dataUri: string;
   width: number;
   height: number;
-}
-
-interface RemotePoint {
-  x: number;
-  y: number;
 }
 
 interface RemoteGestureState {
@@ -84,39 +86,6 @@ const REMOTE_SPECIAL_KEYS = new Set([
   "F11",
   "F12",
 ]);
-
-function getPointerPosition(event: {
-  nativeEvent: {
-    locationX?: number;
-    locationY?: number;
-    offsetX?: number;
-    offsetY?: number;
-  };
-}): RemotePoint | null {
-  const x = event.nativeEvent.locationX ?? event.nativeEvent.offsetX;
-  const y = event.nativeEvent.locationY ?? event.nativeEvent.offsetY;
-  return typeof x === "number" && typeof y === "number" ? { x, y } : null;
-}
-
-function getRemotePoint(
-  event: {
-    nativeEvent: {
-      locationX?: number;
-      locationY?: number;
-      offsetX?: number;
-      offsetY?: number;
-    };
-  },
-  frame: Frame | null,
-  viewportSize: { width: number; height: number },
-): RemotePoint | null {
-  const position = getPointerPosition(event);
-  if (!position || !frame || !viewportSize.width || !viewportSize.height) return null;
-  return {
-    x: Math.max(0, Math.min(frame.width, (position.x / viewportSize.width) * frame.width)),
-    y: Math.max(0, Math.min(frame.height, (position.y / viewportSize.height) * frame.height)),
-  };
-}
 
 function RemoteBrowserPane({
   browserId,
@@ -162,6 +131,9 @@ function RemoteBrowserPane({
   const remoteBrowserId = browser?.remoteBrowserId ?? null;
   const remoteBrowserIdRef = useRef(remoteBrowserId);
   remoteBrowserIdRef.current = remoteBrowserId;
+  const activity = useBrowserActivity(serverId, workspaceId, remoteBrowserId);
+  const runLocked = isBrowserRunLocked(activity);
+  const canInteract = isInteractive && !runLocked;
   const frameRef = useRef(frame);
   frameRef.current = frame;
   const viewportSizeRef = useRef(viewportSize);
@@ -370,6 +342,32 @@ function RemoteBrowserPane({
     });
   }, [enqueueRemoteOperation, refreshFrame]);
 
+  // A new step or a pause means the run finished a browser action; the interval stays as fallback.
+  const activityRefreshKey = activity
+    ? `${activity.runId}:${activity.step}:${activity.phase === "paused" || activity.phase === "finished" ? activity.phase : ""}`
+    : null;
+  useEffect(() => {
+    if (activityRefreshKey) queueFrameRefresh();
+  }, [activityRefreshKey, queueFrameRefresh]);
+
+  const handleActivityControl = useCallback(
+    (action: "pause" | "resume") => {
+      const currentBrowserId = remoteBrowserIdRef.current;
+      if (!client || !currentBrowserId) return;
+      void client
+        .controlBrowserActivity({ workspaceId, browserId: currentBrowserId, action })
+        .catch((caught: unknown) => {
+          if (mountedRef.current)
+            setError(caught instanceof Error ? caught.message : String(caught));
+        });
+    },
+    [client, workspaceId],
+  );
+
+  const handleActivityDismiss = useCallback(() => {
+    if (activity) useBrowserActivityStore.getState().dismiss(serverId, activity);
+  }, [activity, serverId]);
+
   const flushScroll = useCallback(() => {
     if (scrollTimerRef.current) {
       clearTimeout(scrollTimerRef.current);
@@ -504,7 +502,7 @@ function RemoteBrowserPane({
 
   const handleFramePointerMove = useCallback(
     (event: RNPointerEvent) => {
-      if (!isWeb || !isInteractive) return;
+      if (!isWeb || !canInteract) return;
       const currentBrowserId = remoteBrowserIdRef.current;
       const point = getRemotePoint(
         event as unknown as {
@@ -520,7 +518,7 @@ function RemoteBrowserPane({
       );
       if (currentBrowserId && point) scheduleHover(currentBrowserId, point);
     },
-    [frame, isInteractive, scheduleHover, viewportSize],
+    [frame, canInteract, scheduleHover, viewportSize],
   );
 
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
@@ -559,8 +557,8 @@ function RemoteBrowserPane({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => isInteractive,
-        onStartShouldSetPanResponderCapture: () => isInteractive,
+        onStartShouldSetPanResponder: () => canInteract,
+        onStartShouldSetPanResponderCapture: () => canInteract,
         onPanResponderGrant: (event) => {
           const point = getRemotePoint(event, frameRef.current, viewportSizeRef.current);
           const currentBrowserId = remoteBrowserIdRef.current;
@@ -658,7 +656,7 @@ function RemoteBrowserPane({
       execute,
       flushScroll,
       handleFrameClick,
-      isInteractive,
+      canInteract,
       queueFrameRefresh,
       refreshFrame,
       scheduleScroll,
@@ -683,18 +681,19 @@ function RemoteBrowserPane({
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <Pressable onPress={handleBack}>
+        <Pressable disabled={runLocked} onPress={handleBack}>
           <Text style={styles.toolbarButton}>‹</Text>
         </Pressable>
-        <Pressable onPress={handleForward}>
+        <Pressable disabled={runLocked} onPress={handleForward}>
           <Text style={styles.toolbarButton}>›</Text>
         </Pressable>
-        <Pressable onPress={handleReload}>
+        <Pressable disabled={runLocked} onPress={handleReload}>
           <Text style={styles.toolbarButton}>↻</Text>
         </Pressable>
         <AdaptiveTextInput
           autoCapitalize="none"
           autoCorrect={false}
+          editable={!runLocked}
           initialValue={shownUrl}
           onChangeText={setDraftUrl}
           onFocus={handleUrlFocus}
@@ -712,13 +711,20 @@ function RemoteBrowserPane({
           </Pressable>
         </View>
       ) : null}
+      {activity ? (
+        <BrowserActivityBar
+          activity={activity}
+          onControl={handleActivityControl}
+          onDismiss={handleActivityDismiss}
+        />
+      ) : null}
       <View onLayout={handleViewportLayout} style={styles.viewport}>
         <AdaptiveTextInput
           accessibilityLabel="Remote browser input"
           autoCapitalize="none"
           autoCorrect={false}
           caretHidden={true}
-          editable={isInteractive}
+          editable={canInteract}
           initialValue=""
           multiline={false}
           onChangeText={handleRemoteInputChange}
@@ -736,7 +742,8 @@ function RemoteBrowserPane({
             style={styles.frameButton}
             testID={`remote-browser-frame-${browserId}`}
           >
-            <Image source={frameSource} style={styles.frame} />
+            {/* A prop, not style: Unistyles turns web styles into classes react-native-web can't read. */}
+            <Image resizeMode="contain" source={frameSource} style={styles.frame} />
           </View>
         ) : (
           <Text style={styles.status}>Connecting to Linux browser...</Text>
@@ -789,6 +796,6 @@ const styles = StyleSheet.create((theme) => ({
     color: "transparent",
   },
   frameButton: { flex: 1, minHeight: 0 },
-  frame: { width: "100%", height: "100%", resizeMode: "stretch" },
+  frame: { width: "100%", height: "100%" },
   status: { alignSelf: "center", color: theme.colors.foregroundMuted },
 }));

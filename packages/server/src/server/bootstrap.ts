@@ -159,6 +159,7 @@ import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
+import { BrowserActivityHub } from "./browser-tools/browser-activity.js";
 import {
   COMPETING_BROWSER_MCP_SERVERS,
   DaemonConfigBrowserToolsPolicy,
@@ -731,6 +732,9 @@ export async function createPaseoDaemon(
     appBaseUrl = typeof value === "string" ? value : "https://app.paseo.sh";
   });
   let wsServer: VoiceAssistantWebSocketServer | null = null;
+  const browserActivity = new BrowserActivityHub((payload) =>
+    wsServer?.broadcast({ type: "session", message: { type: "browser.activity", payload } }),
+  );
   let serviceProxyListenTarget: ListenTarget | null = null;
   const scriptHealthMonitor = new ScriptHealthMonitor({
     serviceProxy,
@@ -1513,6 +1517,7 @@ export async function createPaseoDaemon(
       createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
       browserToolsEnabled: browserToolsPolicy.isEnabled(),
       browserToolsBroker,
+      browserActivity,
       paseoToolPolicy:
         runtime.paseoToolPolicy ??
         (runtime.callerAgentId
@@ -1533,6 +1538,7 @@ export async function createPaseoDaemon(
         evidence: verifyEvidence,
         isBrowserToolsEnabled: () => browserToolsPolicy.isEnabled(),
         emit: () => {},
+        activity: browserActivity,
         isGoalAllowed: (cwd) => !isSystemOneExcluded(config.paseoHome, cwd),
         goal: {
           decisionSource: createConfiguredSystemOneDecisionSource(
@@ -1853,6 +1859,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               resourcePolicyRuntime,
+              browserActivity,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

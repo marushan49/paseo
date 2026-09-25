@@ -87,6 +87,7 @@ import {
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
 import { JevBrowserGoalRunner } from "../../browser-tools/jev-goal-runner.js";
+import type { BrowserActivityHub } from "../../browser-tools/browser-activity.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import {
   createConfiguredSystemOneDecisionSource,
@@ -141,6 +142,7 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  browserActivity?: BrowserActivityHub;
   /** Paseo's testing engine: saved recipes, ad-hoc steps, and Jev goal steps. */
   verify?: Pick<VerifySession, "runForAgent">;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
@@ -1275,6 +1277,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       options.paseoHome && options.daemonConfigStore
         ? new JevBrowserGoalRunner({
             broker: options.browserToolsBroker,
+            activity: options.browserActivity,
             decisionSource: createConfiguredSystemOneDecisionSource(
               options.paseoHome,
               options.daemonConfigStore,

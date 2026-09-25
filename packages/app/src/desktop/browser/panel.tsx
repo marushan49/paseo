@@ -6,7 +6,13 @@ import { getIsElectron } from "@/constants/platform";
 import { RemoteBrowserPane } from "@/desktop/browser/remote-pane";
 import { BrowserPane } from "@/desktop/browser/pane";
 import { usePaneContext, usePaneFocus } from "@/panels/pane-context";
-import { definePanel, type PanelDescriptor, type PanelIconProps } from "@/panels/panel-registry";
+import {
+  definePanel,
+  type PanelDescriptor,
+  type PanelDescriptorContext,
+  type PanelIconProps,
+} from "@/panels/panel-registry";
+import { browserActivityStatusBucket, useBrowserActivity } from "@/desktop/browser/activity";
 import { useBrowserStore } from "@/desktop/browser/store";
 import { useHostFeature } from "@/runtime/host-features";
 import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
@@ -38,11 +44,19 @@ function createBrowserTabIcon(faviconUrl: string | null) {
   };
 }
 
-function useBrowserPanelDescriptor(target: {
-  kind: "browser";
-  browserId: string;
-}): PanelDescriptor {
+function useBrowserPanelDescriptor(
+  target: {
+    kind: "browser";
+    browserId: string;
+  },
+  context: PanelDescriptorContext,
+): PanelDescriptor {
   const browser = useBrowserStore((state) => state.browsersById[target.browserId] ?? null);
+  const activity = useBrowserActivity(
+    context.serverId,
+    context.workspaceId,
+    browser?.remoteBrowserId,
+  );
   const url = browser?.url ?? "https://example.com";
   const icon = createBrowserTabIcon(browser?.faviconUrl ?? null);
   const label = getBrowserLabel({ title: browser?.title ?? "", url });
@@ -53,7 +67,7 @@ function useBrowserPanelDescriptor(target: {
     tooltip: url || label,
     titleState: "ready",
     icon,
-    statusBucket: browser?.isLoading ? "running" : null,
+    statusBucket: browserActivityStatusBucket(activity) ?? (browser?.isLoading ? "running" : null),
   };
 }
 

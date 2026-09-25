@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { BrowserToolsExecuteInput } from "./broker.js";
 import type { BrowserToolsResponsePayload } from "./errors.js";
 import { JevBrowserGoalRunner, parseObservedElements } from "./jev-goal-runner.js";
+import type { BrowserActivityEvent } from "@getpaseo/protocol/browser-activity/rpc-schemas";
+import { BrowserActivityHub } from "./browser-activity.js";
 import type {
   TypeSafeChoiceAnswer,
   TypeSafeDecisionRequest,
@@ -200,6 +202,133 @@ describe("JevBrowserGoalRunner", () => {
 
     expect(result.status).toBe("blocked");
     expect(broker.calls.filter((call) => call.command.command === "click")).toHaveLength(1);
+  });
+});
+
+describe("JevBrowserGoalRunner activity", () => {
+  it("streams phases, the chosen target, and confidence without the filled value", async () => {
+    const events: BrowserActivityEvent[] = [];
+    const activity = new BrowserActivityHub((event) => events.push(event));
+    const runner = new JevBrowserGoalRunner({
+      broker: new GoalBroker(),
+      decisionSource: new ScriptedDecisions(["FILL", "CLICK", "DONE"]),
+      activity,
+    });
+
+    await runner.run(
+      {
+        goal: "Sign in and reach Welcome",
+        browserId: BROWSER_ID,
+        values: { account: { value: "secret-account", description: "email" } },
+        verify: [{ text: "Welcome" }],
+      },
+      CONTEXT,
+    );
+
+    expect(events.map((event) => `${event.step}:${event.phase}`)).toEqual([
+      "0:observing",
+      "1:observing",
+      "1:deciding",
+      "1:selected",
+      "1:executing",
+      "2:observing",
+      "2:deciding",
+      "2:selected",
+      "2:executing",
+      "3:observing",
+      "3:deciding",
+      "3:verifying",
+      "3:finished",
+    ]);
+    expect(events.every((event) => event.workspaceId === "workspace-1")).toBe(true);
+    expect(events.every((event) => event.browserId === BROWSER_ID)).toBe(true);
+    expect(new Set(events.map((event) => event.runId)).size).toBe(1);
+    expect(events.every((event) => event.kind === "goal" && event.next === undefined)).toBe(true);
+    expect(events[3]?.action).toEqual({
+      operation: "FILL",
+      target: { role: "textbox", name: "Email" },
+      valueSlot: "account",
+      confidence: 1,
+      targetConfidence: 1,
+      status: "active",
+    });
+    expect(events.at(-1)).toMatchObject({
+      result: { status: "passed" },
+      steps: [
+        { operation: "FILL", status: "done" },
+        { operation: "CLICK", target: { role: "button", name: "Continue" }, status: "done" },
+      ],
+    });
+    expect(JSON.stringify(events)).not.toContain("secret-account");
+  });
+
+  it("pauses on takeover and snapshots the page again before deciding", async () => {
+    const log: string[] = [];
+    const broker = new GoalBroker();
+    const execute = broker.execute.bind(broker);
+    broker.execute = async (input) => {
+      log.push(input.command.command);
+      return execute(input);
+    };
+    let markPaused!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      markPaused = resolve;
+    });
+    const activity = new BrowserActivityHub((event) => {
+      if (event.phase === "paused") markPaused();
+    });
+    const decisions = new ScriptedDecisions(["CLICK", "DONE"]);
+    const decide = decisions.decide.bind(decisions);
+    decisions.decide = async (request) => {
+      log.push("decide");
+      if (log.filter((entry) => entry === "decide").length === 1) {
+        activity.control({ workspaceId: "workspace-1", browserId: BROWSER_ID, action: "pause" });
+      }
+      return decide(request);
+    };
+    const runner = new JevBrowserGoalRunner({ broker, decisionSource: decisions, activity });
+
+    const run = runner.run(
+      { goal: "Continue", browserId: BROWSER_ID, verify: [{ text: "Welcome" }] },
+      CONTEXT,
+    );
+    await paused;
+    expect(log).toEqual(["snapshot", "decide", "click"]);
+
+    broker.clicked = true;
+    activity.control({ workspaceId: "workspace-1", browserId: BROWSER_ID, action: "resume" });
+    const result = await run;
+
+    expect(result.status).toBe("passed");
+    expect(log).toEqual(["snapshot", "decide", "click", "snapshot", "decide", "wait"]);
+  });
+
+  it("finishes the activity as failed when the run aborts", async () => {
+    const events: BrowserActivityEvent[] = [];
+    const broker = new GoalBroker();
+    const execute = broker.execute.bind(broker);
+    broker.execute = async (input) => {
+      if (input.command.command === "snapshot" && broker.clicked) {
+        throw new Error("Browser tab closed");
+      }
+      return execute(input);
+    };
+    const runner = new JevBrowserGoalRunner({
+      broker,
+      decisionSource: new ScriptedDecisions(["CLICK"]),
+      activity: new BrowserActivityHub((event) => events.push(event)),
+    });
+
+    await expect(
+      runner.run(
+        { goal: "Continue", browserId: BROWSER_ID, verify: [{ text: "Welcome" }] },
+        CONTEXT,
+      ),
+    ).rejects.toThrow("Browser tab closed");
+    expect(events.at(-1)).toMatchObject({
+      phase: "finished",
+      result: { status: "failed", message: "Browser tab closed" },
+    });
   });
 });
 

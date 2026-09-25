@@ -1,6 +1,7 @@
 import { searchTimeline } from "./agent/chat-search/index.js";
 import { isSystemOneExcluded } from "./system-one/scope.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
+import type { BrowserActivityHub } from "./browser-tools/browser-activity.js";
 import { browserToolsFailure } from "./browser-tools/errors.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import type { DaemonPlaywrightHost } from "./verify/playwright-host.js";
@@ -467,6 +468,7 @@ type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
   browserToolsBroker?: BrowserToolsBroker | null;
+  browserActivity?: BrowserActivityHub | null;
   verifyHost?: DaemonPlaywrightHost | null;
   verifyEvidence?: EvidenceStore | null;
   clientId: string;
@@ -733,6 +735,7 @@ export class Session {
       ),
   );
   private readonly browserToolsBroker: SessionOptions["browserToolsBroker"];
+  private readonly browserActivity: SessionOptions["browserActivity"];
   private readonly verifySession: VerifySession | null;
   private readonly verifyHost: DaemonPlaywrightHost | null | undefined;
   private readonly clientId: string;
@@ -897,6 +900,7 @@ export class Session {
       getWebSocketRuntimeMetrics,
     } = options;
     this.browserToolsBroker = options.browserToolsBroker;
+    this.browserActivity = options.browserActivity;
     this.clientId = clientId;
     this.authorization = new SessionAuthorization(permissions);
     this.appVersion = appVersion ?? null;
@@ -2314,6 +2318,18 @@ export class Session {
     source?: object,
   ): Promise<void> | undefined {
     if (msg.type === "browser.remote.execute.request") return this.executeRemoteBrowser(msg);
+    if (msg.type === "browser.activity.control.request") {
+      this.emit({
+        type: "browser.activity.control.response",
+        payload: {
+          requestId: msg.requestId,
+          workspaceId: msg.workspaceId,
+          browserId: msg.browserId,
+          applied: this.browserActivity?.control(msg) ?? false,
+        },
+      });
+      return Promise.resolve();
+    }
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
       if (source)
@@ -2727,6 +2743,12 @@ export class Session {
           source,
         );
         this.refreshObservationProducers();
+        // Late subscribers need the current state: a paused run emits nothing until resumed.
+        if (msg.events.includes("browser.activity")) {
+          for (const payload of this.browserActivity?.current() ?? []) {
+            owner.emit({ type: "browser.activity", payload });
+          }
+        }
         if (!msg.events.includes("checkout_status_update")) return undefined;
         return this.reconcileWorkspaceGitObservers().catch(async (error) => {
           await owner.release();
@@ -3166,6 +3188,7 @@ export class Session {
       isBrowserToolsEnabled: () =>
         new DaemonConfigBrowserToolsPolicy(this.daemonConfigStore).isEnabled(),
       emit: (message) => this.emit(message),
+      activity: options.browserActivity ?? undefined,
       isGoalAllowed: (cwd) => !isSystemOneExcluded(this.paseoHome, cwd),
       goal: {
         decisionSource: createConfiguredSystemOneDecisionSource(
@@ -9033,6 +9056,7 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "activity_log":
     case "hub.execution.agent.update":
     case "hub.execution.agent.stream":
+    case "browser.activity":
       return message.type;
     case "status":
       switch (message.payload.status) {
@@ -9067,6 +9091,8 @@ function legacyWantsEvent(
       return !capabilities.has(CLIENT_CAPS.explicitEventSubscriptions);
     case "agent.provider_subagents.update":
       return capabilities.has(CLIENT_CAPS.providerSubagents);
+    case "browser.activity":
+      return false;
     default:
       return true;
   }

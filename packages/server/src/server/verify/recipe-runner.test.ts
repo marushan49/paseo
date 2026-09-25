@@ -12,6 +12,8 @@ import { EvidenceStore } from "./evidence-store.js";
 import { DaemonPlaywrightHost } from "./playwright-host.js";
 import { RecipeRunner } from "./recipe-runner.js";
 import type { TypeSafeDecisionRequest } from "../browser-tools/jev-client.js";
+import type { BrowserActivityEvent } from "@getpaseo/protocol/browser-activity/rpc-schemas";
+import { BrowserActivityHub } from "../browser-tools/browser-activity.js";
 import { resolveBrowserExecutable } from "./browser-capability.js";
 import {
   FIXTURE_PASSWORD,
@@ -186,6 +188,95 @@ describe.skipIf(!BROWSER_AVAILABLE)("RecipeRunner", () => {
     expect(result.checks).toEqual([
       expect.objectContaining({ name: 'goal "Show the sign-in form"', ok: true }),
     ]);
+  });
+
+  it("streams the current and next recipe step and pauses between steps on takeover", async () => {
+    const events: BrowserActivityEvent[] = [];
+    const activity = new BrowserActivityHub((event) => {
+      events.push(event);
+      if (event.step === 3 && event.phase === "verifying" && !event.pauseRequested) {
+        activity.control({
+          workspaceId: WORKSPACE_ID,
+          browserId: event.browserId,
+          action: "pause",
+        });
+      }
+      if (event.phase === "paused") {
+        activity.control({
+          workspaceId: WORKSPACE_ID,
+          browserId: event.browserId,
+          action: "resume",
+        });
+      }
+    });
+    const activityRunner = new RecipeRunner({
+      host,
+      evidence,
+      env,
+      resolveServiceUrl: async ({ service }) => (service === "frontend" ? app.url : null),
+      activity,
+    });
+
+    const result = await activityRunner.run({
+      workspaceId: WORKSPACE_ID,
+      // A fresh profile: earlier tests leave the shared one signed in, which skips /login.
+      browser: { ...testConfig().browser, defaultProfile: "activity-test" },
+      verification: {
+        recipes: {
+          "activity-slice": {
+            params: [],
+            steps: [
+              { action: "navigate", service: "frontend", path: "/login?token=hidden" },
+              {
+                action: "fill",
+                role: "textbox",
+                name: "Email",
+                credential: "fixture-admin",
+                credentialField: "username",
+              },
+              { action: "assert-visible", role: "heading", name: "Sign in" },
+              { action: "assert-text", text: "Password" },
+            ],
+          },
+        },
+      },
+      recipeName: "activity-slice",
+    });
+
+    expect(result.status).toBe("pass");
+    expect(events.map((event) => `${event.step}:${event.phase}`)).toEqual([
+      "0:observing",
+      "2:executing",
+      "3:verifying",
+      "3:verifying",
+      "3:paused",
+      "3:observing",
+      "4:verifying",
+      "4:finished",
+    ]);
+    expect(events[1]).toMatchObject({
+      kind: "recipe",
+      label: "activity-slice",
+      workspaceId: WORKSPACE_ID,
+      totalSteps: 4,
+      action: {
+        operation: "fill",
+        target: { role: "textbox", name: "Email" },
+        valueSlot: "fixture-admin.username",
+      },
+      next: { operation: "assert-visible", target: { role: "heading", name: "Sign in" } },
+    });
+    expect(events[1]?.steps.map((step) => step.status)).toEqual([
+      "done",
+      "active",
+      "pending",
+      "pending",
+    ]);
+    expect(events[6]?.next).toBeUndefined();
+    expect(events.at(-1)?.result?.status).toBe("passed");
+    const serialized = JSON.stringify(events);
+    expect(serialized).not.toContain(FIXTURE_USERNAME);
+    expect(serialized).not.toContain("hidden");
   });
 
   it("fails a goal step clearly when System One is not wired in", async () => {

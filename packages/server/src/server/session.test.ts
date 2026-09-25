@@ -23,6 +23,7 @@ import {
   type FileTransferFrame,
 } from "@getpaseo/protocol/binary-frames/index";
 import { Session } from "./session.js";
+import { BrowserActivityHub } from "./browser-tools/browser-activity.js";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { StructuredAgentFallbackError } from "./agent/agent-response-loop.js";
@@ -333,6 +334,7 @@ interface SessionForTestOptions {
   orchestrationSkills?: SessionOptions["orchestrationSkills"];
   daemonConfigStore?: SessionOptions["daemonConfigStore"];
   workspaceLabelService?: WorkspaceLabelService;
+  browserActivity?: SessionOptions["browserActivity"];
 }
 
 function createSessionForTest(options: SessionForTestOptions = {}): Session {
@@ -443,6 +445,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     daemonVersion: options.daemonVersion,
     daemonRuntimeConfig: options.daemonRuntimeConfig,
     permissions: options.permissions ?? OWNER_PERMISSIONS,
+    browserActivity: options.browserActivity,
   };
   return new Session(sessionOptions);
 }
@@ -629,6 +632,47 @@ test("routes plugin requests and releases its owned catalog subscription on clea
   await session.cleanup();
   expect(listeners.size).toBe(0);
   expect(releasePluginSubscription).toHaveBeenCalledOnce();
+});
+
+test("browser activity subscribers receive active runs and control their own browser", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const hub = new BrowserActivityHub(() => {});
+  hub.start({ workspaceId: "ws-1", browserId: "tab-a", kind: "goal", label: "Sign in" });
+  const session = createSessionForTest({ messages, browserActivity: hub });
+
+  await session.handleMessage({
+    type: "session.events.set_subscription.request",
+    requestId: "activity",
+    events: ["browser.activity"],
+  });
+  await session.handleMessage({
+    type: "browser.activity.control.request",
+    requestId: "wrong-workspace",
+    workspaceId: "ws-2",
+    browserId: "tab-a",
+    action: "pause",
+  });
+  await session.handleMessage({
+    type: "browser.activity.control.request",
+    requestId: "takeover",
+    workspaceId: "ws-1",
+    browserId: "tab-a",
+    action: "pause",
+  });
+
+  expect(messages.find((message) => message.type === "browser.activity")).toMatchObject({
+    payload: { workspaceId: "ws-1", browserId: "tab-a", label: "Sign in", pauseRequested: false },
+  });
+  expect(
+    messages.flatMap((message) =>
+      message.type === "browser.activity.control.response" ? [message.payload] : [],
+    ),
+  ).toEqual([
+    { requestId: "wrong-workspace", workspaceId: "ws-2", browserId: "tab-a", applied: false },
+    { requestId: "takeover", workspaceId: "ws-1", browserId: "tab-a", applied: true },
+  ]);
+  expect(hub.current()[0]?.pauseRequested).toBe(true);
+  await session.cleanup();
 });
 
 describe("workspace label subscriptions", () => {

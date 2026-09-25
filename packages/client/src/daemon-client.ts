@@ -2254,6 +2254,17 @@ export class DaemonClient {
     });
   }
 
+  controlBrowserActivity(input: {
+    workspaceId: string;
+    browserId: string;
+    action: "pause" | "resume";
+  }): Promise<CorrelatedResponsePayload<"browser.activity.control.response">> {
+    return this.sendCorrelatedSessionRequest<"browser.activity.control.response">({
+      message: { type: "browser.activity.control.request", ...input },
+      responseType: "browser.activity.control.response",
+    });
+  }
+
   observeEvents(
     events: SessionEventSubscription[],
     options?: { signal?: AbortSignal; notifications?: boolean },
