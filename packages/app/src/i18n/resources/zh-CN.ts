@@ -611,6 +611,8 @@ export const zhCN: TranslationResources = {
         stopLoading: "停止加载",
         refresh: "刷新",
         browserUrl: "浏览器 URL",
+        showKeyboard: "显示键盘",
+        openExternal: "在设备浏览器中打开网站",
         enterUrl: "输入 URL",
         openDevTools: "打开浏览器开发者工具",
         cancelSelector: "取消元素选择器",

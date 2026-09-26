@@ -612,6 +612,8 @@ export const ko: TranslationResources = {
         stopLoading: "로딩 중지",
         refresh: "새로고침",
         browserUrl: "브라우저 URL",
+        showKeyboard: "키보드 표시",
+        openExternal: "기기 브라우저에서 웹사이트 열기",
         enterUrl: "URL 입력",
         openDevTools: "브라우저 개발자 도구 열기",
         cancelSelector: "요소 선택기 취소",

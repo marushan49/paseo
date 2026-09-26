@@ -608,6 +608,8 @@ export const en = {
         stopLoading: "Stop loading",
         refresh: "Refresh",
         browserUrl: "Browser URL",
+        showKeyboard: "Show keyboard",
+        openExternal: "Open website in device browser",
         enterUrl: "Enter URL",
         openDevTools: "Open browser dev tools",
         cancelSelector: "Cancel element selector",

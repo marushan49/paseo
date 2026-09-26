@@ -617,6 +617,8 @@ export const fr: TranslationResources = {
         stopLoading: "Arrêter le chargement",
         refresh: "Rafraîchir",
         browserUrl: "NavigateurURL",
+        showKeyboard: "Afficher le clavier",
+        openExternal: "Ouvrir le site dans le navigateur de l’appareil",
         enterUrl: "EntrezURL",
         openDevTools: "Outils de développement du navigateur ouvert",
         cancelSelector: "Annuler le sélecteur d'élément",
