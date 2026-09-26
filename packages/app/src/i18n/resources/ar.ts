@@ -612,6 +612,7 @@ export const ar: TranslationResources = {
         refresh: "ينعش",
         browserUrl: "متصفح URL",
         showKeyboard: "إظهار لوحة المفاتيح",
+        openExternal: "افتح الموقع في متصفح الجهاز",
         enterUrl: "أدخل URL",
         openDevTools: "افتح أدوات تطوير المتصفح",
         cancelSelector: "إلغاء محدد العنصر",
@@ -623,6 +624,8 @@ export const ar: TranslationResources = {
         selectorLoading: "انتظر حتى ينتهي تحميل الصفحة",
         selectorFailed: "تعذّر بدء محدد العنصر",
       },
+      googleSignInHint:
+        "تم حظر تسجيل الدخول بحساب Google في هذا المتصفح البعيد. افتح الموقع في متصفح جهازك. لإعادة استخدام جلسة سجلت الدخول فيها هنا، استورد ملفات تعريف الارتباط من الإعدادات ← المتصفح في Paseo Desktop.",
       annotate: {
         title: "التعليق على العنصر",
         placeholder: "رسالة إلى الوكيل حول هذا العنصر…",

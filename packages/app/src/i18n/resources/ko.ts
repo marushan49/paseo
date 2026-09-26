@@ -613,6 +613,7 @@ export const ko: TranslationResources = {
         refresh: "새로고침",
         browserUrl: "브라우저 URL",
         showKeyboard: "키보드 표시",
+        openExternal: "기기 브라우저에서 웹사이트 열기",
         enterUrl: "URL 입력",
         openDevTools: "브라우저 개발자 도구 열기",
         cancelSelector: "요소 선택기 취소",
@@ -624,6 +625,8 @@ export const ko: TranslationResources = {
         selectorLoading: "페이지 로딩이 끝날 때까지 기다려 주세요.",
         selectorFailed: "요소 선택기를 시작할 수 없습니다.",
       },
+      googleSignInHint:
+        "이 원격 브라우저에서는 Google 로그인이 차단됩니다. 기기 브라우저에서 웹사이트를 여세요. 로그인한 세션을 여기에서 사용하려면 Paseo Desktop의 설정 → 브라우저에서 쿠키를 가져오세요.",
       annotate: {
         title: "요소에 주석 달기",
         placeholder: "이 요소에 관해 에이전트에게 보낼 메시지…",

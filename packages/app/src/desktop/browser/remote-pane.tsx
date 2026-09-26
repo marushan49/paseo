@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   Image,
   PanResponder,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Keyboard } from "lucide-react-native";
+import { ExternalLink, Keyboard } from "lucide-react-native";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { isNative, isWeb } from "@/constants/platform";
@@ -39,6 +39,8 @@ import {
   type RemotePoint,
 } from "@/desktop/browser/remote-point";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { isHttpUrl } from "@/utils/http-url";
+import { openExternalUrl } from "@/utils/open-external-url";
 import type {
   BrowserAutomationCommand,
   BrowserAutomationResult,
@@ -71,7 +73,42 @@ const FRAME_REFRESH_MS = 1_000;
 const SCROLL_FRAME_REFRESH_MS = 250;
 const RESIZE_SETTLE_MS = 150;
 const ThemedKeyboard = withUnistyles(Keyboard);
+const ThemedExternalLink = withUnistyles(ExternalLink);
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+
+function isGoogleAccountPage(url: string): boolean {
+  return /^https:\/\/accounts\.google\.com(?:[/:?#]|$)/i.test(url);
+}
+
+function websiteUrl(url: string | null | undefined): string | null {
+  return url && isHttpUrl(url) && !isGoogleAccountPage(url) ? url : null;
+}
+
+function useExternalBrowserLink(
+  url: string | undefined,
+  mountedRef: RefObject<boolean>,
+  onError: (message: string) => void,
+) {
+  const [lastWebsiteUrl, setLastWebsiteUrl] = useState(websiteUrl(url));
+  useEffect(() => {
+    setLastWebsiteUrl((previous) => websiteUrl(url) ?? previous);
+  }, [url]);
+  const isGoogleAccount = isGoogleAccountPage(url ?? "");
+  const externalUrl = isGoogleAccount ? lastWebsiteUrl : websiteUrl(url);
+  const open = useCallback(() => {
+    if (!externalUrl) return;
+    void openExternalUrl(externalUrl).catch((caught: unknown) => {
+      if (mountedRef.current) onError(caught instanceof Error ? caught.message : String(caught));
+    });
+  }, [externalUrl, mountedRef, onError]);
+  return { isGoogleAccount, externalUrl, open };
+}
+
+function GoogleSignInHint({ visible }: { visible: boolean }) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return <Text style={styles.signInHint}>{t("workspace.browser.googleSignInHint")}</Text>;
+}
 
 async function captureRemoteFrame(
   execute: (command: BrowserAutomationCommand) => Promise<BrowserAutomationResult>,
@@ -159,6 +196,12 @@ function RemoteBrowserPane({
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const onExternalError = useCallback((message: string) => setError(message), []);
+  const {
+    isGoogleAccount,
+    externalUrl,
+    open: openExternal,
+  } = useExternalBrowserLink(browser?.url, mountedRef, onExternalError);
   const remoteInputRef = useRef<EditingTextInputHandle | null>(null);
   const commandQueueRef = useRef(Promise.resolve());
   const pendingScrollRef = useRef<{
@@ -795,6 +838,16 @@ function RemoteBrowserPane({
           resetKey={`${remoteBrowserId ?? "initial"}|${shownUrl}`}
           style={styles.urlInput}
         />
+        <Pressable
+          accessibilityLabel={t("workspace.browser.controls.openExternal")}
+          accessibilityRole="button"
+          disabled={!externalUrl}
+          onPress={openExternal}
+          style={styles.toolbarAction}
+          testID="remote-browser-open-external"
+        >
+          <ThemedExternalLink size={20} uniProps={mutedIconColor} />
+        </Pressable>
         {isNative || isCompact ? (
           <Pressable
             accessibilityLabel={t("workspace.browser.controls.showKeyboard")}
@@ -808,6 +861,7 @@ function RemoteBrowserPane({
           </Pressable>
         ) : null}
       </View>
+      <GoogleSignInHint visible={isGoogleAccount} />
       {error ? (
         <View style={styles.errorRow}>
           <Text style={styles.error}>{error}</Text>
@@ -880,6 +934,12 @@ const styles = StyleSheet.create((theme) => ({
     gap: 8,
     paddingHorizontal: 10,
     paddingBottom: 6,
+  },
+  signInHint: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: theme.colors.foregroundMuted,
+    fontSize: 12,
   },
   error: { flex: 1, color: theme.colors.destructive },
   retryButton: { paddingHorizontal: 8, paddingVertical: 4 },

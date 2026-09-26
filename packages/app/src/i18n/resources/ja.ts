@@ -618,6 +618,7 @@ export const ja: TranslationResources = {
         refresh: "更新",
         browserUrl: "ブラウザURL",
         showKeyboard: "キーボードを表示",
+        openExternal: "デバイスのブラウザーでサイトを開く",
         enterUrl: "URLを入力",
         openDevTools: "ブラウザ開発ツールを開く",
         cancelSelector: "要素セレクターをキャンセル",
@@ -629,6 +630,8 @@ export const ja: TranslationResources = {
         selectorLoading: "ページの読み込みが完了するまでお待ちください",
         selectorFailed: "要素セレクターを開始できませんでした",
       },
+      googleSignInHint:
+        "このリモートブラウザーでは Google ログインがブロックされます。デバイスのブラウザーでサイトを開いてください。ログイン済みセッションをここで使うには、Paseo Desktop の設定 → ブラウザーで Cookie をインポートしてください。",
       annotate: {
         title: "要素に注釈を付ける",
         placeholder: "この要素についてエージェントへのメッセージ…",

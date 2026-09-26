@@ -618,6 +618,7 @@ export const ru: TranslationResources = {
         refresh: "Обновить",
         browserUrl: "URL браузера",
         showKeyboard: "Показать клавиатуру",
+        openExternal: "Открыть сайт в браузере устройства",
         enterUrl: "Введите URL",
         openDevTools: "Открыть инструменты разработчика браузера",
         cancelSelector: "Отменить выбор элемента",
@@ -629,6 +630,8 @@ export const ru: TranslationResources = {
         selectorLoading: "Дождитесь окончания загрузки страницы",
         selectorFailed: "Не удалось включить режим выбора элемента",
       },
+      googleSignInHint:
+        "Google блокирует вход в этом удалённом браузере. Откройте сайт в браузере устройства. Чтобы использовать здесь сеанс с выполненным входом, импортируйте файлы cookie в Настройки → Браузер в Paseo Desktop.",
       annotate: {
         title: "Добавить примечание к элементу",
         placeholder: "Сообщение агенту об этом элементе…",

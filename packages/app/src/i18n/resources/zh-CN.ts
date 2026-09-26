@@ -612,6 +612,7 @@ export const zhCN: TranslationResources = {
         refresh: "刷新",
         browserUrl: "浏览器 URL",
         showKeyboard: "显示键盘",
+        openExternal: "在设备浏览器中打开网站",
         enterUrl: "输入 URL",
         openDevTools: "打开浏览器开发者工具",
         cancelSelector: "取消元素选择器",
@@ -623,6 +624,8 @@ export const zhCN: TranslationResources = {
         selectorLoading: "请等待页面加载完成",
         selectorFailed: "无法启动元素选择器",
       },
+      googleSignInHint:
+        "Google 会阻止在此远程浏览器中登录。请在设备浏览器中打开网站。要在此使用已登录的会话，请在 Paseo Desktop 的“设置 → 浏览器”中导入 Cookie。",
       annotate: {
         title: "标注元素",
         placeholder: "给智能体关于此元素的留言…",

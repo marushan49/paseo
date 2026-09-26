@@ -618,6 +618,7 @@ export const fr: TranslationResources = {
         refresh: "Rafraîchir",
         browserUrl: "NavigateurURL",
         showKeyboard: "Afficher le clavier",
+        openExternal: "Ouvrir le site dans le navigateur de l’appareil",
         enterUrl: "EntrezURL",
         openDevTools: "Outils de développement du navigateur ouvert",
         cancelSelector: "Annuler le sélecteur d'élément",
@@ -629,6 +630,8 @@ export const fr: TranslationResources = {
         selectorLoading: "Attendez la fin du chargement de la page",
         selectorFailed: "Impossible de démarrer le sélecteur d’élément",
       },
+      googleSignInHint:
+        "Google bloque la connexion dans ce navigateur distant. Ouvrez le site dans le navigateur de votre appareil. Pour réutiliser ici une session connectée, importez les cookies dans Paramètres → Navigateur sur Paseo Desktop.",
       annotate: {
         title: "Annoter l'élément",
         placeholder: "Message à l'agent concernant cet élément…",
