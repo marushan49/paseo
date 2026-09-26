@@ -629,8 +629,6 @@ export const ptBR: TranslationResources = {
         selectorLoading: "Aguarde o carregamento da página terminar",
         selectorFailed: "Não foi possível iniciar o seletor de elemento",
       },
-      googleSignInHint:
-        "O Google bloqueia o login neste navegador remoto. Abra o site no navegador do dispositivo. Para usar uma sessão conectada aqui, importe os cookies em Configurações → Navegador no Paseo Desktop.",
       annotate: {
         title: "Anotar elemento",
         placeholder: "Mensagem ao agente sobre este elemento…",

@@ -101,13 +101,7 @@ function useExternalBrowserLink(
       if (mountedRef.current) onError(caught instanceof Error ? caught.message : String(caught));
     });
   }, [externalUrl, mountedRef, onError]);
-  return { isGoogleAccount, externalUrl, open };
-}
-
-function GoogleSignInHint({ visible }: { visible: boolean }) {
-  const { t } = useTranslation();
-  if (!visible) return null;
-  return <Text style={styles.signInHint}>{t("workspace.browser.googleSignInHint")}</Text>;
+  return { externalUrl, open };
 }
 
 async function captureRemoteFrame(
@@ -197,11 +191,11 @@ function RemoteBrowserPane({
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const onExternalError = useCallback((message: string) => setError(message), []);
-  const {
-    isGoogleAccount,
-    externalUrl,
-    open: openExternal,
-  } = useExternalBrowserLink(browser?.url, mountedRef, onExternalError);
+  const { externalUrl, open: openExternal } = useExternalBrowserLink(
+    browser?.url,
+    mountedRef,
+    onExternalError,
+  );
   const remoteInputRef = useRef<EditingTextInputHandle | null>(null);
   const commandQueueRef = useRef(Promise.resolve());
   const pendingScrollRef = useRef<{
@@ -861,7 +855,6 @@ function RemoteBrowserPane({
           </Pressable>
         ) : null}
       </View>
-      <GoogleSignInHint visible={isGoogleAccount} />
       {error ? (
         <View style={styles.errorRow}>
           <Text style={styles.error}>{error}</Text>
@@ -934,12 +927,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: 8,
     paddingHorizontal: 10,
     paddingBottom: 6,
-  },
-  signInHint: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: theme.colors.foregroundMuted,
-    fontSize: 12,
   },
   error: { flex: 1, color: theme.colors.destructive },
   retryButton: { paddingHorizontal: 8, paddingVertical: 4 },

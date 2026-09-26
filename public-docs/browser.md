@@ -134,7 +134,7 @@ agent ──MCP──▶ daemon (broker) ──▶ persistent browser (workspace
 - Navigation is restricted to `http(s)` URLs.
 - File uploads can only reference files inside the agent's workspace.
 - Tabs share the browser profile you use in Paseo, including cookies and logins — that's what makes logged-in testing work, and why the feature is opt-in per host.
-- Google sign-in can reject the daemon's controlled browser. Open the site in a regular browser and sign in there. On a desktop running Paseo, use **Settings → host → Browser → Import from browser** to copy that browser's cookies into the daemon profile. The **Open in device browser** button on mobile opens a separate session; it does not sign the remote tab in.
+- Sign in inside the remote tab to keep the session on the workspace host. The browser uses a dedicated Chrome profile with its normal security settings. A Linux host needs `xvfb` and `xauth` for its private virtual display. Run the daemon as a non-root user with Chrome sandbox support; Paseo does not disable the sandbox when launch fails. Identity providers can still apply their own account and browser checks. **Open in device browser** opens a separate session.
 - `browser_goal` sends the goal, accessibility element summary, and recent action metadata to TypeSafe. It does not send screenshots or values loaded from the `values` environment-variable map.
 
 See the [tools reference](/docs/browser-tools) for the full tool list.

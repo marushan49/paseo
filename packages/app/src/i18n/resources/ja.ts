@@ -630,8 +630,6 @@ export const ja: TranslationResources = {
         selectorLoading: "ページの読み込みが完了するまでお待ちください",
         selectorFailed: "要素セレクターを開始できませんでした",
       },
-      googleSignInHint:
-        "このリモートブラウザーでは Google ログインがブロックされます。デバイスのブラウザーでサイトを開いてください。ログイン済みセッションをここで使うには、Paseo Desktop の設定 → ブラウザーで Cookie をインポートしてください。",
       annotate: {
         title: "要素に注釈を付ける",
         placeholder: "この要素についてエージェントへのメッセージ…",

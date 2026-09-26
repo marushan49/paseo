@@ -630,8 +630,6 @@ export const fr: TranslationResources = {
         selectorLoading: "Attendez la fin du chargement de la page",
         selectorFailed: "Impossible de démarrer le sélecteur d’élément",
       },
-      googleSignInHint:
-        "Google bloque la connexion dans ce navigateur distant. Ouvrez le site dans le navigateur de votre appareil. Pour réutiliser ici une session connectée, importez les cookies dans Paramètres → Navigateur sur Paseo Desktop.",
       annotate: {
         title: "Annoter l'élément",
         placeholder: "Message à l'agent concernant cet élément…",

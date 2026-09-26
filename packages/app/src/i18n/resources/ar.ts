@@ -624,8 +624,6 @@ export const ar: TranslationResources = {
         selectorLoading: "انتظر حتى ينتهي تحميل الصفحة",
         selectorFailed: "تعذّر بدء محدد العنصر",
       },
-      googleSignInHint:
-        "تم حظر تسجيل الدخول بحساب Google في هذا المتصفح البعيد. افتح الموقع في متصفح جهازك. لإعادة استخدام جلسة سجلت الدخول فيها هنا، استورد ملفات تعريف الارتباط من الإعدادات ← المتصفح في Paseo Desktop.",
       annotate: {
         title: "التعليق على العنصر",
         placeholder: "رسالة إلى الوكيل حول هذا العنصر…",

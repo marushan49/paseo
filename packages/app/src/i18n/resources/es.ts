@@ -630,8 +630,6 @@ export const es: TranslationResources = {
         selectorLoading: "Espera a que la página termine de cargar",
         selectorFailed: "No se pudo iniciar el selector de elementos",
       },
-      googleSignInHint:
-        "Google bloquea el inicio de sesión en este navegador remoto. Abre el sitio web en el navegador de tu dispositivo. Para usar aquí una sesión iniciada, importa las cookies desde Ajustes → Navegador en Paseo Desktop.",
       annotate: {
         title: "Anotar elemento",
         placeholder: "Mensaje al agente sobre este elemento…",

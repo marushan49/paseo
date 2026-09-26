@@ -624,8 +624,6 @@ export const zhCN: TranslationResources = {
         selectorLoading: "请等待页面加载完成",
         selectorFailed: "无法启动元素选择器",
       },
-      googleSignInHint:
-        "Google 会阻止在此远程浏览器中登录。请在设备浏览器中打开网站。要在此使用已登录的会话，请在 Paseo Desktop 的“设置 → 浏览器”中导入 Cookie。",
       annotate: {
         title: "标注元素",
         placeholder: "给智能体关于此元素的留言…",

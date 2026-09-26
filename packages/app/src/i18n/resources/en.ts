@@ -621,8 +621,6 @@ export const en = {
         selectorLoading: "Wait for the page to finish loading",
         selectorFailed: "Couldn't start element selector",
       },
-      googleSignInHint:
-        "Google sign-in is blocked in this remote browser. Open the website in your device browser. To reuse a signed-in session here, import browser cookies in Settings → Browser on Paseo Desktop.",
       annotate: {
         title: "Annotate element",
         placeholder: "Message to the agent about this element…",
