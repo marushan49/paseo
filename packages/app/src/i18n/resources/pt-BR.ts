@@ -616,6 +616,7 @@ export const ptBR: TranslationResources = {
         stopLoading: "Parar carregamento",
         refresh: "Atualizar",
         browserUrl: "URL do navegador",
+        showKeyboard: "Mostrar teclado",
         enterUrl: "Inserir URL",
         openDevTools: "Abrir ferramentas de desenvolvedor do navegador",
         cancelSelector: "Cancelar seletor de elemento",

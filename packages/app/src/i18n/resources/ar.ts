@@ -611,6 +611,7 @@ export const ar: TranslationResources = {
         stopLoading: "توقف عن التحميل",
         refresh: "ينعش",
         browserUrl: "متصفح URL",
+        showKeyboard: "إظهار لوحة المفاتيح",
         enterUrl: "أدخل URL",
         openDevTools: "افتح أدوات تطوير المتصفح",
         cancelSelector: "إلغاء محدد العنصر",

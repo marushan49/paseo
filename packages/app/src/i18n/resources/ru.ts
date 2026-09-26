@@ -617,6 +617,7 @@ export const ru: TranslationResources = {
         stopLoading: "Остановить загрузку",
         refresh: "Обновить",
         browserUrl: "URL браузера",
+        showKeyboard: "Показать клавиатуру",
         enterUrl: "Введите URL",
         openDevTools: "Открыть инструменты разработчика браузера",
         cancelSelector: "Отменить выбор элемента",

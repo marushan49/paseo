@@ -617,6 +617,7 @@ export const es: TranslationResources = {
         stopLoading: "dejar de cargar",
         refresh: "Refrescar",
         browserUrl: "NavegadorURL",
+        showKeyboard: "Mostrar teclado",
         enterUrl: "IngreseURL",
         openDevTools: "Abrir herramientas de desarrollo del navegador",
         cancelSelector: "Cancelar selector de elementos",
